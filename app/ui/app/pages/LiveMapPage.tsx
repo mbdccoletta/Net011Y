@@ -1,0 +1,299 @@
+// Home: the network breathing on a map. Probable causes on the left, the reasoning behind the
+// selected one on the right, and a replay of how it spread along the bottom. Every action
+// drills down into the native Dynatrace apps.
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import type { NetworkModel, Verdict } from "../model/types";
+import type { SiteInfo } from "../model/site";
+import { isBad, worst } from "../model/verdict";
+import { buildCauses, type Cause } from "../model/causes";
+import { LiveMap, MAP_COLORS, type Insets, type MapLink, type MapSite } from "../components/LiveMap";
+import { fmtInt, hhmm, prefersReducedMotion } from "../utils/format";
+import { logsQuery, openLogs } from "../utils/drilldown";
+import { NativeDrill } from "../components/NativeDrill";
+import { SiteTree } from "../components/SiteTree";
+import { useSiteHierarchy } from "../hooks/useSiteHierarchy";
+import { causeContext, networkContext } from "../utils/assist";
+import { AssistPanel } from "../components/AssistPanel";
+import { DataNeeds } from "../components/DataNeeds";
+import { PageEmpty } from "../components/PageEmpty";
+import { VIEW_NEEDS, type Need, type NeedKey } from "../data/requirements";
+import { CauseChain, EvidenceBadges, NetworkStatus, SpreadChart } from "../components/CauseVisuals";
+import { ExternalLinkIcon, PauseIcon, PlayIcon } from "@dynatrace/strato-icons";
+
+interface Props {
+  needs: Record<NeedKey, Need>;
+  model: NetworkModel;
+  infos: SiteInfo[];
+  /** Selected cause id, "all" for the whole network, null for the default (largest cause) */
+  causeId: string | null;
+  failed: string[];
+  onCause: (id: string) => void;
+  onSite: (code: string) => void;
+  onDevice: (name: string) => void;
+  onSites: (patch: { status: string; region: string | null; q: string }) => void;
+  /** Offered while the environment has no network data yet. */
+  onExample?: () => void;
+}
+
+const parseTs = (s: string) => Date.parse(s.length === 17 ? s.replace("Z", ":00Z") : s);
+const clock = (ms: number) => hhmm(new Date(ms).toISOString()).replace(" UTC", "");
+
+function Marker({ verdict }: { verdict: Verdict }) {
+  return <i className={`lm-marker lm-marker--${verdict === "Critical" ? "crit" : verdict === "Warning" ? "warn" : "ok"}`} style={{ background: MAP_COLORS[verdict] }} aria-label={verdict} />;
+}
+
+function causeMeta(c: Cause) {
+  return [
+    c.subtitle,
+    c.impact.offline ? `${c.impact.offline} offline` : null,
+    c.since ? `since ${clock(parseTs(c.since))}` : null,
+  ].filter(Boolean).join(" · ");
+}
+
+export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onSite, onDevice, onSites, onExample }: Props) {
+  const causes = useMemo(() => buildCauses(model, infos), [model, infos]);
+  const shared = causes.filter((c) => c.sites.length > 1 || c.kind === "carrier" || c.kind === "datacenter");
+  const isolated = causes.filter((c) => !shared.includes(c));
+  const cause = causeId === "all" ? null : causes.find((c) => c.id === causeId) ?? shared[0] ?? null;
+
+  // map data
+  const siteCause = useMemo(() => new Map(causes.flatMap((c) => c.sites.map((s) => [s.code, c.title] as const))), [causes]);
+  const mapSites = useMemo<MapSite[]>(() => infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({
+    code: i.code, name: i.site.name, lat: i.site.lat!, lon: i.site.lon!, verdict: i.verdict, dc: i.site.dc, region: i.site.region,
+    cause: i.cause ? i.cause : siteCause.get(i.code) ?? null,
+  })), [infos, siteCause]);
+  const mapLinks = useMemo<MapLink[]>(() => {
+    const placed = new Set(mapSites.map((s) => s.code));
+    // traffic of a site's WAN: latest in + out of the edge routers' uplinks (bits per second)
+    const trafficOf = (code: string): number | null => {
+      const ifs = model.devices.filter((d) => d.site === code && d.role === "edge").flatMap((d) => (d.unreachableSince ? [] : d.interfaces.filter((f) => f.uplink)));
+      const measured = ifs.filter((f) => f.in.length || f.out.length);
+      if (!measured.length) return model.devices.some((d) => d.site === code && d.role === "edge" && d.unreachableSince) ? 0 : null;
+      return measured.reduce((a, f) => a + (f.oper.startsWith("up") ? (f.in[f.in.length - 1] ?? 0) + (f.out[f.out.length - 1] ?? 0) : 0), 0);
+    };
+    const hubLinks = infos.filter((i) => i.site.hub && placed.has(i.code) && placed.has(i.site.hub)).map((i) => ({
+      id: `wan:${i.code}`, a: i.code, b: i.site.hub!, verdict: i.site.wanVerdict ?? (i.causeLayer === "Carrier" ? i.verdict : "Healthy"),
+      bps: i.circuits.length && i.circuits.every((c) => c.status === "down") ? 0 : trafficOf(i.code),
+    }));
+    if (hubLinks.length) return hubLinks;
+    const siteOf = new Map(model.devices.map((d) => [d.name, d]));
+    const seen = new Set<string>();
+    return model.links.flatMap((l) => {
+      const a = siteOf.get(l.a), b = siteOf.get(l.b);
+      if (!a || !b || a.site === b.site || !placed.has(a.site) || !placed.has(b.site)) return [];
+      const key = [a.site, b.site].sort().join("|");
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [{ id: `lldp:${key}`, a: a.site, b: b.site, verdict: worst([a.verdict, b.verdict]), bps: trafficOf(a.site) }];
+    });
+  }, [infos, mapSites, model]);
+  // left panel: the problems Dynatrace has open, or sites grouped by the primary tag hierarchy chosen in Settings
+  const { levels } = useSiteHierarchy();
+  // until levels are chosen in Settings, group by the region the app already knows
+  const defaultLevels = useMemo(() => (infos.some((i) => i.site.region) ? ["site.region"] : []), [infos]);
+  const [leftTab, setLeftTab] = useState<"causes" | "sites">(() => { try { return window.localStorage.getItem("network-pulse.left-tab") === "sites" ? "sites" : "causes"; } catch { return "causes"; } });
+  const chooseTab = (t: "causes" | "sites") => { setLeftTab(t); try { window.localStorage.setItem("network-pulse.left-tab", t); } catch { /* per session only */ } };
+  const [group, setGroup] = useState<{ id: string; codes: Set<string> } | null>(null);
+  const causeFocus = useMemo(() => (cause ? new Set(cause.sites.map((s) => s.code)) : null), [cause]);
+  const focus = leftTab === "sites" && group ? group.codes : causeFocus;
+
+  // responsive insets: panels float over the map only on wide stages
+  const stage = useRef<HTMLDivElement>(null);
+  const [wide, setWide] = useState(true);
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setWide(e.contentRect.width >= 1100));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // wide stage fills exactly the visible height below the page bar, so the replay bar is never cut
+  const [stageH, setStageH] = useState<number | null>(null);
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const measure = () => {
+      let box: HTMLElement | null = el.parentElement;
+      while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
+      const container = box ?? document.documentElement;
+      const top = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+      setStageH(Math.max(560, Math.floor(container.clientHeight - top - 16)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(document.documentElement);
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, []);
+  const insets = useMemo<Insets>(() => (wide ? { top: 24, left: 336, right: 376, bottom: 104 } : { top: 16, left: 16, right: 16, bottom: 16 }), [wide]);
+
+  // replay
+  const end = parseTs(model.meta.generatedAt);
+  const moments = useMemo(() => (cause ? cause.timeline : causes.map((c) => ({ t: c.since ?? "", label: c.title, level: c.verdict, sites: c.sites.map((s) => s.code) })).filter((m) => m.t)), [cause, causes]);
+  const start = useMemo(() => {
+    const first = moments.map((m) => parseTs(m.t)).filter((v) => !Number.isNaN(v)).sort((a, b) => a - b)[0];
+    return first ? Math.min(first - 10 * 60000, end - 30 * 60000) : end - 2 * 3600000;
+  }, [moments, end]);
+  const [cursor, setCursor] = useState(1);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => { setCursor(1); setPlaying(false); }, [cause?.id]);
+  useEffect(() => {
+    if (!playing) return;
+    const stepMs = prefersReducedMotion() ? 500 : 50;
+    const id = window.setInterval(() => setCursor((c) => {
+      const next = c + stepMs / 8000;
+      if (next >= 1) { setPlaying(false); return 1; }
+      return next;
+    }), stepMs);
+    return () => window.clearInterval(id);
+  }, [playing]);
+  const at = start + cursor * (end - start);
+  const affectedAt = useMemo(() => {
+    const m = new Map<string, number>();
+    (cause ? [cause] : causes).forEach((c) => {
+      c.sites.forEach((s) => {
+        const ts = c.affectedAt[s.code] ?? c.since;
+        if (ts) m.set(s.code, parseTs(ts));
+      });
+    });
+    return m;
+  }, [cause, causes]);
+  const hitAt = useMemo(() => (cursor >= 1 ? () => true : (code: string) => { const ts = affectedAt.get(code); return ts == null || ts <= at; }), [cursor, at, affectedAt]);
+  const hitCount = cause ? cause.sites.filter((s) => hitAt(s.code)).length : null;
+
+  const affected = infos.filter((i) => isBad(i.verdict));
+  const regions = new Set(infos.map((i) => i.site.region).filter(Boolean)).size;
+  const dcs = infos.filter((i) => i.site.dc).length;
+  const lost = causes.reduce((a, c) => a + c.impact.sessionsLost, 0);
+  const offline = causes.reduce((a, c) => a + c.impact.offline, 0);
+  const scopeDevices = cause ? cause.devices : causes.flatMap((c) => c.devices);
+  const ips = scopeDevices.map((d) => d.ip).filter(Boolean).slice(0, 40);
+  const maxSites = Math.max(1, ...causes.map((c) => c.sites.length));
+
+  const causeButton = (c: Cause) => (
+    <button key={c.id} type="button" className={`lm-cause${cause?.id === c.id ? " is-on" : ""}`} aria-pressed={cause?.id === c.id}
+      style={{ "--lm-tone": MAP_COLORS[c.verdict] } as React.CSSProperties} onClick={() => onCause(c.id)} title={causeMeta(c)}>
+      <b><Marker verdict={c.verdict} /><span className="lm-cause__title">{c.title}</span><em>{c.sites.length}</em></b>
+      <span className="lm-cause__bar" aria-hidden="true"><i style={{ width: `${(c.sites.length / maxSites) * 100}%` }} /></span>
+    </button>
+  );
+
+  // Nothing has arrived yet: the map explains what to send, while the other pages stay reachable and
+  // show whatever their own data allows.
+  if (!infos.length) {
+    return (
+      <div className="lm">
+        <div className="lm-bar">
+          <span className="lm-pill lm-pill--live"><span className="lm-live" aria-hidden="true" />Live {hhmm(model.meta.generatedAt)}</span>
+          <span className="lm-pill">no sites yet</span>
+        </div>
+        <PageEmpty title="No network data yet" onExample={onExample} needs={needs} keys={VIEW_NEEDS.empty}
+          detail="Send the data below to Dynatrace to fill the app. Every page stays open: each one shows what it can as soon as its data arrives." />
+      </div>
+    );
+  }
+
+  return (
+    <div className="lm">
+      <div className="lm-bar">
+        <span className="lm-pill lm-pill--live"><span className="lm-live" aria-hidden="true" />Live {hhmm(model.meta.generatedAt)}</span>
+        <span className="lm-pill">{fmtInt(infos.length)} sites{regions ? ` · ${regions} regions` : ""}{dcs ? ` · ${dcs} data centers` : ""} · {fmtInt(model.devices.length)} devices</span>
+        {model.demo && <span className="lm-pill lm-pill--warn">Example data</span>}
+        {!model.demo && failed.length > 0 && <span className="lm-pill lm-pill--warn" title={failed.join(", ")}>{failed.length} data source(s) unavailable</span>}
+        <span className="lm-legend" aria-label="Legend">
+          <span><Marker verdict="Critical" />Critical</span>
+          <span><Marker verdict="Warning" />Warning</span>
+          <span><Marker verdict="Healthy" />Healthy</span>
+        </span>
+      </div>
+
+      <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.map} needs={needs} compact /></div>
+      <div ref={stage} className={`lm-stage${wide ? " is-wide" : ""}`} style={wide && stageH ? { height: stageH } : undefined}>
+        {mapSites.length ? (
+          <LiveMap sites={mapSites} links={mapLinks} focus={focus} hitAt={hitAt} insets={insets} onSite={onSite} />
+        ) : (
+          <div className="lm-map lm-map--empty">No site has a known location yet. Add coordinates to the site table to see the map.</div>
+        )}
+
+        <aside className="lm-panel lm-left" aria-label={leftTab === "sites" ? "Sites" : "Probable causes"}>
+          <span className="vz-seg lm-lefttabs" role="group" aria-label="List">
+            <button type="button" className={leftTab === "causes" ? "is-on" : ""} aria-pressed={leftTab === "causes"} onClick={() => chooseTab("causes")}>Causes</button>
+            <button type="button" className={leftTab === "sites" ? "is-on" : ""} aria-pressed={leftTab === "sites"} onClick={() => chooseTab("sites")}>Sites</button>
+          </span>
+          {leftTab === "sites" ? (
+            <SiteTree infos={infos} levels={levels.length ? levels : defaultLevels} selected={group?.id ?? null}
+              onGroup={(id, codes) => setGroup(id && codes ? { id, codes } : null)} onSite={onSite} />
+          ) : (<>
+          <h2 className="lm-h">{causes.length ? `${causes.length} open problem${causes.length > 1 ? "s" : ""} · ${fmtInt(affected.length)} sites` : "No open problem on this network"}</h2>
+          <div className="lm-stats">
+            <span><b style={{ color: offline ? "var(--lm-bad)" : undefined }}>{fmtInt(offline)}</b>sites offline</span>
+            <span><b style={{ color: lost ? "var(--lm-bad)" : undefined }}>{lost ? `−${fmtInt(lost)}` : "0"}</b>sessions/h</span>
+          </div>
+          <button type="button" className={`lm-cause lm-cause--all${cause ? "" : " is-on"}`} aria-pressed={!cause} onClick={() => onCause("all")}>
+            <b><span className="lm-cause__title">Whole network</span><em>{fmtInt(affected.length)}/{fmtInt(infos.length)}</em></b>
+          </button>
+          {shared.length > 0 && <h3 className="lm-sub">Shared causes · {shared.length}</h3>}
+          {shared.map(causeButton)}
+          {isolated.length > 0 && <h3 className="lm-sub">Isolated faults · {isolated.length}</h3>}
+          {isolated.map(causeButton)}
+          </>)}
+        </aside>
+
+        <aside className="lm-panel lm-right" aria-label={cause ? cause.title : "Whole network"}>
+          {cause ? (
+            <>
+              <h2 className="lm-title"><Marker verdict={cause.verdict} /><span>{cause.title}</span>{cause.since && <em>{clock(parseTs(cause.since))}</em>}</h2>
+              <CauseChain cause={cause} />
+              <div className="lm-spreadbox">
+                <SpreadChart cause={cause} start={start} end={end} at={at} />
+                <span className="lm-spreadbox__label"><b>{hitCount ?? cause.sites.length}</b>/{cause.sites.length}</span>
+              </div>
+              <EvidenceBadges cause={cause} onLogs={() => openLogs(logsQuery(ips, cause.since))} />
+            </>
+          ) : (
+            <>
+              <h2 className="lm-title"><span>Whole network</span></h2>
+              <NetworkStatus infos={infos} onRegion={(region) => onSites({ status: "issues", region, q: "" })} />
+            </>
+          )}
+          <NativeDrill devices={scopeDevices} since={cause?.since} demo={model.demo}
+            // a carrier cause spans many routers and links: no single device to open; a device or data center cause has one
+            focus={cause && cause.kind !== "carrier" && cause.devices.length === 1 ? cause.devices[0] : null}
+            circuits={cause ? cause.sites.flatMap((s) => s.circuits.filter((c) => c.status === "down" || isBad(c.verdict))) : []}
+            after={<button type="button" className="lm-btn" onClick={() => onSites({ status: "issues", region: cause?.impact.regions.length === 1 ? cause.impact.regions[0] : null, q: "" })}>Sites</button>} />
+          <AssistPanel subject={cause?.id ?? "network"}
+            questions={cause
+              ? [{ label: "Explain cause", prompt: "Explain this cause" }, { label: "Assess impact", prompt: "What is the business impact?" }, { label: "Suggest next steps", prompt: "What are the next steps?" }]
+              : [{ label: "Summarize network", prompt: "Summarize the network" }, { label: "Prioritize fixes", prompt: "What should be fixed first?" }]}
+            object={cause ? "cause" : "network"}
+            context={() => (cause ? causeContext(model, cause) : networkContext(model, infos, causes))} />
+        </aside>
+
+        <div className="lm-panel lm-time" role="group" aria-label="Replay">
+          <button type="button" className="lm-play" onClick={() => { if (cursor >= 1) setCursor(0); setPlaying((p) => !p); }} aria-label={playing ? "Pause replay" : "Replay how it spread"}>
+            {playing ? <PauseIcon /> : <PlayIcon />}
+          </button>
+          <div className="lm-track">
+            <div className="lm-track__fill" style={{ width: `${cursor * 100}%` }} />
+            {moments.map((m, k) => {
+              const pos = (parseTs(m.t) - start) / (end - start);
+              if (!(pos >= 0 && pos <= 1)) return null;
+              const prev = k ? (parseTs(moments[k - 1].t) - start) / (end - start) : -1;
+              return (
+                <span key={`${m.t}-${m.label}`} className="lm-tick" style={{ left: `${pos * 100}%`, background: MAP_COLORS[m.level] }} title={`${clock(parseTs(m.t))} · ${m.label}`}>
+                  {pos - prev > 0.07 && <em>{clock(parseTs(m.t))}</em>}
+                </span>
+              );
+            })}
+            <input type="range" min={0} max={1000} value={Math.round(cursor * 1000)} aria-label="Replay time"
+              onChange={(e) => { setPlaying(false); setCursor(Number(e.target.value) / 1000); }} />
+          </div>
+          <span className="lm-clock">
+            {clock(at)}
+            {hitCount != null && cursor < 1 && <small>{hitCount} of {cause!.impact.sites} sites hit</small>}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,901 @@
+<meta charset="utf-8">
+<title>NetworkPlane · prototype (legacy)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F3F3F8; --surface:#FFFFFF; --surface-2:#ECECF4; --line:#DADBE6; --ink:#1D1E33; --muted:#5D5F78;
+  --primary:#4A4FD4; --primary-soft:#E5E6FB;
+  --crit:#C22A43; --crit-fill:#FBE2E7; --warn:#A96400; --warn-fill:#FCEFD7; --good:#1C8454; --good-fill:#DCF2E6; --nm:#72748C; --nm-fill:#E9E9F1;
+  --wire:#B9BBD3; --scrim:rgba(20,21,40,.35);
+  --sans:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#131421; --surface:#1B1C2D; --surface-2:#23243A; --line:#32344C; --ink:#E6E7F3; --muted:#9A9CB7;
+  --primary:#9296FF; --primary-soft:#2A2C56;
+  --crit:#FF6E83; --crit-fill:#3D1B26; --warn:#F0B04A; --warn-fill:#392B12; --good:#52CB8C; --good-fill:#163224; --nm:#9A9CB7; --nm-fill:#29293D; --wire:#46486A; --scrim:rgba(0,0,0,.55);
+}}
+:root[data-theme="dark"]{
+  --bg:#131421; --surface:#1B1C2D; --surface-2:#23243A; --line:#32344C; --ink:#E6E7F3; --muted:#9A9CB7;
+  --primary:#9296FF; --primary-soft:#2A2C56;
+  --crit:#FF6E83; --crit-fill:#3D1B26; --warn:#F0B04A; --warn-fill:#392B12; --good:#52CB8C; --good-fill:#163224; --nm:#9A9CB7; --nm-fill:#29293D; --wire:#46486A; --scrim:rgba(0,0,0,.55);
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;margin:0;padding-inline:16px;padding-block:0 48px}
+button,select,input{font:inherit;color:inherit}
+button:focus-visible,select:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.hint{font-size:12px;color:var(--muted)}
+h1{font-size:24px;margin:0;font-weight:800;letter-spacing:-.01em;text-wrap:balance}
+svg text{fill:var(--muted);font-family:var(--sans)}
+
+/* shell */
+.top{display:flex;align-items:center;gap:10px 16px;flex-wrap:wrap;padding-block:12px;max-width:1480px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;letter-spacing:-.01em}
+.srcchip{margin-left:auto;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--muted)}
+.srcchip.sim{border-color:var(--warn);background:var(--warn-fill);color:var(--warn)}
+.iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:8px;min-width:34px;height:34px;display:grid;place-items:center;cursor:pointer;font-size:15px;padding:0 8px}
+.iconbtn:hover{border-color:var(--primary)}
+.app{display:grid;grid-template-columns:1fr;gap:16px;max-width:1480px;margin:0 auto;align-items:start}
+@media (min-width:1040px){.app{grid-template-columns:310px minmax(0,1fr)}}
+.app.full{grid-template-columns:minmax(0,1fr)}
+main,.stack,.stack>*{min-width:0}
+.stack{display:grid;gap:14px}
+
+/* primitives */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.panel-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:14px 16px 0;flex-wrap:wrap}
+.panel-h h2,.panel-h h3{margin:0;font-size:15px;font-weight:700}
+.panel-b{padding:12px 16px 16px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:12px;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.pill.Critical{background:var(--crit-fill);color:var(--crit)} .pill.Warning{background:var(--warn-fill);color:var(--warn)}
+.pill.Healthy{background:var(--good-fill);color:var(--good)} .pill.NM{background:var(--nm-fill);color:var(--nm)}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;display:inline-block}
+.dot.Critical{background:var(--crit);color:var(--crit)} .dot.Warning{background:var(--warn);color:var(--warn)} .dot.Healthy{background:var(--good);color:var(--good)} .dot.NM{background:var(--nm)}
+@media (prefers-reduced-motion: no-preference){
+  .breath.Critical{animation:breath 1.7s ease-in-out infinite} .breath.Warning{animation:breath 3.2s ease-in-out infinite} .breath.Healthy{animation:breath 6s ease-in-out infinite}
+}
+@keyframes breath{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,currentColor 0%,transparent)}50%{box-shadow:0 0 0 6px color-mix(in srgb,currentColor 22%,transparent)}}
+.chip{font-size:12px;background:var(--surface-2);border-radius:4px;padding:2px 8px;color:var(--muted);display:inline-flex;gap:6px;align-items:center;border:0}
+.chip b{color:var(--ink);font-weight:600}
+.chip.tag{background:var(--primary-soft);color:var(--primary)}
+.chip.inc{background:var(--crit-fill);color:var(--crit);font-family:var(--mono);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600}
+tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right}
+.tblwrap{overflow-x:auto}
+.empty{padding:14px 8px;color:var(--muted);font-size:13px;display:flex;align-items:center;gap:8px}
+.linkbtn{background:none;border:0;padding:0;cursor:pointer;color:var(--ink);font-weight:600;text-align:left}
+.linkbtn:hover{color:var(--primary);text-decoration:underline}
+.bar{height:8px;border-radius:2px;background:var(--surface-2);overflow:hidden;min-width:60px}
+.bar i{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:12px;color:var(--muted);align-items:center}
+.legend i{display:inline-block;width:22px;height:0;border-top:2px solid var(--ink);vertical-align:middle;margin-right:6px}
+.note-box{background:var(--primary-soft);color:var(--ink);border-radius:8px;padding:10px 14px;font-size:13px}
+
+/* sidebar */
+.side{display:grid;gap:10px;padding:12px}
+@media (min-width:1040px){.side{position:sticky;top:8px;height:calc(100vh - 16px);grid-template-rows:auto auto auto minmax(0,1fr)}}
+.siterow{width:100%;text-align:left;background:none;border:0;border-radius:8px;padding:8px 8px;display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:1px 8px;cursor:pointer;align-items:center}
+.siterow:hover{background:var(--surface-2)}
+.siterow[aria-current="true"]{background:var(--primary-soft);box-shadow:inset 3px 0 0 var(--primary)}
+.siterow .nm{font-weight:700;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.siterow .cd{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.siterow .cause{grid-column:2/4;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.netrow{border-bottom:1px solid var(--line);border-radius:8px 8px 0 0;padding-block:10px}
+.filters{display:flex;flex-wrap:wrap;gap:6px}
+.fbtn{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;gap:6px;align-items:center;color:var(--muted)}
+.fbtn[aria-pressed="true"]{border-color:var(--primary);color:var(--ink);background:var(--primary-soft)}
+.search{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 10px}
+.sitelist{list-style:none;margin:0;padding:0;overflow:auto;display:grid;align-content:start;max-height:340px}
+@media (min-width:1040px){.sitelist{max-height:none}}
+.sitelist .group{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:10px 8px 4px}
+
+/* page head */
+.crumbs{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.crumbs button{background:none;border:0;padding:0;cursor:pointer;color:var(--primary);font-weight:600}
+.titlerow{display:flex;gap:8px 14px;align-items:center;flex-wrap:wrap}
+.lede{margin:0;font-size:14.5px;max-width:90ch}
+.cause-box{display:flex;gap:8px 14px;align-items:center;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--tone,var(--line));border-radius:10px;padding:12px 16px}
+.cause-box.Critical{--tone:var(--crit)} .cause-box.Warning{--tone:var(--warn)} .cause-box.Healthy{--tone:var(--good)}
+.cause-box .k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:800;color:var(--tone)}
+.cause-box .t{font-size:15px;font-weight:600}
+.cause-box .go{margin-left:auto;color:var(--primary)}
+
+/* info cards */
+.infocards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (min-width:1100px){.infocards{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.info{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px 12px;display:grid;gap:3px;align-content:start}
+.info::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--tone,var(--line))}
+.info.Critical{--tone:var(--crit)} .info.Warning{--tone:var(--warn)} .info.Healthy{--tone:var(--good)} .info.NM{--tone:var(--nm)}
+.info .lab{font-size:12px;font-weight:600;color:var(--muted)}
+.info .val{font-size:28px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--tone,var(--ink))}
+.info .val small{font-size:14px;font-weight:600;color:var(--muted);margin-left:2px}
+.info .ctx{font-size:12px;color:var(--muted)}
+
+/* site tabs */
+.stabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto}
+.stab{background:none;border:0;padding:9px 14px;cursor:pointer;color:var(--muted);font-weight:600;border-bottom:2px solid transparent;white-space:nowrap}
+.stab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--primary)}
+.stab:hover{color:var(--ink)}
+
+/* network page */
+.netgrid{display:grid;grid-template-columns:1fr;gap:14px;align-items:start}
+@media (min-width:1240px){.netgrid{grid-template-columns:minmax(0,.85fr) minmax(0,1.3fr)}}
+.netgrid > :only-child{grid-column:1/-1}
+.brmap{width:100%;height:auto;max-height:560px;display:block;margin:0 auto}
+.brmap g[data-site]{cursor:pointer}
+.causes{list-style:none;margin:0;padding:0;display:grid}
+.causes li{display:grid;gap:6px;padding:12px 0;border-top:1px solid var(--line)}
+.causes li:first-child{border-top:0;padding-top:0}
+.causes .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.causes .row b{font-size:14px}
+.sitechip{cursor:pointer}
+.sitechip:hover{color:var(--ink);background:var(--primary-soft)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.tile{text-align:left;cursor:pointer;background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--tone);border-radius:10px;padding:14px 16px;display:grid;gap:6px}
+.tile.Critical{--tone:var(--crit)} .tile.Warning{--tone:var(--warn)} .tile.Healthy{--tone:var(--good)}
+.tile:hover{border-color:var(--primary)}
+
+/* network-wide view */
+.netgraph svg{display:block;width:100%;height:auto;min-width:920px}
+.lnode{cursor:pointer}
+.pscroll{max-height:600px;overflow:auto;padding-top:0}
+.paths{display:grid}
+.prow{display:grid;grid-template-columns:minmax(120px,160px) repeat(var(--n),minmax(40px,1fr)) minmax(140px,1.5fr);align-items:center;column-gap:4px;padding:4px 6px;border:0;border-radius:6px;background:none;width:100%;text-align:left;cursor:pointer}
+.prow:hover{background:var(--surface-2)}
+.prow.head{cursor:default;position:sticky;top:0;z-index:1;background:var(--surface);padding-block:10px 6px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.prow.head:hover{background:var(--surface)}
+.pcell-h{text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pname{display:flex;align-items:center;gap:7px;font-weight:700;font-size:13px;overflow:hidden;white-space:nowrap}
+.pcause{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:8px}
+.pcell{position:relative;height:20px;display:grid;place-items:center}
+.pcell::before{content:"";position:absolute;left:-4px;right:-4px;top:50%;border-top:2px solid var(--line)}
+.pcell.first::before{left:50%} .pcell.last::before{right:50%}
+.pnode{position:relative;width:10px;height:10px;border-radius:50%}
+.pnode.cause{width:15px;height:15px;box-shadow:0 0 0 4px color-mix(in srgb,currentColor 28%,transparent)}
+.pnode.cons{width:12px;height:12px;background:var(--surface);border:2px solid currentColor}
+.pnode.none{width:8px;height:2px;border-radius:1px;background:var(--wire)}
+
+/* e2e graph */
+.enode{cursor:pointer}
+.e2egraph .mono{font-family:var(--mono)}
+
+/* device detail */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{padding:12px 14px;display:grid;gap:4px}
+.kpi .lab{font-size:12px;color:var(--muted);font-weight:600}
+.kpi .val{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi .val small{font-size:13px;font-weight:600;color:var(--muted)}
+.kpi .note{font-size:12px;color:var(--muted)}
+.reasons{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.reasons li{display:flex;gap:10px;align-items:baseline;font-size:13.5px}
+.events{list-style:none;margin:0;padding:0;display:grid}
+.events li{padding:8px 2px;border-top:1px solid var(--line);display:grid;gap:2px;font-size:12.5px}
+.events li:first-child{border-top:0}
+.events .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.events .t{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.events .mn{font-family:var(--mono);font-size:11px;font-weight:500}
+.lvl{font-size:10.5px;font-weight:700;padding:0 6px;border-radius:3px}
+.lvl.ERROR{background:var(--crit-fill);color:var(--crit)} .lvl.WARN{background:var(--warn-fill);color:var(--warn)} .lvl.INFO,.lvl.TRAP{background:var(--surface-2);color:var(--muted)}
+.seg{display:inline-flex;background:var(--surface-2);border-radius:6px;padding:2px}
+.seg button{border:0;background:none;padding:5px 12px;border-radius:5px;cursor:pointer;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.qbar{display:grid;grid-template-columns:170px 1fr 48px;gap:8px;align-items:center;font-size:12.5px}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:20}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(760px,100vw);background:var(--bg);border-left:1px solid var(--line);z-index:21;overflow-x:hidden;overflow-y:auto;padding:0 18px 24px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-content:start;box-shadow:-16px 0 40px rgba(0,0,0,.2)}
+.drawer > *, .drawer .stack > *, .drawer .panel{min-width:0}
+.drawer-h{display:flex;gap:10px;align-items:center;position:sticky;top:0;background:var(--bg);padding-block:14px 10px;z-index:1;border-bottom:1px solid var(--line)}
+.drawer-h h2{margin:0;font-size:17px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drawer-h .kind{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}
+</style>
+
+<div id="root"></div>
+
+<script src="data.js"></script>
+<script src="data-demo.js"></script>
+<script>
+/* ---------- data ---------- */
+const SOURCES = { real: window.NET, demo: window.NET_DEMO };
+let N, byName;
+const state = { src: "demo", site: null, tab: "path", filter: "all", q: "", layerFilter: null, drawer: [], onlyIssues: true, showAllIf: false };
+function useSource(src) {
+  state.src = SOURCES[src] ? src : "real";
+  N = SOURCES[state.src];
+  byName = Object.fromEntries(N.devices.map(d => [d.name, d]));
+  Object.assign(state, { site: null, tab: "path", filter: "all", q: "", layerFilter: null, showAllIf: false });
+}
+
+/* ---------- formatting & verdict primitives ---------- */
+const ORDERV = {Critical: 0, Warning: 1, Healthy: 2, "Not monitored": 3};
+const DUR = {Critical: "1.7s", Warning: "3.2s", Healthy: "6s"};
+const ROLE_LABEL = {core:"Core", edge:"Roteador de borda", firewall:"Firewall", lb:"Load balancer", switch:"Switch", compute:"Compute", wlc:"Controladora Wi-Fi", ap:"Access point", endpoint:"Endpoint", other:"Outro"};
+const ROLE_LAYER = {core:"Core", edge:"Borda", firewall:"Segurança", lb:"Segurança", switch:"Acesso", compute:"Acesso", wlc:"Acesso", ap:"Acesso", endpoint:"Acesso", other:"Acesso"};
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const vk = v => v === "Not monitored" ? "NM" : v;
+const pill = v => `<span class="pill ${vk(v)}">${v === "Not monitored" ? "Sem polling" : v}</span>`;
+const dot = (v, breath) => `<span class="dot ${vk(v)} ${breath ? "breath" : ""}" aria-hidden="true"></span>`;
+const worst = list => list.includes("Critical") ? "Critical" : list.includes("Warning") ? "Warning" : list.includes("Healthy") ? "Healthy" : "Not monitored";
+const toneVar = v => ({Critical:"var(--crit)", Warning:"var(--warn)", Healthy:"var(--good)"}[v] || "var(--nm)");
+const fmtN = n => n == null ? "—" : Number(n).toLocaleString("pt-BR");
+const numPt = v => v == null || v === "—" ? "—" : typeof v === "number" ? v.toLocaleString("pt-BR", {maximumFractionDigits: 3}) : esc(v);
+const fmtBps = b => { if (b == null) return "—"; const u = ["bps","kbps","Mbps","Gbps","Tbps"]; let i = 0; while (b >= 1000 && i < u.length-1) { b /= 1000; i++; } return `${b >= 100 ? b.toFixed(0) : b.toFixed(1)} ${u[i]}`; };
+const fmtBytes = b => { if (b == null) return "—"; const u = ["B","KB","MB","GB","TB"]; let i = 0; while (b >= 1024 && i < u.length-1) { b /= 1024; i++; } return `${b >= 100 ? b.toFixed(0) : b.toFixed(1)} ${u[i]}`; };
+const speedLabel = s => !s ? "—" : s >= 1000 ? `${+(s/1000).toFixed(1)} Gbps` : `${s} Mbps`;
+const stripDevice = t => (t || "").replace(/^[A-Z0-9][A-Za-z0-9-]+: /, "");
+const siteName = c => N.sites[c]?.name || c;
+function infoCard(label, value, unit, ctx, tone) {
+  return `<div class="info ${tone ? vk(tone) : ""}"><span class="lab">${label}</span><span class="val">${value}${unit ? `<small>${unit}</small>` : ""}</span>${ctx ? `<span class="ctx">${ctx}</span>` : ""}</div>`;
+}
+function spark(arr, w = 120, h = 28, color = "var(--primary)", arr2 = null, color2 = "var(--muted)") {
+  if (!arr || arr.length < 2) return `<svg width="${w}" height="${h}" aria-hidden="true"></svg>`;
+  const all = arr.concat(arr2 || []), max = Math.max(...all, 1), min = Math.min(...all, 0);
+  const x = i => 1 + i * (w-4) / (arr.length-1), y = v => h-3 - (v-min) / ((max-min) || 1) * (h-7);
+  const line = a => a.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+    <path d="${line(arr)}L${x(arr.length-1).toFixed(1)},${h-1}L1,${h-1}Z" fill="${color}" opacity=".12"/>
+    ${arr2 && arr2.length > 1 ? `<path d="${line(arr2)}" fill="none" stroke="${color2}" stroke-width="1.2" stroke-dasharray="3 2"/>` : ""}
+    <path d="${line(arr)}" fill="none" stroke="${color}" stroke-width="1.6"/>
+    <circle cx="${x(arr.length-1).toFixed(1)}" cy="${y(arr[arr.length-1]).toFixed(1)}" r="2.6" fill="${color}"/></svg>`;
+}
+
+/* ---------- model: one place that answers "how is this site and why" ---------- */
+function siteV(code) {
+  return (N.siteVerdicts && N.siteVerdicts[code]) || worst(N.devices.filter(d => d.site === code && d.verdict !== "Not monitored").map(d => d.verdict));
+}
+function pathOf(code) {
+  return N.e2e.paths.find(p => p.site === code) || N.e2e.paths.find(p => p.hops[0]?.site === code) || null;
+}
+// a path belongs to a site when it was generated for it, or (real data) when it starts there
+const ownsPath = (p, code) => !!p && (p.site === code || (!p.site && p.hops[0]?.site === code));
+function siteInfo(code) {
+  const s = N.sites[code], v = siteV(code), p = pathOf(code);
+  const devs = N.devices.filter(d => d.site === code);
+  const out = { code, s, v, p, devs, circuits: (N.circuits || []).filter(c => c.site === code), cause: null, causeHop: null, causeDevice: null, causeLayer: null, incident: null };
+  if (v === "Critical" || v === "Warning") {
+    if (ownsPath(p, code) && p.summary.firstBad != null) {
+      const h = p.hops[p.summary.firstBad];
+      Object.assign(out, { causeHop: h, causeLayer: h.layer, cause: `${h.title}: ${stripDevice(h.topReason || h.headline.label)}`, incident: p.summary.incident });
+    } else {
+      const d = devs.filter(x => x.verdict === v).sort((a, b) => b.impact - a.impact)[0];
+      if (d) Object.assign(out, { causeDevice: d, causeLayer: ROLE_LAYER[d.role], cause: `${d.name}: ${d.reasons[0]?.text || ""}`, incident: d.incident });
+    }
+  }
+  return out;
+}
+const allSites = () => Object.keys(N.sites).map(siteInfo)
+  .sort((a, b) => ORDERV[a.v] - ORDERV[b.v] || (b.s.dc ? 1 : 0) - (a.s.dc ? 1 : 0) || a.s.name.localeCompare(b.s.name));
+
+/* ---------- sidebar ---------- */
+function siteListItems() {
+  const q = state.q.trim().toLowerCase();
+  const rows = allSites().filter(i => (state.filter === "all" || i.v === state.filter)
+    && (!q || `${i.s.name} ${i.code} ${i.s.uf || ""}`.toLowerCase().includes(q)));
+  if (!rows.length) return `<li class="empty">Nenhum site com esse filtro.</li>`;
+  let html = "", group = null;
+  rows.forEach(i => {
+    const g = i.v === "Critical" || i.v === "Warning" ? "Precisam de atenção" : "Dentro do esperado";
+    if (g !== group) { html += `<li class="group">${g}</li>`; group = g; }
+    html += `<li><button class="siterow" data-site="${i.code}" aria-current="${state.site === i.code}">
+      ${dot(i.v)}<span class="nm">${esc(i.s.name)}</span><span class="cd">${esc(i.code)}${i.s.uf ? ` · ${esc(i.s.uf)}` : ""}</span>
+      ${i.cause ? `<span class="cause" title="${esc(i.cause)}">${esc(i.cause)}</span>` : ""}</button></li>`;
+  });
+  return html;
+}
+function sidebar() {
+  const infos = allSites(), cnt = v => infos.filter(i => i.v === v).length;
+  const net = worst(infos.map(i => i.v));
+  return `<aside class="panel side" aria-label="Sites">
+    <button class="siterow netrow" data-go="network" aria-current="${!state.site}">${dot(net, true)}<span class="nm">Rede inteira</span><span class="cd">${infos.length} sites</span></button>
+    <div class="filters" role="group" aria-label="Filtrar sites por status">
+      ${[["all", "Todos", infos.length], ["Critical", "Critical", cnt("Critical")], ["Warning", "Warning", cnt("Warning")], ["Healthy", "Healthy", cnt("Healthy")]]
+        .map(([k, l, n]) => `<button class="fbtn" data-filter="${k}" aria-pressed="${state.filter === k}">${k === "all" ? "" : dot(k)}${l} <span class="mono">${n}</span></button>`).join("")}
+    </div>
+    <input class="search" id="sitesearch" type="search" placeholder="Buscar por nome, código ou UF" value="${esc(state.q)}" aria-label="Buscar site">
+    <ul class="sitelist">${siteListItems()}</ul>
+  </aside>`;
+}
+
+/* ---------- network page ---------- */
+function brazilMap(infos) {
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const dc = infos.find(i => i.s.dc)?.s;
+  const spokes = dc ? infos.filter(i => !i.s.dc).map(i => { const v = i.s.wanVerdict || "Healthy";
+    return `<line x1="${i.s.x}" y1="${i.s.y}" x2="${dc.x}" y2="${dc.y}" stroke="${v === "Healthy" ? "var(--wire)" : toneVar(v)}" stroke-width="${v === "Healthy" ? .8 : 2}" opacity="${v === "Healthy" ? .5 : .9}" ${v === "Not monitored" ? 'stroke-dasharray="4 3"' : ""}/>`; }).join("") : "";
+  const pins = infos.slice().reverse().map(i => { const s = i.s, v = i.v, sel = state.site === i.code;
+    const pulse = !reduce && (v === "Critical" || v === "Warning") ? `<circle cx="${s.x}" cy="${s.y}" r="7" fill="none" stroke="${toneVar(v)}" stroke-width="2"><animate attributeName="r" values="7;16;7" dur="${DUR[v]}" repeatCount="indefinite"/><animate attributeName="opacity" values=".9;0;.9" dur="${DUR[v]}" repeatCount="indefinite"/></circle>` : "";
+    const shape = s.dc ? `<rect x="${s.x-8}" y="${s.y-8}" width="16" height="16" rx="3" fill="${toneVar(v)}" stroke="var(--surface)" stroke-width="2"/>`
+                       : `<circle cx="${s.x}" cy="${s.y}" r="${sel ? 8 : 6}" fill="${toneVar(v)}" stroke="${sel ? "var(--primary)" : "var(--surface)"}" stroke-width="2"/>`;
+    const label = s.dc || v !== "Healthy" ? `<text x="${s.x+11}" y="${s.y+4}" font-size="11.5" style="fill:var(--ink);font-weight:700;paint-order:stroke;stroke:var(--surface);stroke-width:3px">${esc(s.dc ? "DC São Paulo" : s.code)}</text>` : "";
+    return `<g data-site="${i.code}" role="button" tabindex="0" aria-label="${esc(s.name)}: ${v}" style="opacity:${state.layerFilter && !s.dc && i.causeLayer !== state.layerFilter ? .22 : 1}">${pulse}${shape}${label}<title>${esc(s.name)} (${i.code}) · ${v}</title></g>`; }).join("");
+  return `<section class="panel"><div class="panel-h"><h2>Mapa</h2><span class="hint">linha = link WAN até o data center · clique num site</span></div>
+    <div class="panel-b"><svg viewBox="${N.map.viewBox.join(" ")}" class="brmap" role="img" aria-label="Mapa do Brasil com ${infos.length} sites">
+      <path d="${N.map.path}" fill="var(--surface-2)" stroke="var(--line)" stroke-width="1"/>${spokes}${pins}</svg>
+      <div class="legend">${dot("Critical")} Critical ${dot("Warning")} Warning ${dot("Healthy")} Healthy <span>■ data center</span></div></div></section>`;
+}
+function siteTiles(infos) {
+  return `<section class="panel"><div class="panel-h"><h2>Sites</h2></div><div class="panel-b tiles">${infos.map(i => `
+    <button class="tile ${vk(i.v)}" data-site="${i.code}"><span class="titlerow"><b style="font-size:16px">${esc(i.s.name)}</b>${pill(i.v)}</span>
+      <span class="hint">${i.devs.length} equipamentos · ${i.devs.filter(d => d.verdict === "Critical" || d.verdict === "Warning").length} com problema</span>
+      <span style="font-size:13px">${esc(i.cause || "Nada fora do normal")}</span></button>`).join("")}</div></section>`;
+}
+const LAYER_SHORT = {"Acesso": "Acesso", "Borda": "Borda", "Core": "Core", "Operadora": "Operadora", "Data center": "DC", "Segurança": "Segurança", "Aplicação": "App", "Internet": "Internet"};
+const LAYER_ICON = {"Acesso": "switch", "Borda": "router", "Core": "core", "Operadora": "cloud", "Data center": "core", "Segurança": "firewall", "Aplicação": "server", "Internet": "globe"};
+function layerOrder() {
+  const order = [];
+  N.e2e.paths.forEach(p => p.hops.forEach(h => { if (!order.includes(h.layer)) order.push(h.layer); }));
+  return order;
+}
+// per site, per layer: worst verdict of that layer's hops, and whether it is the probable cause or only a consequence
+function siteLayerState(i, layers) {
+  const p = ownsPath(i.p, i.code) ? i.p : null;
+  return layers.map(L => {
+    if (!p) return null;
+    const idx = p.hops.map((h, k) => h.layer === L ? k : -1).filter(k => k >= 0);
+    if (!idx.length) return null;
+    const hops = idx.map(k => p.hops[k]), v = worst(hops.map(h => h.verdict));
+    const bad = v === "Critical" || v === "Warning", cause = bad && idx.includes(p.summary.firstBad);
+    return {v, cause, cons: bad && !cause && hops.every(h => h.consequenceOnly || !(h.verdict === "Critical" || h.verdict === "Warning")), hops};
+  });
+}
+function donut(cx, cy, r, counts) {
+  const C = 2 * Math.PI * r, parts = counts.filter(c => c[1] > 0), total = parts.reduce((a, c) => a + c[1], 0) || 1;
+  let off = 0;
+  return parts.map(([v, n]) => {
+    const len = n / total * C, gap = parts.length > 1 ? 2 : 0;
+    const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${toneVar(v)}" stroke-width="9" stroke-dasharray="${Math.max(len - gap, 1).toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"><title>${n} site(s) ${v === "Not monitored" ? "sem medição" : v}</title></circle>`;
+    off += len;
+    return seg;
+  }).join("");
+}
+function networkGraph(infos) {
+  const layers = layerOrder();
+  const rows = infos.map(i => ({i, st: siteLayerState(i, layers)})).filter(r => r.st.some(Boolean));
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const nodes = ["users", ...layers];
+  const gaps = nodes.slice(1).map(n => n === "Operadora" && N.circuits ? 1.7 : 1);
+  const tot = gaps.reduce((a, b) => a + b, 0), cum = [0];
+  gaps.forEach((g, k) => cum.push(cum[k] + g));
+  const W = 1180, H = 206, Y = 84, R = 36, mx = 86;
+  const X = k => mx + cum[k] * (W - 2 * mx) / tot;
+  const stats = layers.map((L, li) => {
+    const cells = rows.map(r => r.st[li]).filter(Boolean);
+    const cnt = v => cells.filter(c => c.v === v).length;
+    const causes = rows.filter(r => r.st[li]?.cause);
+    const names = new Set();
+    rows.forEach(r => (r.st[li]?.hops || []).forEach(h => (h.devices || []).forEach(n => names.add(n))));
+    const devs = [...names].map(n => byName[n]).filter(Boolean);
+    let fact;
+    if (L === "Operadora" && N.circuits) fact = `${N.circuits.length} links`;
+    else if (L === "Aplicação") {
+      const p90 = rows.map(r => r.st[li]?.hops.find(h => h.kind === "app")?.stats.p90Ms).filter(v => v != null).sort((a, b) => a - b);
+      fact = p90.length ? `p90 mediano ${numPt(Math.round(p90[Math.floor(p90.length / 2)] / 100) / 10)} s` : "workloads com OneAgent";
+    } else if (L === "Internet") {
+      const peers = N.peers.filter(p => p.proto === "BGP");
+      fact = `BGP ${peers.filter(p => (p.state || "").startsWith("established")).length}/${peers.length} established`;
+    } else fact = `${devs.length} equipamentos`;
+    return {L, causes, cons: cells.filter(c => c.cons).length, fact, verdict: worst(causes.map(r => r.st[li].v)),
+            counts: [["Critical", cnt("Critical")], ["Warning", cnt("Warning")], ["Healthy", cnt("Healthy")], ["Not monitored", cnt("Not monitored")]]};
+  });
+  let links = "";
+  for (let k = 0; k < nodes.length - 1; k++) {
+    const x1 = X(k) + R + 7, x2 = X(k+1) - R - 7, mid = (x1 + x2) / 2, st = stats[k];
+    if (nodes[k+1] === "Operadora" && N.circuits) {
+      [["primary", -28, "Primários"], ["backup", 28, "Backups"]].forEach(([kind, off, label]) => {
+        const cs = N.circuits.filter(c => c.kind === kind);
+        if (!cs.length) return;
+        const down = cs.filter(c => c.status === "down").length;
+        const degr = cs.filter(c => c.status === "up" && (c.verdict === "Critical" || c.verdict === "Warning")).length;
+        const lv = down ? (kind === "primary" ? "Critical" : "Warning") : degr ? "Warning" : "Healthy";
+        const d = `M${x1},${Y} C${x1+50},${Y+off} ${x2-50},${Y+off} ${x2},${Y}`;
+        links += `<path d="${d}" fill="none" stroke="${toneVar(lv)}" stroke-width="3" ${kind === "backup" ? 'stroke-dasharray="6 4"' : ""}/>`
+          + (reduce ? "" : `<circle r="3.4" fill="${toneVar(lv)}"><animateMotion dur="${DUR[lv]}" repeatCount="indefinite" path="${d}"/></circle>`)
+          + `<text x="${mid}" y="${off < 0 ? Y + off * .75 - 9 : Y + off * .75 + 19}" text-anchor="middle" font-size="11" style="fill:var(--ink)"><tspan font-weight="700">${label}</tspan> ${cs.length}`
+          + (down ? ` · <tspan style="fill:var(--crit);font-weight:700">${down} fora</tspan>` : "")
+          + (degr ? ` · <tspan style="fill:var(--warn);font-weight:700">${degr} degradado${degr > 1 ? "s" : ""}</tspan>` : "") + `</text>`;
+      });
+      continue;
+    }
+    const v = st.causes.length ? st.verdict : "Healthy", d = `M${x1},${Y} L${x2},${Y}`;
+    links += `<path d="${d}" fill="none" stroke="${v === "Healthy" ? "var(--wire)" : toneVar(v)}" stroke-width="${v === "Healthy" ? 2 : 3}"/>`
+      + (reduce ? "" : `<circle r="3" fill="${toneVar(v)}"><animateMotion dur="${DUR[v]}" repeatCount="indefinite" path="${d}"/></circle>`);
+  }
+  const nodeSvg = nodes.map((L, k) => {
+    const cx = X(k);
+    if (k === 0) {
+      const aff = rows.filter(r => r.i.v === "Critical" || r.i.v === "Warning").length;
+      return `<g><circle cx="${cx}" cy="${Y}" r="${R}" fill="var(--surface)" stroke="var(--line)" stroke-width="2"/>${e2eIcon("users", cx, Y)}
+        <text x="${cx}" y="${Y+R+22}" text-anchor="middle" font-size="13" style="fill:var(--ink);font-weight:700">Usuários</text>
+        <text x="${cx}" y="${Y+R+38}" text-anchor="middle" font-size="11">${rows.length} sites</text>
+        <text x="${cx}" y="${Y+R+54}" text-anchor="middle" font-size="11" style="fill:${aff ? "var(--crit)" : "var(--muted)"};font-weight:700">${aff} com problema</text></g>`;
+    }
+    const st = stats[k-1], nc = st.causes.length, sel = state.layerFilter === L;
+    const tone = nc ? toneVar(st.verdict) : "var(--muted)";
+    return `<g class="lnode" data-layer="${esc(L)}" role="button" tabindex="0" aria-pressed="${sel}" aria-label="${esc(L)}: ${nc} causa(s) provável(is), ${st.cons} site(s) afetado(s) por consequência. Clique para filtrar.">
+      ${sel ? `<circle cx="${cx}" cy="${Y}" r="${R+11}" fill="none" stroke="var(--primary)" stroke-width="2.5"/>` : ""}
+      ${!reduce && nc ? `<circle cx="${cx}" cy="${Y}" r="${R+5}" fill="none" stroke="${tone}" stroke-width="2"><animate attributeName="r" values="${R+5};${R+17};${R+5}" dur="${DUR[st.verdict]}" repeatCount="indefinite"/><animate attributeName="opacity" values=".8;0;.8" dur="${DUR[st.verdict]}" repeatCount="indefinite"/></circle>` : ""}
+      <circle cx="${cx}" cy="${Y}" r="${R}" fill="var(--surface)"/>${donut(cx, Y, R, st.counts)}
+      ${e2eIcon(LAYER_ICON[L] || "switch", cx, Y - 8)}
+      <text x="${cx}" y="${Y+21}" text-anchor="middle" font-size="14" style="fill:${tone};font-weight:800">${nc}</text>
+      <text x="${cx}" y="${Y+R+22}" text-anchor="middle" font-size="13" style="fill:var(--ink);font-weight:700">${esc(L)}</text>
+      <text x="${cx}" y="${Y+R+38}" text-anchor="middle" font-size="11">${nc ? `<tspan style="fill:${tone};font-weight:700">${nc} causa${nc > 1 ? "s" : ""}</tspan>` : "sem causa"}${st.cons ? ` · ${st.cons} consequência` : ""}</text>
+      <text x="${cx}" y="${Y+R+54}" text-anchor="middle" font-size="11">${esc(st.fact)}</text></g>`;
+  }).join("");
+  return `<section class="panel"><div class="panel-h"><h2>Caminho da rede inteira</h2><span class="hint">anel = sites por status em cada camada · número = causas prováveis ali · clique numa camada para filtrar</span></div>
+    <div class="panel-b tblwrap netgraph"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Caminho agregado de ${rows.length} sites">${links}${nodeSvg}</svg>
+      ${state.layerFilter ? `<div class="legend" style="margin-top:6px"><span class="chip tag">Mostrando sites com causa em <b>${esc(state.layerFilter)}</b></span><button class="linkbtn" data-layer="" style="color:var(--primary)">Limpar filtro</button></div>` : ""}</div></section>`;
+}
+function sitePaths(infos) {
+  const layers = layerOrder(), n = layers.length;
+  const list = infos.filter(i => !state.layerFilter || i.causeLayer === state.layerFilter);
+  const cell = (c, k) => {
+    const pos = k === 0 ? "first" : k === n - 1 ? "last" : "";
+    if (!c) return `<span class="pcell ${pos}"><span class="pnode none"></span></span>`;
+    const t = toneVar(c.v);
+    return `<span class="pcell ${pos}" title="${esc(layers[k])}: ${c.v === "Not monitored" ? "sem medição" : c.v}${c.cause ? " · causa provável" : c.cons ? " · consequência" : ""}"><span class="pnode ${c.cause ? "cause" : c.cons ? "cons" : ""}" style="color:${t};${c.cons ? "" : `background:${t}`}"></span></span>`;
+  };
+  return `<section class="panel"><div class="panel-h"><h2>Todos os sites, camada por camada</h2><span class="hint">${list.length} de ${infos.length} sites · ponto grande = causa · anel vazado = consequência</span></div>
+    <div class="panel-b pscroll"><div class="paths" style="--n:${n}">
+      <div class="prow head"><span>Site</span>${layers.map(L => `<span class="pcell-h" title="${esc(L)}">${esc(LAYER_SHORT[L] || L)}</span>`).join("")}<span style="padding-left:8px">Causa provável</span></div>
+      ${list.map(i => { const st = siteLayerState(i, layers);
+        return `<button class="prow" data-site="${i.code}" aria-label="${esc(i.s.name)}: ${i.v}${i.cause ? `, causa provável ${esc(i.cause)}` : ""}">
+          <span class="pname">${dot(i.v)}<span style="overflow:hidden;text-overflow:ellipsis">${esc(i.s.name)}</span></span>
+          ${st.some(Boolean) ? st.map(cell).join("") : `<span class="hint" style="grid-column:span ${n};text-align:center">${i.s.dc ? "data center · destino dos caminhos" : "sem caminho medido"}</span>`}
+          <span class="pcause">${i.cause ? esc(i.cause) : "—"}${i.incident ? ` <span class="chip inc">${esc(i.incident)}</span>` : ""}</span></button>`; }).join("")
+        || `<div class="empty">Nenhum site com causa nessa camada.</div>`}
+    </div></div></section>`;
+}
+function networkPage() {
+  const infos = allSites();
+  const affected = infos.filter(i => i.v === "Critical" || i.v === "Warning");
+  const crit = infos.filter(i => i.v === "Critical").length, warn = affected.length - crit;
+  const net = worst(infos.map(i => i.v));
+  const blind = N.devices.filter(d => d.verdict === "Not monitored");
+  const layers = {};
+  affected.forEach(i => (layers[i.causeLayer || "Outro"] ||= []).push(i));
+  const rows = Object.entries(layers).sort((a, b) => b[1].length - a[1].length || ORDERV[worst(a[1].map(x => x.v))] - ORDERV[worst(b[1].map(x => x.v))]);
+  const maxN = Math.max(1, ...rows.map(r => r[1].length));
+  let cards;
+  if (N.circuits) {
+    const circuits = N.circuits, down = circuits.filter(c => c.status === "down");
+    const degraded = circuits.filter(c => c.status === "up" && (c.verdict === "Critical" || c.verdict === "Warning"));
+    const apps = N.e2e.paths.map(p => ({p, a: p.hops.find(h => h.kind === "app")})).filter(x => x.a && x.a.stats.p90Ms != null)
+      .sort((x, y) => y.a.stats.p90Ms - x.a.stats.p90Ms);
+    cards = [
+      infoCard("Sites com problema", `${affected.length}<small>/ ${infos.length}</small>`, "", `${crit} Critical · ${warn} Warning`, net),
+      infoCard("Links WAN fora", down.length, "", `de ${circuits.length} links · ${degraded.length} degradado(s)`, down.length ? "Critical" : degraded.length ? "Warning" : "Healthy"),
+      infoCard("Pior tempo de resposta SAP", apps[0] ? numPt(Math.round(apps[0].a.stats.p90Ms / 100) / 10) : "—", "s", apps[0] ? `p90 · ${esc(siteName(apps[0].p.site))}` : "", apps[0]?.a.verdict),
+      infoCard("Pontos cegos", blind.length, "", "equipamentos descobertos sem polling", blind.length ? "Warning" : "Healthy"),
+    ];
+  } else {
+    const mon = N.devices.filter(d => d.verdict !== "Not monitored"), bad = mon.filter(d => d.verdict === "Critical" || d.verdict === "Warning");
+    const rtts = N.devices.map(d => d.icmp?.rttMs).filter(v => v != null);
+    cards = [
+      infoCard("Sites com problema", `${affected.length}<small>/ ${infos.length}</small>`, "", `${crit} Critical · ${warn} Warning`, net),
+      infoCard("Equipamentos com problema", `${bad.length}<small>/ ${mon.length}</small>`, "", `${mon.filter(d => d.verdict === "Critical").length} Critical`, worst(bad.map(d => d.verdict))),
+      infoCard("Latência ICMP máx", numPt(rtts.length ? Math.max(...rtts) : null), "ms", `a partir de ${esc(N.e2e.probe)}`, "Healthy"),
+      infoCard("Pontos cegos", blind.length, "", "equipamentos descobertos sem polling", blind.length ? "Warning" : "Healthy"),
+    ];
+  }
+  const lede = affected.length
+    ? `${affected.length} de ${infos.length} sites precisam de atenção. A causa provável mais comum está em <b>${esc(rows[0][0])}</b> (${rows[0][1].length} site${rows[0][1].length > 1 ? "s" : ""}).`
+    : `Todos os ${infos.length} sites estão dentro do esperado.`;
+  const causes = `<section class="panel"><div class="panel-h"><h2>Onde estão as causas</h2><span class="hint">sites agrupados pela camada da causa provável</span></div>
+    <div class="panel-b">${rows.length ? `<ul class="causes">${rows.map(([layer, list]) => `<li>
+      <div class="row"><b>${esc(layer)}</b><span class="mono hint">${list.length} site${list.length > 1 ? "s" : ""}</span></div>
+      <div class="bar"><i style="width:${list.length / maxN * 100}%;background:${toneVar(worst(list.map(x => x.v)))}"></i></div>
+      <div class="chips">${list.map(x => `<button class="chip sitechip" data-site="${x.code}" title="${esc(x.cause)}">${dot(x.v)}${esc(x.s.name)}${x.incident ? ` <span class="mono" style="color:var(--crit)">${esc(x.incident)}</span>` : ""}</button>`).join("")}</div>
+    </li>`).join("")}</ul>` : `<div class="empty">${dot("Healthy")} Nenhuma causa ativa.</div>`}</div></section>`;
+  return `<div class="stack">
+    <div class="stack" style="gap:6px">
+      <div class="titlerow"><h1>Rede</h1>${pill(net)}</div><p class="lede">${lede}</p></div>
+    <div class="infocards">${cards.join("")}</div>
+    ${networkGraph(infos)}
+    <div class="netgrid">${N.map ? brazilMap(infos) : ""}${sitePaths(infos)}</div>
+  </div>`;
+}
+
+/* ---------- site page ---------- */
+function exportersOf(code) {
+  return (N.flows?.exporters || []).filter(e => byName[e.device]?.site === code);
+}
+function sitePage() {
+  const i = siteInfo(state.site);
+  const { s, v, p, devs, circuits } = i;
+  const tabs = [
+    ["path", "Caminho E2E", !!p],
+    ["devices", `Equipamentos (${devs.length})`, true],
+    ["links", `Links WAN (${circuits.length})`, circuits.length > 0],
+    ["events", "Eventos", true],
+    ["traffic", "Tráfego", !N.demo && exportersOf(state.site).length > 0],
+  ].filter(t => t[2]);
+  if (!tabs.some(t => t[0] === state.tab)) state.tab = tabs[0][0];
+  const bad = devs.filter(d => d.verdict === "Critical" || d.verdict === "Warning");
+  const blind = devs.filter(d => d.verdict === "Not monitored");
+  let cards;
+  const circHop = p && ownsPath(p, state.site) ? p.hops.find(h => h.kind === "circuit") : null;
+  const appHop = p && ownsPath(p, state.site) ? p.hops.find(h => h.kind === "app") : null;
+  if (circHop) {
+    const up = circuits.filter(c => c.status === "up" && c.latencyMs != null), prim = circuits.find(c => c.kind === "primary");
+    cards = [
+      infoCard("Links WAN ativos", `${circuits.filter(c => c.status === "up").length}<small>/ ${circuits.length}</small>`, "", prim && prim.latencyMs != null ? `primário ${numPt(prim.latencyMs)} ms · SLA ${prim.slaMs} ms` : "primário sem medição", circHop.verdict),
+      infoCard("Perda no link", up.length ? numPt(Math.max(...up.map(c => c.lossPct || 0))) : "—", up.length ? "%" : "", up.length ? "maior perda entre links ativos" : "nenhum link medido", up.length ? circHop.verdict : "Not monitored"),
+      infoCard("Tempo de resposta SAP", appHop.stats.p90Ms != null ? numPt(Math.round(appHop.stats.p90Ms / 100) / 10) : "—", appHop.stats.p90Ms != null ? "s" : "", appHop.stats.p90Ms != null ? `p90 · erros ${numPt(appHop.stats.errPct)}%` : "sem sessões da filial", appHop.verdict),
+      infoCard("Equipamentos com problema", `${bad.length}<small>/ ${devs.length}</small>`, "", blind.length ? `${blind.length} sem polling` : "todos com polling", worst(bad.map(d => d.verdict))),
+    ];
+  } else {
+    const cpus = devs.map(d => d.cpuNow).filter(x => x != null), rtts = devs.map(d => d.icmp?.rttMs).filter(x => x != null);
+    const cpuMax = cpus.length ? Math.max(...cpus) : null;
+    cards = [
+      infoCard("Equipamentos com problema", `${bad.length}<small>/ ${devs.length}</small>`, "", `${devs.filter(d => d.verdict === "Critical").length} Critical`, worst(bad.map(d => d.verdict))),
+      infoCard("CPU máx", cpuMax != null ? Math.round(cpuMax) : "—", cpuMax != null ? "%" : "", cpuMax != null ? esc(devs.find(d => d.cpuNow === cpuMax).name) : "", cpuMax == null ? "Not monitored" : cpuMax >= N.meta.thresholds.cpu_crit ? "Critical" : cpuMax >= N.meta.thresholds.cpu_warn ? "Warning" : "Healthy"),
+      infoCard("Latência ICMP máx", numPt(rtts.length ? Math.max(...rtts) : null), "ms", `a partir de ${esc(N.e2e.probe)}`, rtts.length ? "Healthy" : "Not monitored"),
+      infoCard("Pontos cegos", blind.length, "", blind.length ? "descobertos sem polling" : "todos com polling", blind.length ? "Warning" : "Healthy"),
+    ];
+  }
+  const consequence = p && ownsPath(p, state.site) && p.summary.consequenceHops ? `<span class="hint">+ ${p.summary.consequenceHops} salto(s) afetados só por consequência</span>` : "";
+  const causeBox = i.cause
+    ? `<div class="cause-box ${v}"><span class="k">Causa provável</span><span class="t">${esc(i.cause)}</span>${i.incident ? `<span class="chip inc">${esc(i.incident)}</span>` : ""}${consequence}<button class="linkbtn go" data-open="cause">Ver detalhe →</button></div>`
+    : `<div class="cause-box Healthy"><span class="k">Sem causa ativa</span><span class="t">Nada fora do normal neste site.</span></div>`;
+  let body = "";
+  if (state.tab === "path") body = `${e2eGraph(p)}${ownsPath(p, state.site) ? timeSplit(p) : `<p class="hint" style="margin:0">Caminho a partir deste site: ${esc(p.name)}.</p>`}`;
+  else if (state.tab === "devices") body = devicesTable(devs);
+  else if (state.tab === "links") body = `<section class="panel"><div class="panel-b tblwrap">${circuitsTable(circuits)}</div></section>`;
+  else if (state.tab === "events") body = eventsList(devs);
+  else if (state.tab === "traffic") body = trafficFor(state.site);
+  return `<div class="stack">
+    <div class="stack" style="gap:6px">
+      <nav class="crumbs" aria-label="Você está em"><button data-go="network">Rede</button><span>›</span><span style="color:var(--ink);font-weight:600">${esc(s.name)}</span></nav>
+      <div class="titlerow"><h1>${esc(s.name)}</h1><span class="mono hint">${esc(state.site)}${s.uf ? ` · ${esc(s.uf)}` : ""}${s.id ? ` · ID ${esc(s.id)}` : ""}${s.dc ? " · data center" : ""}</span>${pill(v)}</div>
+    </div>
+    ${causeBox}
+    <div class="infocards">${cards.join("")}</div>
+    <div class="stabs" role="tablist">${tabs.map(([id, l]) => `<button class="stab" role="tab" data-tab="${id}" aria-selected="${state.tab === id}">${l}</button>`).join("")}</div>
+    ${body}
+  </div>`;
+}
+function devicesTable(devs) {
+  const rows = devs.slice().sort((a, b) => ORDERV[a.verdict] - ORDERV[b.verdict] || (b.impact || 0) - (a.impact || 0) || a.name.localeCompare(b.name));
+  return `<section class="panel"><div class="panel-b tblwrap"><table style="min-width:860px"><thead><tr><th>Status</th><th>Equipamento</th><th>Papel</th><th>IP</th><th class="r">CPU</th><th class="r">ICMP</th><th class="r">Perda</th><th>Motivo principal</th></tr></thead><tbody>
+    ${rows.map(d => `<tr><td>${pill(d.verdict)}</td><td><button class="linkbtn mono" data-dev="${esc(d.name)}">${esc(d.name)}</button></td><td>${ROLE_LABEL[d.role] || d.role}</td>
+      <td class="mono">${esc(d.ip)}</td><td class="r mono">${d.cpuNow != null ? Math.round(d.cpuNow) + "%" : "—"}</td>
+      <td class="r mono">${d.icmp?.rttMs != null ? numPt(d.icmp.rttMs) + " ms" : "—"}</td><td class="r mono">${d.icmp?.loss != null ? numPt(d.icmp.loss) + "%" : "—"}</td>
+      <td>${esc(d.reasons[0]?.text || "Dentro do esperado")}${d.incident ? ` <span class="chip inc">${esc(d.incident)}</span>` : ""}</td></tr>`).join("")}
+  </tbody></table></div></section>`;
+}
+function circuitsTable(circuits) {
+  return `<table style="min-width:860px"><thead><tr><th>Status</th><th>Link</th><th>Operadora · tecnologia</th><th class="r">Latência</th><th class="r">SLA</th><th class="r">Perda</th><th class="r">Jitter</th><th>Incidente</th><th>Motivo</th></tr></thead><tbody>
+    ${circuits.map(c => `<tr><td>${pill(c.verdict)}</td><td>${c.kind === "primary" ? "Primário" : "Backup"}</td><td>${esc(c.carrier)} · ${esc(c.tech)}</td>
+      <td class="r mono">${c.latencyMs != null ? numPt(c.latencyMs) + " ms" : "—"}</td><td class="r mono">${numPt(c.slaMs)} ms</td>
+      <td class="r mono">${c.lossPct != null ? numPt(c.lossPct) + "%" : "—"}</td><td class="r mono">${c.jitterMs != null ? numPt(c.jitterMs) + " ms" : "—"}</td>
+      <td>${c.incident ? `<span class="chip inc">${esc(c.incident)}</span>` : "—"}</td><td>${esc(c.reasons[0]?.text || "Dentro do SLA")}</td></tr>`).join("")}</tbody></table>
+    <div class="hint" style="margin-top:8px">Latência, perda e jitter medidos por ICMP sintético do data center até o roteador do site, por link, e comparados ao SLA de cada link.</div>`;
+}
+function eventLine(e, deviceName) {
+  const k = e.kind === "trap" ? "TRAP" : e.level;
+  return `<li><div class="top"><span class="lvl ${esc(k)}">${esc(k)}</span>${e.mnemonic ? `<span class="mn">${esc(e.mnemonic)}</span>` : ""}<span class="t">${esc(e.t.slice(11, 16))} UTC</span>
+    ${deviceName ? `<button class="linkbtn mono" style="font-size:11.5px" data-dev="${esc(deviceName)}">${esc(deviceName)}</button>` : ""}</div><div>${esc(e.text)}</div></li>`;
+}
+function eventsList(devs) {
+  const evs = devs.flatMap(d => d.events.map(e => ({e, d: d.name}))).sort((a, b) => b.e.t.localeCompare(a.e.t)).slice(0, 80);
+  return `<section class="panel"><div class="panel-h"><h2>Syslog e traps</h2><span class="hint">mais recentes primeiro · últimas 3h</span></div>
+    <div class="panel-b">${evs.length ? `<ul class="events">${evs.map(x => eventLine(x.e, x.d)).join("")}</ul>` : `<div class="empty">Sem eventos no período.</div>`}</div></section>`;
+}
+function trafficFor(code) {
+  const q = N.flows.quality;
+  return `<div class="stack">
+    <div class="note-box"><b>Confiança do flow: baixa.</b> ${q.oldStartPct}% dos registros com timestamp antigo, ${q.pktGtBytesPct}% com mais pacotes que bytes e sem <span class="mono">ifIndex</span>: os volumes abaixo são indicativos.</div>
+    ${exportersOf(code).map(e => { const tot = e.flows5m.reduce((a, b) => a + b, 0), maxP = Math.max(...e.protocols.map(p => p.flows), 1);
+      return `<section class="panel"><div class="panel-h"><h3><button class="linkbtn" data-dev="${esc(e.device)}">${esc(e.device)}</button></h3><span class="mono hint">${esc(e.ip)} · NetFlow v9</span></div>
+        <div class="panel-b stack">
+          <div style="display:flex;gap:16px;align-items:end;flex-wrap:wrap"><div><div class="hint">flows · 2h</div><div style="font-size:24px;font-weight:800" class="mono">${fmtN(tot)}</div></div>${spark(e.flows5m, 220, 40)}</div>
+          ${e.protocols.map(p => `<div class="qbar" style="grid-template-columns:90px 1fr 70px"><span class="mono">${esc(p.proto)}</span><div class="bar"><i style="width:${p.flows / maxP * 100}%;background:var(--primary)"></i></div><span class="mono">${fmtN(p.flows)}</span></div>`).join("")}
+          <table><thead><tr><th>Origem</th><th>Destino</th><th>Protocolo</th><th class="r">Flows</th><th class="r">Volume reportado</th></tr></thead><tbody>
+          ${N.flows.top.filter(c => c.exp === e.ip).slice(0, 10).map(c => `<tr><td class="mono">${esc(c.src)}</td><td class="mono">${esc(c.dst)}:${esc(c.dport)}</td><td class="mono">${esc(c.proto)}</td><td class="r mono">${fmtN(c.flows)}</td><td class="r mono">${fmtN(c.gb)} GB</td></tr>`).join("")}
+          </tbody></table></div></section>`; }).join("")}
+  </div>`;
+}
+
+/* ---------- end-to-end graph ---------- */
+function e2eIcon(type, cx, cy) {
+  const s = `fill="none" stroke="var(--ink)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"`;
+  switch (type) {
+    case "users": return `<g ${s}><circle cx="${cx}" cy="${cy-6}" r="5"/><path d="M${cx-10},${cy+11} q10,-15 20,0"/></g>`;
+    case "wifi": return `<g ${s}><path d="M${cx-11},${cy-3} q11,-10 22,0 M${cx-7},${cy+2} q7,-6 14,0"/><circle cx="${cx}" cy="${cy+7}" r="1.6" fill="var(--ink)"/></g>`;
+    case "switch": return `<g ${s}><rect x="${cx-13}" y="${cy-7}" width="26" height="14" rx="2"/><path d="M${cx-8},${cy} h2 M${cx-3},${cy} h2 M${cx+2},${cy} h2 M${cx+7},${cy} h1"/></g>`;
+    case "router": return `<g ${s}><circle cx="${cx}" cy="${cy}" r="11"/><path d="M${cx-6},${cy-6} l4,4 M${cx+6},${cy+6} l-4,-4 M${cx+6},${cy-6} l-4,4 M${cx-6},${cy+6} l4,-4"/></g>`;
+    case "cloud": return `<g ${s}><path d="M${cx-11},${cy+7} h22 a6,6 0 0 0 0,-12 a8,8 0 0 0 -15,-2 a6,6 0 0 0 -7,14z"/></g>`;
+    case "core": return `<g ${s}><rect x="${cx-12}" y="${cy-10}" width="24" height="6" rx="1.5"/><rect x="${cx-12}" y="${cy-2}" width="24" height="6" rx="1.5"/><rect x="${cx-12}" y="${cy+6}" width="24" height="6" rx="1.5"/></g>`;
+    case "firewall": return `<g ${s}><rect x="${cx-12}" y="${cy-10}" width="24" height="20" rx="2"/><path d="M${cx-12},${cy-3} h24 M${cx-12},${cy+4} h24 M${cx-4},${cy-10} v7 M${cx+4},${cy-3} v7 M${cx-4},${cy+4} v6"/></g>`;
+    case "globe": return `<g ${s}><circle cx="${cx}" cy="${cy}" r="11"/><path d="M${cx-11},${cy} h22 M${cx},${cy-11} q-8,11 0,22 q8,-11 0,-22"/></g>`;
+    default: return `<g ${s}><rect x="${cx-11}" y="${cy-11}" width="22" height="22" rx="2.5"/><path d="M${cx-6},${cy-5} h12 M${cx-6},${cy} h12 M${cx-6},${cy+5} h7"/></g>`;
+  }
+}
+function iconType(h) {
+  if (h.kind === "circuit") return "cloud";
+  if (h.kind === "internet") return "globe";
+  if (h.kind === "app" || h.kind === "cloud") return "server";
+  const t = h.title.toLowerCase();
+  if (/switch/.test(t)) return "switch";
+  if (/wi-?fi|wireless/.test(t)) return "wifi";
+  if (/de borda|da filial|roteador e firewall/.test(t)) return "router";
+  if (/core|concentrador/.test(t)) return "core";
+  if (/firewall/.test(t)) return "firewall";
+  return "switch";
+}
+function e2eGraph(P) {
+  const s = P.summary, reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const open = state.drawer.find(d => d.type === "hop" && d.path === P.id);
+  const selIdx = open ? open.i : -1;
+  const nodes = [{user: true, site: P.hops[0].site}, ...P.hops.map((h, i) => ({h, i, site: h.site}))];
+  const gaps = nodes.slice(1).map(n => n.h && n.h.kind === "circuit" && n.h.circuits?.length ? 2 : 1);
+  const totalGap = gaps.reduce((a, b) => a + b, 0), cum = [0];
+  gaps.forEach((g, i) => cum.push(cum[i] + g));
+  const W = Math.max(1000, 172 * (totalGap + 1)), H = 292, Y = 142, R = 28, mx = 78;
+  const X = k => mx + cum[k] * (W - 2 * mx) / totalGap;
+  const segs = [];
+  nodes.forEach((n, k) => { const l = segs[segs.length-1]; if (l && l.site === n.site) l.end = k; else segs.push({site: n.site, start: k, end: k}); });
+  const bands = segs.map(g => { const x1 = X(g.start) - 80, x2 = X(g.end) + 80;
+    return `<rect x="${x1+5}" y="8" width="${x2-x1-10}" height="${H-12}" rx="14" fill="var(--surface-2)" opacity=".6"/>
+      <text x="${(x1+x2)/2}" y="28" text-anchor="middle" font-size="11" style="fill:var(--muted);letter-spacing:.08em;font-weight:700">${esc(String(siteName(g.site)).toUpperCase())}</text>`; }).join("");
+  const packet = (d, v) => reduce || !DUR[v] ? "" : `<circle r="3.4" fill="${toneVar(v)}"><animateMotion dur="${DUR[v]}" repeatCount="indefinite" path="${d}"/></circle>`;
+  let links = "";
+  for (let k = 0; k < nodes.length - 1; k++) {
+    const x1 = X(k) + R + 5, x2 = X(k+1) - R - 5, mid = (x1 + x2) / 2, next = nodes[k+1].h;
+    if (next && next.kind === "circuit" && next.circuits?.length) {
+      next.circuits.forEach((c, j) => {
+        const off = next.circuits.length === 1 ? 0 : (j === 0 ? -36 : 36);
+        const d = `M${x1},${Y} C${x1+45},${Y+off} ${x2-45},${Y+off} ${x2},${Y}`;
+        const down = c.status === "down", nm = c.verdict === "Not monitored", cy = Y + off * .75;
+        links += `<path d="${d}" fill="none" stroke="${nm ? "var(--wire)" : toneVar(c.verdict)}" stroke-width="${down ? 2 : 3}" ${c.kind === "backup" || nm ? 'stroke-dasharray="6 4"' : ""}/>`
+          + (down || nm ? "" : packet(d, c.verdict))
+          + (down ? `<text x="${mid}" y="${cy+5}" text-anchor="middle" font-size="16" style="fill:var(--crit);font-weight:800">✕</text>` : "")
+          + `<text x="${mid}" y="${off < 0 ? cy - 9 : off > 0 ? cy + 19 : Y - 10}" text-anchor="middle" font-size="10.5" style="fill:var(--ink)"><tspan font-weight="700">${c.kind === "primary" ? "Primário" : "Backup"}</tspan> · ${esc(c.tech.split(" ")[0])} · ${down ? "fora" : c.latencyMs != null ? numPt(c.latencyMs) + " ms" : "sem medição"}</text>`;
+      });
+      continue;
+    }
+    const L = k === 0 ? {kind: "lan", verdict: "Not monitored", label: "", facts: []} : P.links[k-1];
+    const d = `M${x1},${Y} L${x2},${Y}`, measured = L.kind !== "lan";
+    links += `<path d="${d}" fill="none" stroke="${measured ? toneVar(L.verdict) : "var(--wire)"}" stroke-width="${measured ? 3 : 2}" ${measured ? "" : 'stroke-dasharray="5 4"'}/>`
+      + (measured && L.verdict !== "Critical" ? packet(d, L.verdict) : "")
+      + (measured && L.verdict === "Critical" ? `<text x="${mid}" y="${Y+5}" text-anchor="middle" font-size="16" style="fill:var(--crit);font-weight:800">✕</text>` : "")
+      + (measured ? `<text x="${mid}" y="${Y-10}" text-anchor="middle" font-size="10.5" style="fill:var(--ink);font-weight:700">${esc(L.label)}</text>
+          <text x="${mid}" y="${Y+19}" text-anchor="middle" font-size="10" class="mono">${esc((L.facts || []).join(" · "))}</text>` : "");
+  }
+  const nodeSvg = nodes.map((n, k) => {
+    const cx = X(k);
+    if (n.user) return `<g><circle cx="${cx}" cy="${Y}" r="${R}" fill="var(--surface)" stroke="var(--line)" stroke-width="2"/>${e2eIcon("users", cx, Y)}
+      <text x="${cx}" y="${Y+48}" text-anchor="middle" font-size="12" style="fill:var(--ink);font-weight:700">Usuários</text>
+      <text x="${cx}" y="${Y+64}" text-anchor="middle" font-size="10.5">${esc(siteName(n.site))}</text></g>`;
+    const h = n.h, v = h.verdict, tone = toneVar(v), sel = n.i === selIdx;
+    const root = n.i === s.firstBad && (v === "Critical" || v === "Warning"), cons = !root && h.consequenceOnly;
+    const pulse = !reduce && root ? `<circle cx="${cx}" cy="${Y}" r="${R}" fill="none" stroke="${tone}" stroke-width="2"><animate attributeName="r" values="${R};${R+15};${R}" dur="${DUR[v]}" repeatCount="indefinite"/><animate attributeName="opacity" values=".85;0;.85" dur="${DUR[v]}" repeatCount="indefinite"/></circle>` : "";
+    const badge = root ? `<rect x="${cx-54}" y="${Y-R-31}" width="108" height="19" rx="9.5" fill="${tone}"/><text x="${cx}" y="${Y-R-18}" text-anchor="middle" font-size="10" style="fill:var(--surface);font-weight:800;letter-spacing:.05em">CAUSA PROVÁVEL</text>`
+      : cons ? `<text x="${cx}" y="${Y-R-14}" text-anchor="middle" font-size="10.5" style="font-style:italic">consequência</text>` : "";
+    const inc = (h.incidents || [])[0] ? `<text x="${cx}" y="${Y-R-39}" text-anchor="middle" font-size="10" class="mono" style="fill:var(--crit);font-weight:600">${esc(h.incidents[0])}</text>` : "";
+    const val = numPt(h.headline.value);
+    const count = h.devices.length ? ` · ${h.devices.length} equip.` : h.circuits ? ` · ${h.circuits.length} link(s)` : "";
+    return `<g class="enode" data-hop="${n.i}" role="button" tabindex="0" aria-label="${esc(h.title)}, ${esc(siteName(h.site))}: ${v}, ${esc(val)} ${esc(h.headline.unit)} ${esc(h.headline.label)}">
+      ${pulse}${sel ? `<circle cx="${cx}" cy="${Y}" r="${R+7}" fill="none" stroke="var(--primary)" stroke-width="2"/>` : ""}
+      <circle cx="${cx}" cy="${Y}" r="${R}" fill="var(--surface)" stroke="${tone}" stroke-width="${sel ? 4 : 2.6}" ${cons ? 'stroke-dasharray="5 4"' : ""}/>
+      ${e2eIcon(iconType(h), cx, Y)}${badge}${inc}
+      <circle cx="${cx+R-5}" cy="${Y-R+5}" r="6" fill="${tone}" stroke="var(--surface)" stroke-width="2"/>
+      <text x="${cx}" y="${Y+48}" text-anchor="middle" font-size="12" style="fill:var(--ink);font-weight:700">${esc(h.title)}</text>
+      <text x="${cx}" y="${Y+63}" text-anchor="middle" font-size="10.5">${esc(h.layer)}${count}</text>
+      <text x="${cx}" y="${Y+92}" text-anchor="middle" font-size="22" style="fill:${tone};font-weight:800">${esc(val)}<tspan font-size="12" style="fill:var(--muted);font-weight:600"> ${esc(h.headline.unit)}</tspan></text>
+      <text x="${cx}" y="${Y+108}" text-anchor="middle" font-size="10.5">${esc(h.headline.label)}</text></g>`;
+  }).join("");
+  return `<section class="panel"><div class="panel-h"><h2>Caminho ponta a ponta</h2><span class="hint">clique num salto para abrir o detalhe · pacotes andam mais rápido onde há problema</span></div>
+    <div class="panel-b tblwrap"><svg class="e2egraph" viewBox="0 0 ${W} ${H}" width="100%" style="min-width:${Math.round(W * .74)}px;display:block" role="img" aria-label="Caminho ponta a ponta: ${esc(P.name)}">${bands}${links}${nodeSvg}</svg>
+      <div class="legend" style="margin-top:6px"><span><i style="border-top:3px solid var(--good)"></i>trecho medido</span><span><i style="border-top:2px dashed var(--wire)"></i>LAN, sem vizinho LLDP</span><span><i style="border-top:2px dashed var(--ink)"></i>link backup</span><span>✕ link fora</span><span>anel tracejado = só consequência</span></div></div></section>`;
+}
+function timeSplit(P) {
+  const app = P.hops.find(h => h.kind === "app"), circ = P.hops.find(h => h.kind === "circuit");
+  if (!app || app.stats.p90Ms == null) return "";
+  const active = circ?.circuits.find(c => c.status === "up" && c.latencyMs != null);
+  const dcHop = P.hops.find(h => h.kind === "devices" && h.site === app.site);
+  const parts = [
+    ["LAN do site", 1, "var(--nm)"],
+    [`WAN · ${active ? active.tech : "link"}`, active ? active.latencyMs : 0, toneVar(circ?.verdict || "Healthy")],
+    ["Data center", dcHop?.stats.rttMax ?? .4, "var(--primary)"],
+  ];
+  const net = parts.reduce((a, p) => a + p[1], 0), total = app.stats.p90Ms;
+  parts.push(["Aplicação (servidor)", Math.max(0, total - net), toneVar(app.verdict === "Healthy" ? "Not monitored" : app.verdict)]);
+  const lossy = active && active.lossPct >= N.meta.thresholds.circuit_loss_warn;
+  const pct = v => numPt(Math.round(v / total * 1000) / 10);
+  return `<section class="panel"><div class="panel-h"><h2>Onde o tempo de resposta é gasto</h2><span class="hint">p90 de ${esc(app.title)} a partir do site · estimativa pela latência de cada trecho</span></div>
+    <div class="panel-b stack">
+      <div style="display:flex;height:28px;border-radius:6px;overflow:hidden;background:var(--surface-2)" role="img" aria-label="Rede ${pct(net)}%, aplicação ${pct(total - net)}%">
+        ${parts.map(p => `<div title="${esc(p[0])}: ${numPt(Math.round(p[1] * 10) / 10)} ms" style="width:${Math.max(p[1] / total * 100, .8)}%;background:${p[2]}"></div>`).join("")}</div>
+      <div class="legend">${parts.map(p => `<span><i style="border-top:10px solid ${p[2]};width:12px"></i>${esc(p[0])} <b class="mono" style="color:var(--ink)">${p[1] < 10 ? numPt(Math.round(p[1] * 10) / 10) : fmtN(Math.round(p[1]))} ms</b> <span class="mono">(${pct(p[1])}%)</span></span>`).join("")}</div>
+      <p style="margin:0;font-size:14px">A rede responde por <b>${pct(net)}%</b> dos ${numPt(Math.round(total / 100) / 10)} s de p90; o restante é tempo da aplicação.${lossy ? ` O link tem <b>${numPt(active.lossPct)}% de perda</b>: retransmissões TCP alongam as transações e não aparecem na latência, então a rede pesa mais do que esta divisão sugere.` : ""}</p>
+    </div></section>`;
+}
+
+/* ---------- drawer contents ---------- */
+function hopDetail(h) {
+  if (h.kind === "circuit") return `<section class="panel"><div class="panel-b tblwrap">${circuitsTable(h.circuits)}</div></section>`;
+  if (h.kind === "app") return `<section class="panel"><div class="panel-b tblwrap"><table style="min-width:600px"><thead><tr><th>Transação</th><th class="r">p90</th><th class="r">Erros</th><th class="r">Execuções · 1h</th><th>p90 · 24h</th></tr></thead><tbody>
+    ${h.app.transactions.map(t => `<tr><td style="font-weight:600">${esc(t.name)}</td><td class="r mono">${t.p90Ms != null ? fmtN(t.p90Ms) + " ms" : "—"}</td>
+      <td class="r mono">${t.errPct != null ? numPt(t.errPct) + "%" : "—"}</td><td class="r mono">${fmtN(t.count)}</td><td>${spark(t.p90Ts, 140, 24, toneVar(h.verdict))}</td></tr>`).join("")}</tbody></table>
+    <div class="hint" style="margin-top:8px">Medido pelo OneAgent no servidor da aplicação, filtrado pela sub-rede do site.${h.app.consequenceOf ? ` Sem sessões porque ${esc(h.app.consequenceOf)} está fora.` : ""}</div></div></section>`;
+  if (h.kind === "internet") return `<section class="panel"><div class="panel-b tblwrap"><table><thead><tr><th>Peer</th><th>AS remoto</th><th>Estado</th><th>Equipamento local</th></tr></thead><tbody>
+    ${h.peers.map(p => `<tr><td class="mono">${esc(p.peer)}</td><td class="mono">${esc(p.remoteAs)}</td><td>${pill((p.state || "").startsWith("established") ? "Healthy" : "Critical")} <span class="mono hint">${esc(p.state)}</span></td><td><button class="linkbtn" data-dev="${esc(p.device)}">${esc(p.device)}</button></td></tr>`).join("")}</tbody></table></div></section>`;
+  if (h.kind === "cloud") {
+    const suspect = r => (r.retr || 0) > 0 || (r.resets || 0) > 0;
+    return `<section class="panel"><div class="panel-h"><h3>Clusters</h3></div><div class="panel-b tblwrap"><table style="min-width:600px"><thead><tr><th>Cluster / grupo</th><th>Nuvem</th><th class="r">Conversas</th><th class="r">Hosts</th><th class="r">Volume</th><th class="r">Retransmissão</th></tr></thead><tbody>
+      ${h.clusters.map(c => `<tr><td style="font-weight:600">${esc(c.name)}</td><td>${esc(c.cloud || "—")}</td><td class="r mono">${fmtN(c.conv)}</td><td class="r mono">${fmtN(c.hosts)}</td><td class="r mono">${fmtBytes(c.bytes)}</td><td class="r mono">${c.retrPct != null ? numPt(c.retrPct) + "%" : "—"}</td></tr>`).join("")}</tbody></table></div></section>
+      <section class="panel"><div class="panel-h"><h3>Maiores conversas · é a rede ou a aplicação?</h3><span class="hint">flows do OneAgent</span></div><div class="panel-b tblwrap"><table style="min-width:640px"><thead><tr><th>Rede</th><th>Host</th><th>Destino</th><th class="r">Volume</th><th class="r">Retrans.</th><th class="r">Resets</th></tr></thead><tbody>
+      ${N.oneagent.slice(0, 20).map(r => `<tr><td>${suspect(r) ? `<span class="pill Warning">Suspeita</span>` : `<span class="pill Healthy">Isenta</span>`}</td><td class="mono" style="font-size:12px">${esc(r.host)}</td><td class="mono">${esc(r.dst)}:${esc(r.dport)}</td><td class="r mono">${fmtBytes(r.bytes)}</td><td class="r mono">${fmtN(r.retr)}</td><td class="r mono">${fmtN(r.resets)}</td></tr>`).join("")}</tbody></table></div></section>`;
+  }
+  return devicesTable(h.devices.map(n => byName[n]));
+}
+function timeline(d) {
+  const w = 700, h = 150, pad = 40, hours = 24, x = i => pad + i * (w - pad - 10) / hours;
+  const max = Math.max(...d.syslogErrTs, 1), bw = ((w - pad - 10) / hours - 2).toFixed(1);
+  const bars = d.syslogErrTs.map((v, i) => `<rect x="${(x(i)+1).toFixed(1)}" y="${(96 - v / max * 70).toFixed(1)}" width="${bw}" height="${(v / max * 70).toFixed(1)}" fill="var(--crit)" opacity=".55"><title>${v} syslog ERROR</title></rect>`).join("");
+  const av = (d.availTs || []).map((v, i) => `<rect x="${(x(i)+1).toFixed(1)}" y="112" width="${bw}" height="10" fill="${v ? "var(--good)" : "var(--crit)"}"/>`).join("");
+  const end = new Date(N.meta.generatedAt.replace("Z", ":00Z")).getTime();
+  const traps = N.traps.filter(t => t.device === d.name).map(t => { const hAgo = (end - new Date(t.t).getTime()) / 3.6e6; if (hAgo < 0 || hAgo > 24) return "";
+    const xx = x(hours - hAgo).toFixed(1); return `<line x1="${xx}" x2="${xx}" y1="128" y2="138" stroke="var(--primary)" stroke-width="2"><title>${esc(t.oid)} ${esc(t.t)}</title></line>`; }).join("");
+  const ticks = [0, 6, 12, 18, 24].map(i => `<text x="${x(i)}" y="${h-2}" font-size="10" text-anchor="middle">${i === 24 ? "agora" : `-${24-i}h`}</text>`).join("");
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="Linha do tempo de 24 horas">
+    <line x1="${pad}" x2="${w-10}" y1="96" y2="96" stroke="var(--line)"/>
+    <text x="0" y="34" font-size="10">syslog</text><text x="0" y="46" font-size="10">ERROR/h</text><text x="${pad-4}" y="30" font-size="10" text-anchor="end">${max}</text>
+    ${bars}<text x="0" y="121" font-size="10">SNMP</text>${av || `<text x="${pad}" y="121" font-size="10">sem polling</text>`}
+    <text x="0" y="137" font-size="10">traps</text>${traps}${ticks}</svg>`;
+}
+function deviceDetail(d) {
+  const nm = d.verdict === "Not monitored";
+  const up = d.interfaces.filter(i => i.oper.startsWith("up")).length;
+  const downAdminUp = d.interfaces.filter(i => i.oper.startsWith("down") && i.admin.startsWith("up")).length;
+  const neigh = [...N.links.filter(l => l.a === d.name || l.b === d.name).map(l => ({proto: "LLDP", peer: l.a === d.name ? l.b : l.a, st: l.label})),
+                 ...N.peers.filter(p => p.device === d.name).map(p => ({proto: p.proto, peer: p.peer + (p.remoteAs ? ` · AS ${p.remoteAs}` : ""), st: p.state}))];
+  const problem = i => i.flag || i.errors || i.crc || (i.uplink && i.oper.startsWith("down") && i.admin.startsWith("up"));
+  let ifs = d.interfaces.slice().sort((a, b) => (b.util ?? -1) - (a.util ?? -1));
+  if (state.onlyIssues) ifs = ifs.filter(problem);
+  const shown = state.showAllIf ? ifs : ifs.slice(0, 30);
+  const flagTxt = {inconsistent: "acima da velocidade", saturated: "saturada", high: "alta"};
+  const utilColor = i => i.flag === "saturated" ? "var(--crit)" : i.flag ? "var(--warn)" : "var(--primary)";
+  const T = N.meta.thresholds;
+  return `<div class="stack">
+    <div class="chips">${pill(d.verdict)}<span class="chip">site <b>${esc(siteName(d.site))}</b></span><span class="chip">papel <b>${ROLE_LABEL[d.role] || d.role}</b></span><span class="chip">IP <b class="mono">${esc(d.ip)}</b></span>${d.incident ? `<span class="chip inc">${esc(d.incident)}</span>` : ""}</div>
+    <div class="hint">${esc(d.desc)}</div>
+    <section class="panel"><div class="panel-h"><h3>Por que ${d.verdict === "Not monitored" ? "sem polling" : d.verdict}</h3></div>
+      <div class="panel-b">${d.reasons.length ? `<ul class="reasons">${d.reasons.map(r => `<li>${pill(r.level)}<span>${esc(r.text)}</span></li>`).join("")}</ul>` : `<div class="empty">${dot("Healthy")} Nenhuma regra violada.</div>`}</div></section>
+    ${nm ? `<div class="note-box">O autodiscovery encontrou este equipamento, mas nenhuma extensão coleta métricas dele. Ação sugerida: ativar a extensão ${esc(d.vendor)} para o IP ${esc(d.ip)}.</div>` : `
+    <div class="kpis">
+      <div class="panel kpi"><span class="lab">Disponibilidade · 24h</span><span class="val" style="color:${d.availPct >= T.avail_crit ? "var(--good)" : "var(--crit)"}">${numPt(d.availPct)}<small>%</small></span></div>
+      <div class="panel kpi"><span class="lab">CPU agora</span><span class="val" style="color:${d.cpuNow >= T.cpu_crit ? "var(--crit)" : d.cpuNow >= T.cpu_warn ? "var(--warn)" : "var(--ink)"}">${d.cpuNow != null ? Math.round(d.cpuNow) : "—"}<small>${d.cpuNow != null ? "%" : ""}</small></span>${d.cpu.length ? spark(d.cpu, 130, 22, d.cpuNow >= T.cpu_crit ? "var(--crit)" : "var(--primary)") : ""}</div>
+      <div class="panel kpi"><span class="lab">ICMP</span><span class="val">${d.icmp?.rttMs != null ? numPt(d.icmp.rttMs) : "—"}<small>${d.icmp?.rttMs != null ? " ms" : ""}</small></span><span class="note">perda ${d.icmp?.loss != null ? numPt(d.icmp.loss) + "%" : "—"}</span></div>
+      <div class="panel kpi"><span class="lab">Interfaces up</span><span class="val">${up}<small>/ ${d.interfaces.length}</small></span><span class="note">${downAdminUp} down com admin up</span></div>
+    </div>`}
+    <section class="panel"><div class="panel-h"><h3>Linha do tempo · 24h</h3><span class="hint">syslog, disponibilidade e traps</span></div><div class="panel-b">${timeline(d)}</div></section>
+    ${nm ? "" : `<section class="panel"><div class="panel-h"><h3>Interfaces <span class="hint" style="font-weight:400">${ifs.length} de ${d.interfaces.length}</span></h3>
+      <div class="seg" role="group" aria-label="Filtro de interfaces"><button data-act="onlyIssues" aria-pressed="${state.onlyIssues}">Com problema</button><button data-act="onlyIssues" aria-pressed="${!state.onlyIssues}">Todas</button></div></div>
+      <div class="panel-b tblwrap"><table style="min-width:620px"><thead><tr><th>Interface</th><th>Oper / Admin</th><th class="r">Velocidade</th><th>Utilização máx</th><th>In / out</th><th class="r">Erros</th></tr></thead><tbody>
+      ${shown.map(i => `<tr><td class="mono">${esc(i.name)}${i.uplink ? ` <span class="chip">uplink</span>` : ""}</td>
+        <td class="mono" style="font-size:11.5px">${esc(i.oper)} / ${esc(i.admin)}</td><td class="r mono">${speedLabel(i.speed)}</td>
+        <td>${i.util == null ? "—" : `<div style="display:flex;gap:8px;align-items:center"><div class="bar" style="width:70px"><i style="width:${Math.min(100, i.util)}%;background:${utilColor(i)}"></i></div><span class="mono">${i.util}%</span>${i.flag ? `<span class="hint" style="color:${utilColor(i)}">${flagTxt[i.flag]}</span>` : ""}</div>`}</td>
+        <td>${i.in.length ? spark(i.in, 100, 20, "var(--primary)", i.out) : "—"}</td><td class="r mono">${fmtN(i.errors + i.crc)}</td></tr>`).join("") || `<tr><td colspan="6"><div class="empty">${dot("Healthy")} Nenhuma interface com problema.</div></td></tr>`}
+      </tbody></table>${ifs.length > 30 ? `<button class="linkbtn" data-act="allIf" style="margin-top:10px;color:var(--primary)">${state.showAllIf ? "Mostrar menos" : `Mostrar todas as ${ifs.length}`}</button>` : ""}</div></section>`}
+    <section class="panel"><div class="panel-h"><h3>Eventos recentes</h3></div><div class="panel-b">${d.events.length ? `<ul class="events">${d.events.slice(0, 20).map(e => eventLine(e)).join("")}</ul>` : `<div class="empty">Sem eventos no período.</div>`}</div></section>
+    ${neigh.length ? `<section class="panel"><div class="panel-h"><h3>Vizinhos e roteamento</h3></div><div class="panel-b"><table><tbody>${neigh.map(n => `<tr><td class="mono">${n.proto}</td><td>${byName[n.peer] ? `<button class="linkbtn" data-dev="${esc(n.peer)}">${esc(n.peer)}</button>` : esc(n.peer)}</td><td class="mono" style="font-size:11.5px">${esc(n.st)}</td></tr>`).join("")}</tbody></table></div></section>` : ""}
+  </div>`;
+}
+function settings() {
+  const rx = /^([A-Z]{2})-([A-Z]{2})-([A-Z0-9]{3,5})-([A-Z]+)(\d*)$/;
+  const real = SOURCES.real, demo = SOURCES.demo;
+  const sources = !N.demo ? `<section class="panel"><div class="panel-h"><h3>Saúde das fontes no GRU</h3></div><div class="panel-b tblwrap"><table><tbody>
+    ${[["Syslog", "Healthy", "IP de origem casa com o equipamento SNMP"], ["SNMP polling", "Healthy", `${N.devices.filter(d => d.mode === "Extension").length} equipamentos com extensão, ${N.devices.filter(d => d.mode !== "Extension").length} só descobertos`],
+       ["SNMP traps", "Warning", "volume baixo, ifIndex 0"], ["NetFlow", "Warning", "dado de simulador, sem ifIndex"], ["Flow OneAgent", "Healthy", "processo, cluster e cost center"], ["Primary tags", "Critical", "nenhum dado de rede com tag"]]
+      .map(([n, v, t]) => `<tr><td style="font-weight:600">${n}</td><td>${pill(v)}</td><td>${t}</td></tr>`).join("")}</tbody></table></div></section>` : "";
+  return `<div class="stack">
+    <section class="panel"><div class="panel-h"><h3>Fonte de dados</h3></div><div class="panel-b stack">
+      <div class="seg" role="group" aria-label="Fonte de dados">
+        ${demo ? `<button data-src="demo" aria-pressed="${state.src === "demo"}">Exemplo Brasil · simulado</button>` : ""}
+        <button data-src="real" aria-pressed="${state.src === "real"}">GRU · dados reais</button></div>
+      <p class="hint" style="margin:0">${N.demo
+        ? `${Object.values(N.sites).filter(s => !s.dc).length} filiais fictícias e um data center, nomes na convenção BR-UF-SITE-PAPEL. Nenhum número vem de cliente real; as regras de veredito são as mesmas dos dados reais.`
+        : `Tenant ${esc(real.meta.tenant)}, laboratório com ${Object.keys(real.sites).length} sites, dados capturados em ${esc(real.meta.generatedAt.replace("T", " "))}.`}</p></div></section>
+    ${sources}
+    <section class="panel"><div class="panel-h"><h3>Tags de site e papel</h3><span class="hint">derivadas do nome do equipamento</span></div><div class="panel-b stack">
+      <div class="note-box">Regra no OpenPipeline sobre <span class="mono">sys.name</span>: <span class="mono">parse "LD:country '-' LD:state '-' LD:site.code '-' ALPHA:role.code"</span> + lookup de sites para <span class="mono">site.id</span> e nome.</div>
+      <div class="tblwrap"><table style="min-width:560px"><thead><tr><th>sys.name</th><th>site</th><th>papel</th><th>Modo</th></tr></thead><tbody>
+      ${N.tagPreview.slice(0, 60).map(t => { const m = t.name.match(rx); return `<tr><td class="mono">${esc(t.name)}</td><td><span class="chip tag">${esc(m ? m[3] : t.site)}</span></td><td><span class="chip tag">${esc(t.role)}</span></td><td class="mono">${esc(t.mode)}</td></tr>`; }).join("")}
+      </tbody></table></div></div></section>
+  </div>`;
+}
+function drawer() {
+  const top = state.drawer[state.drawer.length - 1];
+  if (!top) return "";
+  let kind = "", title = "", body = "";
+  if (top.type === "device") { const d = byName[top.name]; kind = "Equipamento"; title = d.name; body = deviceDetail(d); }
+  else if (top.type === "hop") {
+    const P = N.e2e.paths.find(x => x.id === top.path), h = P.hops[top.i];
+    kind = `Salto do caminho · ${h.layer}`; title = `${h.title} · ${siteName(h.site)}`;
+    body = `<div class="titlerow">${pill(h.verdict)}<span>${esc(h.topReason || h.headline.label)}</span></div>${hopDetail(h)}`;
+  } else if (top.type === "settings") { kind = "Configuração"; title = "Fonte de dados e tags"; body = settings(); }
+  return `<div class="scrim" data-close="1"></div>
+    <aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+      <div class="drawer-h">${state.drawer.length > 1 ? `<button class="iconbtn" data-back="1" aria-label="Voltar">←</button>` : ""}
+        <div style="flex:1;min-width:0"><div class="kind">${esc(kind)}</div><h2>${esc(title)}</h2></div>
+        <button class="iconbtn" data-close="1" aria-label="Fechar">✕</button></div>
+      ${body}
+    </aside>`;
+}
+
+/* ---------- render & events ---------- */
+function render() {
+  const list = document.querySelector(".sitelist"), listTop = list ? list.scrollTop : 0;
+  const hadDrawer = !!document.querySelector(".drawer");
+  document.getElementById("root").innerHTML = `
+    <header class="top">
+      <div class="brand"><svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="7" fill="var(--primary)"/><path d="M4 15h5l2.5-6 4 11 2.5-5H24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>NetworkPlane</div>
+      <button class="srcchip ${N.demo ? "sim" : ""}" data-settings="1">${N.demo ? "Dados simulados · Exemplo Brasil" : `Dados reais · GRU ${esc(N.meta.tenant)}`}</button>
+      <button class="iconbtn" data-settings="1" aria-label="Fonte de dados e tags" title="Fonte de dados e tags">⚙</button>
+    </header>
+    <div class="app ${state.site ? "" : "full"}">${state.site ? sidebar() : ""}<main>${state.site ? sitePage() : networkPage()}</main></div>
+    ${drawer()}`;
+  const nl = document.querySelector(".sitelist"); if (nl) nl.scrollTop = listTop;
+  document.body.style.overflow = state.drawer.length ? "hidden" : "";
+  if (state.drawer.length && !hadDrawer) document.querySelector(".drawer [data-close]")?.focus();
+  const params = new URLSearchParams({src: state.src});
+  if (state.site) { params.set("site", state.site); params.set("tab", state.tab); }
+  history.replaceState(null, "", "#" + params.toString());
+}
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-go],[data-layer],[data-site],[data-filter],[data-tab],[data-hop],[data-dev],[data-open],[data-close],[data-back],[data-src],[data-act],[data-settings]");
+  if (!t) return;
+  const ds = t.dataset;
+  if (ds.go === "network") { state.site = null; state.drawer = []; }
+  else if (ds.layer !== undefined) { state.layerFilter = ds.layer && state.layerFilter !== ds.layer ? ds.layer : null; }
+  else if (ds.site) { state.site = ds.site; state.tab = "path"; state.drawer = []; window.scrollTo({top: 0}); }
+  else if (ds.filter) { state.filter = ds.filter; }
+  else if (ds.tab) { state.tab = ds.tab; }
+  else if (ds.hop !== undefined) { const P = pathOf(state.site); if (P) state.drawer = [{type: "hop", path: P.id, i: +ds.hop}]; }
+  else if (ds.dev) { state.drawer.push({type: "device", name: ds.dev}); state.showAllIf = false; }
+  else if (ds.open === "cause") {
+    const i = siteInfo(state.site);
+    if (i.causeHop) state.drawer = [{type: "hop", path: i.p.id, i: i.p.summary.firstBad}];
+    else if (i.causeDevice) state.drawer = [{type: "device", name: i.causeDevice.name}];
+  }
+  else if (ds.close) { state.drawer = []; }
+  else if (ds.back) { state.drawer.pop(); }
+  else if (ds.src) { useSource(ds.src); state.drawer = [{type: "settings"}]; }
+  else if (ds.settings) { state.drawer = [{type: "settings"}]; }
+  else if (ds.act === "onlyIssues") { state.onlyIssues = t.textContent.trim() === "Com problema"; }
+  else if (ds.act === "allIf") { state.showAllIf = !state.showAllIf; }
+  render();
+});
+document.addEventListener("input", e => {
+  if (e.target.id !== "sitesearch") return;
+  state.q = e.target.value;
+  document.querySelector(".sitelist").innerHTML = siteListItems();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && state.drawer.length) { state.drawer = []; render(); return; }
+  const g = e.target.closest?.("g[role=button]");
+  if (g && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); g.dispatchEvent(new MouseEvent("click", {bubbles: true})); }
+});
+
+/* ---------- boot (deep link: #src=demo&site=SOR1&tab=path) ---------- */
+(() => {
+  let src = SOURCES.demo ? "demo" : "real", site = null, tab = "path";
+  try {
+    const q = new URLSearchParams(location.hash.slice(1));
+    if (q.get("src")) src = q.get("src");
+    site = q.get("site") || (q.get("path") || "").replace(/^site-/, "") || null;
+    tab = q.get("tab") || "path";
+  } catch (err) { /* malformed hash: use defaults */ }
+  useSource(src);
+  if (site && N.sites[site]) { state.site = site; state.tab = tab; }
+  render();
+})();
+</script>

@@ -1,0 +1,21 @@
+# dependencies and build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# dt-app local state and logs (they carry authentication traces)
+.dt-app/
+app/.dt-app/
+
+# Generated fixtures and, above all, records sampled from a real tenant
+scripts/grail/out/
+
+# Local data and backups of earlier prototypes
+data/
+backups/
+
+.DS_Store
+
+# Datasets and reports built from a real tenant (device names, addresses, topology)
+prototype/data.js
+docs/relatorio-rede.html

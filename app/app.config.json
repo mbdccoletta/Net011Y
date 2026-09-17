@@ -1,0 +1,48 @@
+{
+  "environmentUrl": "https://guu84124.apps.dynatrace.com",
+  "app": {
+    "name": "NetworkPlane",
+    "version": "0.1.0",
+    "description": "End-to-end network health per site, with the probable cause",
+    "icon": "./assets/icon.svg",
+    "id": "my.network.pulse",
+    "scopes": [
+      {
+        "name": "storage:smartscape:read",
+        "comment": "Network devices and interfaces discovered by the SNMP extensions (EXT_NETWORK_DEVICE, EXT_NETWORK_INTERFACE)"
+      },
+      {
+        "name": "storage:metrics:read",
+        "comment": "SNMP interface traffic, errors, CPU, uptime and synthetic ICMP latency and loss per device"
+      },
+      {
+        "name": "storage:logs:read",
+        "comment": "Syslog and SNMP traps linked to each network device"
+      },
+      {
+        "name": "storage:events:read",
+        "comment": "OneAgent network flows (default_network_flows bucket) for the application hop"
+      },
+      {
+        "name": "storage:buckets:read",
+        "comment": "Bucket metadata required by the DQL client"
+      },
+      {
+        "name": "storage:system:read",
+        "comment": "System tables used by DQL"
+      },
+      {
+        "name": "davis-copilot:conversations:execute",
+        "comment": "Dynatrace Assist explains the selected cause, its impact and next steps from the app's own evidence"
+      },
+      {
+        "name": "state:app-states:read",
+        "comment": "Site hierarchy chosen by the team, shared by every user of the app"
+      },
+      {
+        "name": "state:app-states:write",
+        "comment": "Saving the site hierarchy for every user of the app"
+      }
+    ]
+  }
+}

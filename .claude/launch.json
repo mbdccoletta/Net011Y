@@ -1,0 +1,39 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "prototype",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4178",
+        "--directory",
+        "/Users/marcelo.coletta/projects/network-observability/prototype"
+      ],
+      "port": 4178
+    },
+    {
+      "name": "network-pulse-app-gru",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "start",
+        "--prefix",
+        "app"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "network-pulse-app-bwm",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "start",
+        "--prefix",
+        "app"
+      ],
+      "port": 3000
+    }
+  ]
+}

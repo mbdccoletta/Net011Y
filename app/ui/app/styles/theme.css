@@ -1,0 +1,603 @@
+/* NetworkPlane — every color is a Strato design token; the fallbacks only apply outside the platform. */
+.np-root {
+  --np-crit: var(--dt-colors-text-critical-default, #bb0731);
+  --np-crit-accent: var(--dt-colors-background-container-critical-accent, #c62239);
+  --np-warn: var(--dt-colors-charts-status-warning-default, #eea746);
+  --np-good: var(--dt-colors-charts-status-ideal-default, #2ab06f);
+  --np-neutral: var(--dt-colors-charts-status-neutral-default, #8c8fa8);
+  --np-ink: var(--dt-colors-text-neutral-default, #1d1e33);
+  --np-muted: var(--dt-colors-text-neutral-subdued, #5d5f78);
+  --np-primary: var(--dt-colors-text-primary-default, #4a4fd4);
+  --np-line: var(--dt-colors-border-neutral-default, #dadbe6);
+  --np-surface: var(--dt-colors-background-surface-default, #ffffff);
+  --np-surface-2: var(--dt-colors-background-container-neutral-default, #ececf4);
+  --np-crit-fill: var(--dt-colors-background-container-critical-default, #f9f1f2);
+  --np-warn-fill: var(--dt-colors-background-container-warning-default, #fcefd7);
+  --np-primary-fill: var(--dt-colors-background-container-primary-default, #e5e6fb);
+  --np-mono: var(--dt-typography-code-base-default-family, ui-monospace, "SFMono-Regular", Menlo, monospace);
+  color: var(--np-ink);
+}
+
+.np-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--dt-spacings-size16, 16px); padding: var(--dt-spacings-size16, 16px); min-width: 0; }
+.np-mono { font-family: var(--np-mono); font-variant-numeric: tabular-nums; }
+.np-muted { color: var(--np-muted); }
+.np-small { font-size: 12px; }
+.np-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.np-scroll-x { overflow-x: auto; }
+.np-svg { display: block; width: 100%; height: auto; }
+.np-svg text { fill: var(--np-muted); font-family: inherit; }
+.np-chip-incident { font-family: var(--np-mono); font-size: 12px; font-weight: 600; color: var(--np-crit); background: var(--np-crit-fill); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+
+/* Living map home. The dark stage below is the base, and the light theme further down applies whenever
+   the platform is NOT explicitly dark — Strato leaves data-theme unset in its default light theme, so a
+   selector written as :root:not([data-theme="dark"]) never matched there and the app painted dark values (white
+   ink, periwinkle map grid) on top of light Strato tokens. */
+.lm {
+  /* The stage is the platform's shell, not the base surface: Dynatrace's dark shell is a near-black
+     #141419 while base-default stays #19192c, and an app painted on the second one reads blue-ish next
+     to every native app. Panels sit on the shell as surfaces, the same hierarchy the light theme uses. */
+  --lm-bg: var(--dt-colors-background-shell-default, #141419);
+  --lm-ink-hi: var(--dt-colors-text-neutral-emphasized, #ffffff);
+  --lm-tint: var(--dt-colors-background-surface-default, #111122);
+  --lm-tint-2: var(--dt-colors-background-container-neutral-default, #212135);
+  --lm-ink: var(--dt-colors-text-neutral-default, #e2e8f0);
+  --lm-ink-2: color-mix(in srgb, var(--dt-colors-text-neutral-default, #e2e8f0) 93%, var(--lm-bg));
+  --lm-ink-3: color-mix(in srgb, var(--dt-colors-text-neutral-default, #e2e8f0) 82%, var(--lm-bg));
+  --lm-muted: var(--lm-ink-3);
+  --lm-line: var(--dt-colors-border-neutral-default, color-mix(in srgb, var(--lm-ink-hi) 8%, transparent));
+  --lm-line-2: var(--dt-colors-border-neutral-accent, color-mix(in srgb, var(--lm-ink-hi) 16%, transparent));
+  --lm-good: var(--dt-colors-text-success-default, #6fc3ba);
+  --lm-warn: var(--dt-colors-text-warning-default, #eea83f);
+  --lm-bad: var(--dt-colors-text-critical-default, #ff999c);
+  /* Status in data visualizations: Strato chart status palette (Colors.Charts.Status.*) */
+  --lm-good-fill: var(--dt-colors-charts-status-ideal-default, #00bb7b);
+  --lm-warn-fill: var(--dt-colors-charts-status-warning-default, #d7b43b);
+  --lm-bad-fill: var(--dt-colors-background-container-critical-accent, #c82d40);
+  --lm-bad-soft: var(--dt-colors-theme-critical-20, #301f2f);
+  --lm-neutral: var(--dt-colors-charts-status-neutral-default, #7c7f9e);
+  --lm-accent: #6366f1;
+  --lm-accent-dim: rgba(99, 102, 241, 0.14);
+  --lm-cyan: #06b6d4;
+  --lm-violet: #8b5cf6;
+  --lm-land: rgba(173, 176, 255, 0.38);
+  /* map drawing, read by the canvas: route colour, strength of the hotspot glow and the label halo */
+  --lm-route: var(--lm-cyan);
+  --lm-glow: 0.2;
+  --lm-land-dot: 1;
+  --lm-dim: 0.22;
+  --lm-calm: 0.2;
+  --lm-stroke: 1;
+  /* a healthy site drawn at 28% of #00cb86 lands at 2.1:1 over the stage — the dots washed out.
+     The mark keeps most of its colour even out of focus; only routes fade that far. */
+  --lm-mark: 1;
+  --lm-site-dim: 0.75;
+  --lm-halo: var(--lm-bg);
+  --lm-haze: 6%;
+  --lm-sans: var(--dt-typography-text-base-default-family, DynatraceFlow, Roboto, Helvetica, sans-serif);
+  --lm-mono: var(--lm-sans);
+  --lm-panel: linear-gradient(165deg, color-mix(in srgb, var(--lm-accent) 10%, var(--lm-tint)), color-mix(in srgb, var(--lm-accent) 4%, var(--lm-tint-2)) 55%, color-mix(in srgb, var(--lm-accent) 7%, var(--lm-tint)));
+  --lm-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --np-mono: var(--dt-typography-code-base-default-family, "Roboto Mono", monospace);
+  font-family: var(--lm-sans);
+  -webkit-font-smoothing: antialiased;
+  background: radial-gradient(1200px 700px at 55% 45%, color-mix(in srgb, var(--lm-accent) var(--lm-haze), var(--lm-bg)) 0%, var(--lm-bg) 70%);
+  color: var(--lm-ink); min-height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+:root:not([data-theme="dark"]) .lm {
+  /* Light mode is built from the Strato light tokens, with the surface hierarchy Dynatrace uses:
+     the shell is the stage, panels and tiles are white surfaces on top of it, and the grid of the map
+     is a neutral from the same scale. No gradients and no haze: those belong to the dark stage. */
+  --lm-bg: var(--dt-colors-background-shell-default, #f2f2f5);
+  --lm-tint: var(--dt-colors-background-surface-default, #ffffff);
+  --lm-tint-2: var(--dt-colors-background-container-neutral-default, #f2f2f5);
+  --lm-ink-hi: var(--dt-colors-text-neutral-emphasized, #2d2e4e);
+  --lm-ink: var(--dt-colors-text-neutral-default, #2d2e4e);
+  --lm-ink-2: var(--dt-colors-text-neutral-default, #2d2e4e);
+  --lm-ink-3: var(--dt-colors-text-neutral-subdued, #595a7d);
+  --lm-line: var(--dt-colors-border-neutral-default, #dadbe4);
+  --lm-line-2: var(--dt-colors-theme-neutral-60, #c6c7d5);
+  --lm-good: var(--dt-colors-text-success-default, #3d8a83); --lm-warn: var(--dt-colors-text-warning-default, #a15c07); --lm-bad: var(--dt-colors-text-critical-default, #bb0731);
+  /* Status colours are the same in both themes, from the Strato palette Dynatrace uses for each job:
+     the chart status palette paints marks (a dot, a bar, a meter, a ring), so warning stays yellow and
+     healthy stays green, and the text palette paints words, where the darker tone is what reads. */
+  --lm-good-fill: var(--dt-colors-charts-status-ideal-default, #00c181);
+  --lm-warn-fill: var(--dt-colors-charts-status-warning-default, #eea746);
+  --lm-bad-fill: var(--dt-colors-background-container-critical-accent, #e01032); --lm-bad-soft: var(--dt-colors-theme-critical-20, #f8e9e9);
+  --lm-neutral: var(--dt-colors-theme-neutral-70, #5b5c81);
+  --lm-accent: var(--dt-colors-text-primary-default, #474fcf); --lm-accent-dim: var(--dt-colors-background-container-primary-default, #e9ecf8);
+  --lm-cyan: #0e7490; --lm-violet: #6d28d9;
+  /* map: a dotted grid on a light stage needs both weight and size. The neutral scale is too pale here
+     (#c6c7d5 measures 1.5:1 on the shell) and 45% of the subdued token still read as washed out, so the
+     grid uses that token solid (4.5:1) with a 1.3x dot. */
+  --lm-land: var(--dt-colors-text-neutral-subdued, #595a7d);
+  --lm-land-dot: 1.3;
+  /* a route at 4% alpha only reads over a dark stage; on light the fades and the stroke need weight */
+  --lm-dim: 0.55;
+  --lm-calm: 0.5;
+  --lm-stroke: 1.5;
+  --lm-mark: 1.15;
+  --lm-site-dim: 0.8;
+  --lm-route: var(--dt-colors-text-primary-default, #474fcf);
+  --lm-glow: 0.1;
+  --lm-halo: var(--dt-colors-background-surface-default, #ffffff);
+  --lm-haze: 0%;
+  --lm-panel: var(--dt-colors-background-surface-default, #ffffff);
+}
+
+:where(.lm) button { font: inherit; color: inherit; }
+.lm button:focus-visible { outline: 2px solid var(--lm-cyan); outline-offset: 2px; }
+.lm-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--lm-line); }
+.lm-pill { display: inline-flex; align-items: center; gap: 6px; font: 600 12px var(--lm-mono); padding: 3px 10px; border-radius: 999px; border: 1px solid var(--lm-line); color: var(--lm-muted); white-space: nowrap; }
+.lm-pill--live { color: var(--lm-ink); }
+.lm-pill--warn { color: var(--lm-warn); border-color: color-mix(in srgb, var(--lm-warn) 45%, transparent); }
+.lm-live { width: 7px; height: 7px; border-radius: 50%; background: var(--lm-good-fill); box-shadow: 0 0 0 0 color-mix(in srgb, var(--lm-good-fill) 70%, transparent); animation: lm-live 2s ease-out infinite; }
+@keyframes lm-live { to { box-shadow: 0 0 0 8px transparent; } }
+.lm-legend { margin-left: auto; display: flex; gap: 14px; font: 600 12px var(--lm-mono); color: var(--lm-ink-3); }
+.lm-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lm-marker { display: inline-block; width: 9px; height: 9px; flex: none; border-radius: 50%; }
+.lm-marker--crit { border-radius: 1px; transform: rotate(45deg) scale(.9); }
+.lm-marker--warn { border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+
+.lm-stage { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 0 0 16px; }
+.lm-map { position: relative; height: 440px; overflow: hidden; }
+/* The map fills the stage, and the replay bar floats over its last strip: without this the dotted grid
+   keeps going under the bar and past the end of the page. The drawing fades out before that edge. */
+.lm-stage.is-wide .lm-map { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 30px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 30px), transparent); }
+.lm-map--empty { display: grid; place-items: center; color: var(--lm-muted); padding: 24px; text-align: center; }
+.lm-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.lm-tip { position: absolute; transform: translate(14px, -50%); pointer-events: none; z-index: 5; display: grid; gap: 2px; max-width: 280px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--lm-tint) 94%, transparent); border: 1px solid var(--lm-line-2); font-family: var(--lm-mono); font-size: 12px; color: var(--lm-muted); }
+.lm-tip b { display: flex; align-items: center; gap: 6px; color: var(--lm-ink); font-size: 12px; }
+.lm-tip b i { width: 8px; height: 8px; border-radius: 50%; }
+.lm-tip__cause { color: var(--lm-ink); }
+.lm-zoom { position: absolute; display: grid; gap: 4px; z-index: 3; }
+.lm-zoom button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--lm-accent) 55%, transparent); background: color-mix(in srgb, var(--lm-tint) 90%, transparent); cursor: pointer; font-size: 14px; }
+.lm-zoom button:hover { border-color: var(--lm-accent); }
+
+.lm-panel { position: relative; background: var(--lm-panel); border: 1px solid color-mix(in srgb, var(--lm-accent) 55%, transparent); border-radius: 12px; padding: 14px 16px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); min-width: 0; margin: 0 16px;
+  box-shadow: 0 0 26px color-mix(in srgb, var(--lm-accent) 22%, transparent), inset 0 1px 0 color-mix(in srgb, var(--lm-ink-hi) 12%, transparent); }
+.lm-panel::before, .lm-panel::after { content: ""; position: absolute; width: 14px; height: 14px; border: 1.5px solid color-mix(in srgb, var(--lm-accent) 75%, transparent); pointer-events: none; }
+.lm-panel::before { top: -1px; left: -1px; border-right: none; border-bottom: none; border-radius: 10px 0 0 0; }
+.lm-panel::after { bottom: -1px; right: -1px; border-left: none; border-top: none; border-radius: 0 0 10px 0; }
+.lm-h { margin: 0 0 10px; padding-bottom: 7px; border-bottom: 1px solid color-mix(in srgb, var(--lm-ink-hi) 18%, transparent); font: 600 12px var(--lm-mono); color: color-mix(in srgb, var(--lm-ink-hi) 85%, transparent); display: flex; align-items: center; gap: 6px; }
+.lm-sub { margin: 14px 0 6px; font: 600 12px var(--lm-mono); color: var(--lm-ink-3); }
+.lm-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.lm-cause { display: grid; gap: 3px; width: 100%; text-align: left; padding: 9px 10px; margin-bottom: 6px; border-radius: 10px; border: 1px solid transparent; background: transparent; cursor: pointer; transition: background .15s, border-color .15s; }
+.lm-cause:hover { background: color-mix(in srgb, var(--lm-ink-hi) 6%, transparent); }
+.lm-cause.is-on { border-color: color-mix(in srgb, var(--lm-tone, var(--lm-cyan)) 65%, transparent); background: color-mix(in srgb, var(--lm-tone, var(--lm-cyan)) 10%, transparent); }
+.lm-cause b { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.lm-btn { border: 1px solid var(--lm-line-2); background: color-mix(in srgb, var(--lm-ink-hi) 4%, transparent); border-radius: 8px; padding: 6px 10px; font: 600 12px var(--lm-mono); cursor: pointer; }
+.lm-btn:hover { border-color: var(--lm-accent); background: var(--lm-accent-dim); }
+.lm-btn--primary { background: var(--lm-accent); border-color: var(--lm-accent); color: var(--lm-ink-hi); font-weight: 600; }
+
+.lm-stats span { display: grid; font: 500 12px var(--lm-mono); color: color-mix(in srgb, var(--lm-ink-hi) 66%, transparent); }
+.lm-stats b { font-family: var(--lm-sans); font-size: 24px; font-weight: 600; color: var(--lm-ink-hi); line-height: 1.15; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px color-mix(in srgb, var(--lm-ink-hi) 25%, transparent); }
+.lm-cause b { min-width: 0; }
+.lm-cause__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-cause b em { font-style: normal; font-family: var(--np-mono); font-size: 12px; color: var(--lm-ink); }
+.lm-cause__bar { display: block; height: 3px; margin-left: 17px; border-radius: 2px; background: color-mix(in srgb, var(--lm-ink-hi) 10%, transparent); overflow: hidden; }
+.lm-cause__bar i { display: block; height: 100%; background: var(--lm-tone); box-shadow: 0 0 8px var(--lm-tone); }
+.lm-cause--all b em { color: var(--lm-muted); }
+
+.lm-right { display: grid; gap: 14px; align-content: start; }
+.lm-title { margin: 0; padding-bottom: 8px; border-bottom: 1px solid color-mix(in srgb, var(--lm-ink-hi) 18%, transparent); display: flex; align-items: center; gap: 8px; font: 600 14px var(--lm-sans); color: var(--lm-ink-hi); min-width: 0; }
+.lm-title span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-title em { font-style: normal; font-family: var(--np-mono); font-size: 12px; color: var(--lm-muted); }
+
+.lm-chain { display: grid; grid-template-columns: 1fr 14px 1fr 14px 1fr 14px 1fr; align-items: center; }
+.lm-chain__node { display: grid; justify-items: center; gap: 2px; text-align: center; min-width: 0; }
+.lm-chain__icon { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: var(--lm-tone); border: 1.5px solid var(--lm-tone);
+  background: color-mix(in srgb, var(--lm-tone) 14%, transparent); box-shadow: 0 0 16px color-mix(in srgb, var(--lm-tone) 35%, transparent); }
+.lm-chain__icon svg { width: 20px; height: 20px; }
+.lm-chain__node b { font: 600 18px var(--lm-sans); color: var(--lm-ink-hi); line-height: 1.2; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px color-mix(in srgb, var(--lm-ink-hi) 25%, transparent); }
+.lm-chain__node span { font: 500 12px var(--lm-mono); color: color-mix(in srgb, var(--lm-ink-hi) 66%, transparent); line-height: 1.2; }
+.lm-chain__link { height: 2px; align-self: start; margin-top: 21px; background: repeating-linear-gradient(90deg, var(--lm-accent) 0 4px, transparent 4px 7px); background-size: 7px 2px; animation: lm-flow 0.7s linear infinite; opacity: .8; }
+@keyframes lm-flow { to { background-position: 7px 0; } }
+
+.lm-spreadbox { position: relative; border: 1px solid var(--lm-line); border-radius: 10px; padding: 8px 10px 4px; }
+.lm-spread { display: block; width: 100%; height: 64px; }
+.lm-spreadbox__label { position: absolute; top: 6px; left: 10px; display: inline-flex; align-items: baseline; gap: 3px; font-family: var(--np-mono); font-size: 12px; color: var(--lm-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lm-spreadbox__label b { color: var(--lm-ink); font-size: 16px; line-height: 1; }
+
+.lm-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.lm-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--lm-tone) 45%, transparent); background: color-mix(in srgb, var(--lm-tone) 10%, transparent); color: var(--lm-ink); font-size: 12px; cursor: pointer; }
+.lm-badge:disabled { cursor: default; }
+.lm-badge svg { width: 14px; height: 14px; color: var(--lm-tone); }
+.lm-badge b { font-family: var(--np-mono); }
+.lm-badge span { font: 500 12px var(--lm-mono); color: color-mix(in srgb, var(--lm-ink-hi) 66%, transparent); }
+
+.lm-netstatus { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 14px; align-items: center; }
+.lm-ring { width: 116px; height: 116px; }
+.lm-regions { display: grid; gap: 6px; }
+.lm-region { display: grid; grid-template-columns: 76px minmax(0, 1fr) 28px; align-items: center; gap: 8px; border: 0; background: none; padding: 2px 0; cursor: pointer; text-align: left; }
+.lm-region:disabled { cursor: default; }
+.lm-region__name { font: 600 12px var(--lm-mono); color: var(--lm-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-region__bar { display: flex; gap: 1px; height: 8px; border-radius: 3px; overflow: hidden; }
+.lm-region__bar i { display: block; height: 100%; }
+.lm-region b { font-family: var(--np-mono); font-size: 12px; text-align: right; }
+
+.lm-drill { display: flex; flex-wrap: wrap; gap: 6px; }
+.lm-btn { display: inline-flex; align-items: center; gap: 5px; }
+.lm-btn svg { width: 12px; height: 12px; }
+
+.lm-assist { border-radius: 12px; padding: 12px; border: 1px solid color-mix(in srgb, var(--lm-violet) 55%, transparent); background: linear-gradient(165deg, color-mix(in srgb, var(--lm-violet) 26%, var(--lm-tint)), color-mix(in srgb, var(--lm-violet) 10%, var(--lm-tint-2))); box-shadow: 0 0 22px color-mix(in srgb, var(--lm-violet) 22%, transparent); display: grid; gap: 10px; }
+.lm-assist__head { display: flex; align-items: center; gap: 8px; font: 600 12px var(--lm-mono); color: var(--lm-ink-hi); }
+.lm-assist__head svg { width: 18px; height: 18px; }
+.lm-assist__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.lm-chip { border: 1px solid color-mix(in srgb, var(--lm-violet) 45%, transparent); background: color-mix(in srgb, var(--lm-tint) 60%, transparent); border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.lm-chip:hover { border-color: var(--lm-violet); }
+.lm-chip.is-on { background: color-mix(in srgb, var(--lm-violet) 35%, transparent); border-color: var(--lm-violet); }
+.lm-assist__body { font-size: 12px; line-height: 1.5; max-height: 320px; overflow-y: auto; }
+.lm-assist__answer, .lm-assist__answer :is(p, li, strong, em, h1, h2, h3, h4, span) { color: var(--lm-ink) !important; }
+.lm-assist__error { color: var(--lm-warn); }
+
+.lm-time { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 10px 16px; }
+.lm-play { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--lm-accent); background: var(--lm-accent-dim); color: var(--lm-ink-hi) !important; box-shadow: 0 0 14px color-mix(in srgb, var(--lm-accent) 40%, transparent); cursor: pointer; display: grid; place-items: center; }
+.lm-track { position: relative; height: 36px; }
+.lm-track::before { content: ""; position: absolute; left: 0; right: 0; top: 13px; height: 2px; background: var(--lm-line); }
+.lm-track__fill { position: absolute; left: 0; top: 13px; height: 2px; background: linear-gradient(90deg, transparent, var(--lm-accent)); }
+.lm-track input { position: absolute; inset: 0 0 auto 0; width: 100%; height: 28px; margin: 0; opacity: 0; cursor: pointer; }
+.lm-tick { position: absolute; top: 7px; width: 3px; height: 14px; border-radius: 2px; transform: translateX(-50%); pointer-events: none; }
+.lm-tick em { position: absolute; top: 17px; left: 50%; transform: translateX(-50%); font-style: normal; font-family: var(--np-mono); font-size: 12px; color: var(--lm-muted); white-space: nowrap; }
+.lm-clock { display: grid; justify-items: end; font-family: var(--np-mono); font-size: 14px; }
+.lm-clock small { font-size: 12px; color: var(--lm-muted); }
+
+@media (min-width: 700px) {
+  .lm-stage:not(.is-wide) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lm-stage:not(.is-wide) .lm-map, .lm-stage:not(.is-wide) .lm-time { grid-column: 1 / -1; }
+  .lm-stage:not(.is-wide) .lm-left { margin-right: 0; }
+  .lm-stage:not(.is-wide) .lm-right { margin-left: 0; }
+}
+.lm-stage.is-wide { display: block; height: max(640px, calc(100vh - 110px)); padding: 0; }
+.lm-stage.is-wide .lm-map { position: absolute; inset: 0; height: auto; }
+.lm-stage.is-wide .lm-panel { position: absolute; margin: 0; z-index: 2; background: var(--lm-tint); }
+.lm-stage.is-wide .lm-left { top: 16px; left: 16px; width: 304px; max-height: calc(100% - 120px); overflow-y: auto; }
+.lm-stage.is-wide .lm-right { top: 16px; right: 16px; width: 344px; max-height: calc(100% - 120px); overflow-y: auto; }
+.lm-stage.is-wide .lm-time { left: 16px; right: 16px; bottom: 16px; }
+@media (max-width: 520px) {
+  .lm-legend { margin-left: 0; }
+  .lm-time { grid-template-columns: auto minmax(0, 1fr); }
+  .lm-clock { grid-column: 1 / -1; justify-items: start; }
+}
+@media (prefers-reduced-motion: reduce) { .lm-live, .lm-chain__link { animation: none; } .lm-cause { transition: none; } }
+
+/* entity tables */
+.np-cell2 { display: grid; gap: 2px; min-width: 0; line-height: 1.3; }
+.np-cell2 > span { overflow: hidden; text-overflow: ellipsis; }
+
+/* details panel */
+.np-details { padding: var(--dt-spacings-size16, 16px); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--dt-spacings-size16, 16px); align-content: start; min-width: 0; overflow-wrap: anywhere; }
+.np-tab { padding-top: var(--dt-spacings-size16, 16px); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--dt-spacings-size16, 16px); min-width: 0; }
+.np-details > *, .np-tab > * { min-width: 0; max-width: 100%; }
+.np-kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 16px; margin: 0; font-size: 12px; }
+.np-kv dt { color: var(--np-muted); }
+.np-kv dd { margin: 0; overflow-wrap: anywhere; }
+
+/* end-to-end path as steps */
+.np-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.np-steps li { position: relative; }
+.np-steps li + li::before { content: ""; position: absolute; left: 19px; top: -6px; height: 8px; border-left: 2px solid var(--np-line); }
+.np-step { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid var(--np-line); border-radius: var(--dt-borders-radius-field-default, 8px); background: var(--np-surface); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.np-step:hover { background: var(--np-surface-2); }
+.np-step:focus-visible { outline: 2px solid var(--np-primary); outline-offset: 2px; }
+.np-step.is-selected { border-color: var(--np-primary); background: var(--np-primary-fill); }
+.np-step__main { display: grid; gap: 2px; min-width: 0; }
+.np-step__title { font-weight: 600; }
+.np-step__cause { color: var(--np-crit); }
+.np-step__value { display: grid; justify-items: end; gap: 2px; white-space: nowrap; }
+
+/* events */
+.np-events { list-style: none; margin: 0; padding: 0; display: grid; }
+.np-events li { padding: 8px 2px; border-top: 1px solid var(--np-line); display: grid; gap: 2px; font-size: 12px; }
+.np-events li:first-child { border-top: 0; }
+.np-level { font-size: 12px; font-weight: 600; padding: 0 6px; border-radius: 3px; background: var(--np-surface-2); color: var(--np-muted); }
+.np-level--ERROR { background: var(--np-crit-fill); color: var(--np-crit); }
+.np-level--WARN { background: var(--np-warn-fill); color: var(--np-ink); }
+.lm-assist__answer :is(h1, h2, h3, h4) { font-size: 14px !important; line-height: 1.35 !important; margin: 8px 0 4px !important; }
+
+/* ---------------------------------------------------------------- visual pages (Delivery Chain tiles) */
+.lm.vz { display: block; min-height: 100%; }
+.vz-body { padding: 16px; display: grid; gap: 14px; min-width: 0; }
+.vz-table { padding: 8px 0; background: var(--dt-colors-background-base-default, transparent); }
+.vz-seg { margin-left: auto; display: inline-flex; border: 1px solid var(--lm-line-2); border-radius: 8px; overflow: hidden; }
+.vz-seg button { border: 0; background: transparent; padding: 4px 12px; font: 600 12px var(--lm-mono); color: var(--lm-ink-3); cursor: pointer; }
+.vz-seg button.is-on { background: var(--lm-accent-dim); color: var(--lm-ink-hi); box-shadow: inset 0 -2px 0 var(--lm-accent); }
+.lm-legend + .vz-seg, .lm-pill--warn + .vz-seg { margin-left: 8px; }
+
+.vz-tile { --c: var(--lm-accent); position: relative; min-width: 0; text-align: left; font: inherit; color: inherit;
+  border-radius: 12px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
+  background: linear-gradient(165deg, color-mix(in srgb, var(--c) 26%, var(--lm-tint)), color-mix(in srgb, var(--c) 9%, var(--lm-tint-2)) 55%, color-mix(in srgb, var(--c) 16%, var(--lm-tint)));
+  box-shadow: 0 0 24px color-mix(in srgb, var(--c) 20%, transparent), inset 0 1px 0 color-mix(in srgb, var(--lm-ink-hi) 10%, transparent); }
+.vz-tile::before, .vz-tile::after { content: ""; position: absolute; width: 13px; height: 13px; border: 1.5px solid color-mix(in srgb, var(--c) 80%, transparent); pointer-events: none; }
+.vz-tile::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; border-radius: 10px 0 0 0; }
+.vz-tile::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; border-radius: 0 0 10px 0; }
+.vz-tile--btn { cursor: pointer; transition: box-shadow .2s var(--lm-ease), transform .2s var(--lm-ease); }
+.vz-tile--btn:hover { transform: translateY(-1px); box-shadow: 0 0 34px color-mix(in srgb, var(--c) 38%, transparent); }
+.vz-tile--btn.is-on { box-shadow: 0 0 0 2px var(--c), 0 0 34px color-mix(in srgb, var(--c) 40%, transparent); }
+.vz-tile--btn:focus-visible { outline: 2px solid var(--lm-ink-hi); outline-offset: 2px; }
+.vz-th { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 7px; margin-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--lm-ink-hi) 16%, transparent);
+  font: 600 12px var(--lm-mono); color: color-mix(in srgb, var(--lm-ink-hi) 85%, transparent); }
+.vz-th > span { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.vz-big { font: 600 28px var(--lm-sans); line-height: 1.1; color: var(--lm-ink-hi); font-variant-numeric: tabular-nums; text-shadow: 0 0 12px color-mix(in srgb, var(--lm-ink-hi) 22%, transparent); }
+.vz-big small { font-size: 14px; color: var(--lm-ink-3); text-shadow: none; }
+.vz-cap { font: 500 12px var(--lm-mono); color: color-mix(in srgb, var(--lm-ink-hi) 66%, transparent); margin-top: 2px; }
+.vz-mono { font-family: var(--lm-mono); }
+
+.vz-k4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.vz-k3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.vz-split { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.vz-split--even { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1000px) { .vz-k4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .vz-split, .vz-split--even { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { .vz-k4, .vz-k3 { grid-template-columns: minmax(0, 1fr); } }
+
+.vz-filters { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.vz-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.vz-chips__label { font: 600 12px var(--lm-mono); color: var(--lm-ink-3); margin-right: 4px; }
+.vz-chip { --c: var(--lm-accent); display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--lm-line-2); background: color-mix(in srgb, var(--lm-ink-hi) 3%, transparent); color: var(--lm-ink-2);
+  font: 600 12px var(--lm-mono); }
+.vz-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.vz-chip b { font-family: var(--lm-mono); color: var(--lm-ink-hi); }
+.vz-chip:hover { border-color: var(--c); }
+.vz-chip.is-on { border-color: var(--c); background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--lm-ink-hi); }
+
+.vz-regions { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; align-items: start; }
+.vz-hex { display: grid; grid-template-columns: repeat(auto-fill, 14px); gap: 3px; }
+.vz-cell { width: 14px; height: 14px; padding: 0; border: 0; border-radius: 3px; cursor: pointer; transition: transform .15s var(--lm-ease); }
+.vz-cell:hover:not(:disabled) { transform: scale(1.45); position: relative; z-index: 1; }
+.vz-cell:disabled { cursor: default; }
+.vz-cell.is-sel { box-shadow: 0 0 0 2px var(--lm-ink-hi); }
+.vz-cell:focus-visible { outline: 2px solid var(--lm-ink-hi); outline-offset: 1px; }
+.vz-assist-row .lm-assist { border: 0; background: transparent; box-shadow: none; padding: 0; }
+
+.vz-bubbles { display: block; width: 100%; height: auto; }
+.vz-svg-label { font: 600 12px var(--lm-mono); fill: var(--lm-ink-3); }
+.vz-svg-cap { font: 500 12px var(--lm-mono); fill: var(--lm-ink-3); }
+.vz-dot { cursor: pointer; }
+.vz-top { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--lm-ink-hi) 12%, transparent); }
+.vz-instrument { display: grid; gap: 12px; }
+.vz-inst-top { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.vz-limit { display: block; width: 100%; height: 70px; }
+.vz-chipline { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.vz-chipline--col { flex-direction: column; gap: 6px; }
+.vz-stat { display: grid; font: 500 12px var(--lm-mono); color: color-mix(in srgb, var(--lm-ink-hi) 66%, transparent); }
+.vz-stat b { font: 600 16px var(--lm-sans); color: var(--lm-ink-hi); }
+.vz-instrument .lm-assist, .vz-details .lm-assist { margin-top: 2px; }
+
+.vz-scroll { overflow-x: auto; }
+.vz-ruler { display: block; width: 100%; min-width: 720px; height: auto; }
+.vz-ruler--fit { min-width: 0; }
+.vz-fluid { width: 100%; min-width: 0; overflow: hidden; }
+/* Drill-down row: each button says which native app it opens and on what */
+.lm-drill__note { flex: 1 1 100%; font-size: 12px; color: var(--lm-warn); }
+.lm-drill .lm-btn:disabled { opacity: .45; cursor: not-allowed; }
+.lm-drill__lead { font: 600 11px var(--lm-sans); letter-spacing: .04em; text-transform: uppercase; color: var(--lm-ink-3); align-self: center; margin-right: 2px; }
+.lm-drill .lm-btn { display: inline-grid; grid-template-columns: auto auto; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 6px 12px; }
+.lm-drill .lm-btn b { grid-column: 1; font: 600 13px var(--lm-sans); }
+.lm-drill .lm-btn small { grid-column: 1; grid-row: 2; font: 400 11px var(--lm-sans); color: var(--lm-ink-3); }
+.lm-drill .lm-btn svg { grid-column: 2; grid-row: 1 / span 2; width: 14px; height: 14px; opacity: .7; }
+.vz-fluid > svg { display: block; max-width: 100%; }
+/* Carrier meters: the status LED breathes while Dynatrace has something open on that carrier */
+.vz-led { transform-box: fill-box; transform-origin: center; }
+.vz-led--pulse { animation: vz-led 2.4s ease-in-out infinite; }
+@keyframes vz-led { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .vz-led--pulse { animation: none; } }
+
+/* details panel */
+.lm.vz-details { padding: 14px; display: grid; gap: 12px; align-content: start; min-height: 100%; }
+.vz-dhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.vz-dhead h2 { margin: 0; display: flex; align-items: center; gap: 8px; font: 600 18px var(--lm-sans); color: var(--lm-ink-hi); overflow-wrap: anywhere; }
+.vz-details .vz-big { font-size: 24px; }
+.vz-trail { display: block; width: 100%; height: auto; }
+.vz-trail__hop { cursor: pointer; outline: none; }
+.vz-trail__hop:focus-visible circle { stroke: var(--lm-ink-hi); }
+.vz-trail__val { font: 600 12px var(--lm-sans); fill: var(--lm-ink-hi); }
+.vz-hop { margin-top: 10px; padding: 10px; border-radius: 10px; background: var(--dt-colors-background-surface-default, #fff); color: var(--dt-colors-text-neutral-default, #2d2e4e); }
+.vz-legacy { padding: 10px; border-radius: 10px; background: var(--dt-colors-background-surface-default, #fff); color: var(--dt-colors-text-neutral-default, #2d2e4e); }
+.vz-strips { display: grid; gap: 5px; }
+.vz-strip { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 10px; border: 0; background: none; padding: 2px 0; cursor: pointer; text-align: left; }
+.vz-strip:hover .vz-strip__name { color: var(--lm-ink-hi); }
+.vz-strip__name { display: flex; align-items: center; gap: 6px; font: 600 12px var(--lm-mono); color: var(--lm-ink-2); overflow: hidden; white-space: nowrap; }
+.vz-strip__cells { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; }
+.vz-strip__cells i { height: 14px; border-radius: 2px; }
+.vz-strip__cells em { font: 500 12px var(--lm-mono); color: var(--lm-ink-3); font-style: normal; grid-column: 1 / -1; }
+.vz-strips__axis { display: flex; justify-content: space-between; margin-left: 106px; font: 500 12px var(--lm-mono); color: var(--lm-ink-3); }
+.vz-sla { display: grid; gap: 8px; }
+.vz-sla__row { display: grid; grid-template-columns: 130px minmax(0, 1fr) 96px; align-items: center; gap: 10px; border: 0; background: none; padding: 0; cursor: pointer; text-align: left; }
+.vz-sla__name { font: 600 12px var(--lm-mono); color: var(--lm-ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vz-sla__track { position: relative; height: 10px; border-radius: 5px; background: color-mix(in srgb, var(--lm-ink-hi) 8%, transparent); }
+.vz-sla__track i { position: absolute; inset: 0 auto 0 0; border-radius: 5px; opacity: .85; }
+.vz-sla__track b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--lm-warn); }
+.vz-sla__val { font: 600 12px var(--lm-mono); color: var(--lm-ink-hi); text-align: right; }
+@media (prefers-reduced-motion: reduce) { .vz-tile--btn, .vz-cell { transition: none; } }
+.vz-regions { grid-auto-flow: row dense; }
+@media (min-width: 560px) { .vz-region--wide { grid-column: span 2; } }
+
+/* data requirement bullets */
+.dn-row { padding: 10px 16px 0; }
+.dn-empty { background: transparent; min-height: 0; display: block; width: min(760px, 100%); margin: 8px auto 0; }
+.vz-empty { display: grid; justify-items: center; align-content: start; gap: 16px; padding: 40px 16px; }
+.dn { --dn-ok: var(--lm-good-fill); --dn-miss: var(--lm-bad-fill); --dn-part: var(--lm-warn-fill);
+  border: 1px solid color-mix(in srgb, var(--lm-cyan) 40%, transparent); border-radius: 12px;
+  background: linear-gradient(165deg, color-mix(in srgb, var(--lm-cyan) 12%, var(--lm-tint)), color-mix(in srgb, var(--lm-cyan) 4%, var(--lm-tint-2))); color: var(--lm-ink); }
+.dn__head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 8px 14px; border: 0; background: none; cursor: pointer; text-align: left; }
+.dn__title { font: 600 12px var(--lm-mono); color: var(--lm-ink-hi); }
+.dn__score { font: 500 12px var(--lm-mono); color: var(--lm-ink-3); }
+.dn__chev { margin-left: auto; color: var(--lm-ink-3); }
+.dn__head:focus-visible { outline: 2px solid var(--lm-cyan); outline-offset: -2px; border-radius: 12px; }
+.dn__list { list-style: none; margin: 0; padding: 4px 14px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px 18px; }
+.dn--compact .dn__list { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.dn__item { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; align-items: start; }
+.dn__mark { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font: 600 12px var(--lm-mono); color: var(--lm-tint); background: var(--lm-neutral); }
+.dn__item--ok .dn__mark { background: var(--dn-ok); }
+.dn__item--missing .dn__mark { background: var(--dn-miss); }
+.dn__item--partial .dn__mark { background: var(--dn-part); }
+.dn__item--sim .dn__mark { background: var(--lm-violet); }
+.dn__body { display: grid; gap: 1px; min-width: 0; }
+.dn__body b { font: 600 12px var(--lm-sans); color: var(--lm-ink-hi); }
+.dn__body em { font: 500 12px var(--lm-mono); font-style: normal; color: var(--lm-ink-3); }
+.dn__item--missing .dn__body em { color: var(--lm-bad); }
+.dn__how { font-size: 12px; line-height: 1.4; color: var(--lm-ink-2); }
+.dn__docs { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 2px; font-size: 12px; }
+.dn__foot { margin: 12px 0 0; font-size: 12px; color: var(--lm-ink-3); }
+.vz-details .dn { margin-top: 2px; }
+
+/* Tiles: no tinted fill — only the ring (border, corner brackets, glow) carries the status colour. */
+.vz-tile { background: color-mix(in srgb, var(--lm-tint) 55%, transparent); border-width: 1.5px; box-shadow: 0 0 18px color-mix(in srgb, var(--c) 16%, transparent); }
+.vz-tile--btn.is-on { background: color-mix(in srgb, var(--c) 8%, transparent); }
+.lm-panel { background: color-mix(in srgb, var(--lm-tint) 70%, transparent); }
+.vz-zoom { display: grid; gap: 8px; }
+.vz-zoom__bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 30px; }
+.vz-zoom__btns { margin-left: auto; display: inline-flex; gap: 4px; }
+.vz-bubbles { touch-action: none; overflow: hidden; border-radius: 10px; cursor: grab; }
+.vz-bubbles.is-dragging { cursor: grabbing; }
+.vz-bubble { cursor: zoom-in; }
+.vz-bubble:focus-visible { outline: none; stroke: var(--lm-ink-hi); }
+.vz-dot-label { font-family: var(--lm-mono); font-weight: 600; fill: var(--lm-ink-hi); stroke: var(--lm-bg); paint-order: stroke; pointer-events: none; }
+
+/* Dynatrace Intelligence presence: AiIcon inside triggers and the AI disclaimer under answers */
+.lm-assist .lm-chip svg { width: 12px; height: 12px; vertical-align: -2px; }
+.lm-assist__disclaimer { display: block; margin-top: 8px; color: var(--lm-ink-3); }
+
+/* Drill-down buttons never sit flush against the element above them (16px default vertical spacing) */
+.vz-tile > * + .lm-drill { margin-top: 16px; }
+
+/* Selected cause: ring only, no fill (same treatment as the tiles) */
+.lm-cause.is-on { background: transparent; }
+
+/* Big numbers as Strato single values: plain DynatraceFlow digits, no glow halo */
+.lm-stats b, .lm-chain__node b, .vz-big { text-shadow: none; font-variant-numeric: normal; }
+.lm-cause b em { font-family: var(--lm-sans); font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* Boxes without fills: highlighted only by a thin tech line (border + corner brackets) */
+.vz-tile, .lm-panel, .lm-assist { background: transparent; box-shadow: none; }
+.vz-tile--btn.is-on { background: transparent; }
+.lm-stage.is-wide .lm-panel { background: var(--lm-tint); } /* over the map, text must stay readable */
+.lm-assist { position: relative; border: 1px solid color-mix(in srgb, var(--lm-violet) 60%, transparent); border-radius: 10px; }
+.lm-assist::before, .lm-assist::after { content: ""; position: absolute; width: 12px; height: 12px; border: 1.5px solid var(--lm-violet); pointer-events: none; }
+.lm-assist::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; border-radius: 10px 0 0 0; }
+.lm-assist::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; border-radius: 0 0 10px 0; }
+.vz-assist-row .lm-assist, .vz-tile .lm-assist { border: 1px solid color-mix(in srgb, var(--lm-violet) 60%, transparent); padding: 12px; }
+.lm-chip, .lm-chip.is-on, .lm-btn, .vz-chip, .vz-chip.is-on { background: transparent; }
+.lm-chip.is-on { box-shadow: inset 0 0 0 1px var(--lm-violet); }
+.vz-chip.is-on { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); }
+.lm-btn--primary { background: transparent; border-color: var(--lm-accent); color: var(--lm-ink-hi); box-shadow: inset 0 0 0 1px var(--lm-accent); }
+.dn, .lm-badge, .lm-chain__icon, .lm-play { background: transparent; background-image: none; }
+
+/* Details panels stack their blocks at content height; the map's row template (last row minmax(0, 1fr)) must not apply */
+.lm.vz-details { grid-template-rows: none; grid-auto-rows: max-content; }
+
+/* Settings: data setup guide (Strato spacing: 32px between groups, 16px between elements, 8px related) */
+.ds { display: grid; gap: 32px; max-width: 880px; padding-bottom: 32px; }
+.ds-block { display: grid; gap: 16px; }
+.ds-block > div { display: grid; gap: 8px; }
+.ds-page { display: grid; gap: 8px; padding-bottom: 8px; }
+.ds-page__group { display: grid; gap: 4px; }
+.ds-page__grouptitle { color: var(--dt-colors-text-neutral-subdued, #5d5f78); text-transform: uppercase; letter-spacing: .04em; }
+.ds-page__needs { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; }
+.ds-label { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; }
+.ds-guide { display: grid; gap: 16px; padding: 4px 0 16px; }
+.ds-guide > div { display: grid; gap: 8px; }
+.ds-guide p { margin: 0; }
+.ds-actions { display: flex; gap: 8px; }
+.ds-links { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.ds-code { font-family: var(--dt-typography-code-small-default-family, "Roboto Mono", monospace); font-size: 12px; }
+
+/* Strato icons inside the app's own controls */
+.dn__mark { background: transparent !important; color: var(--lm-neutral); }
+.dn__mark svg, .dn__chev svg { width: 16px; height: 16px; }
+.dn__item--ok .dn__mark { color: var(--lm-good-fill); }
+.dn__item--missing .dn__mark { color: var(--lm-bad-fill); }
+.dn__item--partial .dn__mark { color: var(--lm-warn-fill); }
+.dn__item--sim .dn__mark { color: var(--lm-violet); }
+.lm-zoom button, .vz-zoom__btns .lm-btn { display: inline-grid; place-items: center; }
+.lm-zoom button svg, .vz-zoom__btns .lm-btn svg, .vz-zoom__bar .lm-btn svg { width: 16px; height: 16px; }
+.np-inline-icon { width: 12px; height: 12px; vertical-align: -2px; }
+
+/* Cause chain: icons share one baseline even when a caption wraps to two lines */
+.lm-chain { align-items: start; }
+.lm-chain__node { align-content: start; }
+.lm-chain__link { margin-top: 21px; }
+.np-link { background: none; border: 0; padding: 0; font: inherit; color: var(--dt-colors-text-primary-default, var(--lm-accent)); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.lm-assist__continue { margin-top: 8px; }
+
+/* Devices by role: halo around problem devices in small groups, pulsing when critical */
+.vz-dot-halo { opacity: .55; transform-box: fill-box; transform-origin: center; }
+.vz-dot-halo--pulse { animation: vz-halo 1.8s ease-out infinite; }
+@keyframes vz-halo { 0% { opacity: .8; transform: scale(.8); } 100% { opacity: 0; transform: scale(1.6); } }
+@media (prefers-reduced-motion: reduce) { .vz-dot-halo--pulse { animation: none; } }
+
+/* Floating map panels scroll vertically only (sub-pixel widths no longer show a horizontal scrollbar) */
+.lm-stage.is-wide .lm-left, .lm-stage.is-wide .lm-right { overflow-x: hidden; }
+
+/* Left panel: causes or sites by primary tag hierarchy */
+.lm-lefttabs { display: inline-flex; margin-bottom: 12px; }
+.st { display: grid; gap: 8px; }
+.st-levels { font-size: 12px; color: var(--lm-ink-3); text-transform: capitalize; }
+.st-tree, .st-tree ul { list-style: none; margin: 0; padding: 0; }
+.st-row { display: flex; align-items: center; gap: 4px; min-width: 0; border-radius: 6px; }
+.st-row--group.is-on { box-shadow: inset 0 0 0 1px var(--lm-accent); }
+.st-chev, .st-group, .st-row--site { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
+.st-chev { display: grid; place-items: center; width: 18px; height: 24px; padding: 0; color: var(--lm-ink-3); flex: none; }
+.st-chev svg { width: 14px; height: 14px; }
+.st-group, .st-row--site { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 4px 6px; border-radius: 6px; text-align: left; font-size: 14px; }
+.st-row--site { width: 100%; font-size: 12px; }
+.st-group:hover, .st-row--site:hover { background: color-mix(in srgb, var(--lm-ink-hi) 6%, transparent); }
+.st-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-count { font-style: normal; font-size: 12px; color: var(--lm-ink-3); font-variant-numeric: tabular-nums; }
+.st-hint { font-size: 12px; color: var(--lm-ink-3); }
+.st-group:focus-visible, .st-row--site:focus-visible, .st-chev:focus-visible { outline: 2px solid var(--lm-accent); outline-offset: 1px; }
+/* Settings: hierarchy levels */
+.sh-levels { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.sh-level { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 12px; border: 1px solid var(--dt-colors-border-neutral-default, rgba(128,128,160,.3)); border-radius: 8px; }
+.sh-level__name { display: grid; gap: 2px; min-width: 0; }
+.sh-level__actions { display: flex; gap: 4px; flex: none; }
+.sh-add { display: flex; gap: 8px; align-items: center; }
+.ds--first { padding-bottom: 32px; }
+.sh-select { width: 340px; max-width: 100%; }
+.sh-option { display: grid; gap: 2px; min-width: 0; }
+.sh-option__name { text-transform: capitalize; }
+.sh-option__meta { font-size: 12px; color: var(--lm-ink-3); }
+.sh-add [role="listbox"], .sh-add [role="presentation"] { min-width: 340px; }
+.sh-select > *, .sh-select button { width: 100%; }
+.sh-state { color: var(--lm-ink-3); }
+.sh-suggest { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px; border: 1px solid var(--dt-colors-border-primary-accent, var(--lm-accent)); border-radius: 8px; }
+.sh-suggest__text { display: grid; gap: 2px; min-width: 0; text-transform: none; }
+.sh-chain { text-transform: capitalize; }
+.ds-group { display: grid; gap: 4px; }
+.sh-save { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px; border: 1px solid var(--dt-colors-border-primary-accent, var(--lm-accent)); border-radius: 8px; }
+.sh-save__actions { display: flex; gap: 8px; }
+
+/* ---------------------------------------------------------------------------------------------
+   Light theme surfaces. The transparent panels above are a dark-stage device: a box with no fill,
+   held together by a thin accent border and corner brackets, reads well over a dark background and
+   disappears over a light one. On light, Dynatrace stacks white surfaces on the shell, so that is
+   what the app does here: a real surface, a hairline border and a shadow instead of a glow.
+   --------------------------------------------------------------------------------------------- */
+:root:not([data-theme="dark"]) .lm .vz-tile,
+:root:not([data-theme="dark"]) .lm.vz-details .vz-tile,
+:root:not([data-theme="dark"]) .lm-panel,
+:root:not([data-theme="dark"]) .lm-assist,
+:root:not([data-theme="dark"]) .dn {
+  background: var(--dt-colors-background-surface-default, #ffffff);
+  border-color: var(--lm-line);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--dt-colors-text-neutral-default, #2d2e4e) 8%, transparent);
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+/* the corner brackets and the accent glow belong to the dark stage */
+:root:not([data-theme="dark"]) .lm-panel::before, :root:not([data-theme="dark"]) .lm-panel::after,
+:root:not([data-theme="dark"]) .vz-tile::before, :root:not([data-theme="dark"]) .vz-tile::after,
+:root:not([data-theme="dark"]) .lm-assist::before, :root:not([data-theme="dark"]) .lm-assist::after { display: none; }
+/* a tile still shows its status, through the border rather than a ring of light */
+:root:not([data-theme="dark"]) .lm .vz-tile { border-left: 3px solid var(--c); }
+:root:not([data-theme="dark"]) .lm-assist { border-left: 3px solid var(--lm-violet); }
+/* controls get a surface too, so a button is a button and not floating text */
+:root:not([data-theme="dark"]) .lm-btn,
+:root:not([data-theme="dark"]) .lm-chip,
+:root:not([data-theme="dark"]) .vz-chip {
+  background: var(--dt-colors-background-surface-default, #ffffff);
+  border-color: var(--lm-line-2);
+}
+:root:not([data-theme="dark"]) .lm-btn:hover, :root:not([data-theme="dark"]) .lm-chip:hover, :root:not([data-theme="dark"]) .vz-chip:hover { background: var(--lm-accent-dim); border-color: var(--lm-accent); }
+:root:not([data-theme="dark"]) .lm-btn--primary { background: var(--lm-accent-dim); border-color: var(--lm-accent); color: var(--dt-colors-text-primary-default, #474fcf); }
+/* labels printed on a solid status colour follow the surface, not the ink */
+:root:not([data-theme="dark"]) .lm-tick em { color: var(--dt-colors-background-surface-default, #ffffff); }

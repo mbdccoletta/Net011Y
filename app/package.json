@@ -1,0 +1,38 @@
+{
+  "name": "network-pulse",
+  "version": "0.1.0",
+  "description": "NetworkPlane: end-to-end network health per site, from access to carrier links to the application, with probable cause.",
+  "private": true,
+  "scripts": {
+    "start": "dt-app dev",
+    "build": "dt-app build --optimize --enable-code-splitting",
+    "deploy": "dt-app deploy",
+    "uninstall": "dt-app uninstall",
+    "info": "dt-app info",
+    "typecheck": "tsc --noEmit -p ui"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@dynatrace-sdk/app-environment": "^1.1.4",
+    "@dynatrace-sdk/client-davis-copilot": "^1.0.0",
+    "@dynatrace-sdk/client-query": "^1.27.0",
+    "@dynatrace-sdk/client-state": "^1.9.3",
+    "@dynatrace-sdk/navigation": "^2.2.0",
+    "@dynatrace-sdk/react-hooks": "^1.14.2",
+    "@dynatrace/strato-components": "^3.13.2",
+    "@dynatrace/strato-components-preview": "^3.4.0",
+    "@dynatrace/strato-design-tokens": "^1.2.0",
+    "@dynatrace/strato-geo": "^3.11.4",
+    "@dynatrace/strato-icons": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.20",
+    "@types/react-dom": "^18.3.5",
+    "dt-app": "^1.14.1",
+    "typescript": "^5.9.3"
+  }
+}

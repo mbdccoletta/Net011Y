@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="NetworkPlane">
+  <rect width="64" height="64" rx="14" fill="#4A4FD4"/>
+  <!-- the plane: the dotted grid the app draws the network on -->
+  <g fill="#FFFFFF" opacity="0.32">
+    <circle cx="13" cy="19" r="1.6"/><circle cx="24" cy="19" r="1.6"/><circle cx="35" cy="19" r="1.6"/><circle cx="46" cy="19" r="1.6"/>
+    <circle cx="13" cy="30" r="1.6"/><circle cx="24" cy="30" r="1.6"/><circle cx="35" cy="30" r="1.6"/><circle cx="46" cy="30" r="1.6"/>
+    <circle cx="13" cy="41" r="1.6"/><circle cx="24" cy="41" r="1.6"/><circle cx="35" cy="41" r="1.6"/><circle cx="46" cy="41" r="1.6"/>
+    <circle cx="13" cy="52" r="1.6"/><circle cx="24" cy="52" r="1.6"/><circle cx="35" cy="52" r="1.6"/><circle cx="46" cy="52" r="1.6"/>
+  </g>
+  <!-- two sites reaching the hub, the shape every screen of the app is built on -->
+  <path d="M15 47c10 0 17-4 22-13" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" opacity="0.9"/>
+  <path d="M17 24c8 2 13 5 20 10" fill="none" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round" opacity="0.9"/>
+  <circle cx="15" cy="47" r="3.6" fill="#FFFFFF"/>
+  <circle cx="17" cy="24" r="3.6" fill="#EEA746"/>
+  <rect x="36" y="30" width="11" height="11" rx="2.5" fill="#FFFFFF"/>
+</svg>
