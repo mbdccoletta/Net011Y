@@ -3,7 +3,7 @@
   "app": {
     "name": "NetO11y",
     "version": "0.1.0",
-    "description": "Sites, devices and WAN links on one map, with the alerts Dynatrace already raises on them",
+    "description": "Sites, devices and WAN links on one map, with the alerts open on them",
     "icon": "./assets/icon.svg",
     "id": "my.network.pulse",
     "scopes": [
