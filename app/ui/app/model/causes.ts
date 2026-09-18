@@ -83,19 +83,29 @@ export function buildCauses(model: NetworkModel, infos: SiteInfo[]): Cause[] {
   const byCode = new Map(infos.map((i) => [i.code, i]));
   const circuits = model.circuits ?? [];
 
-  // 1. one scope per open problem, from the entities Davis says it affects
-  const groups = new Map<string, { p: DeviceProblem; devices: Device[]; circuits: Circuit[] }>();
-  const put = (p: DeviceProblem) => {
-    const g = groups.get(p.eventId) ?? { p, devices: [], circuits: [] };
-    groups.set(p.eventId, g);
+  // 1. One scope per open Davis problem, from the entities it affects. Events that never became a problem
+  // are grouped by what they are and where they are: an environment whose ports flap raises thousands of
+  // "Interface operationally going down" events (fxz0998d: about 4000), and one entry each made a list of
+  // four thousand identical lines.
+  const groups = new Map<string, { p: DeviceProblem; devices: Device[]; circuits: Circuit[]; events: Set<string>; start: string }>();
+  const put = (p: DeviceProblem, owner: string) => {
+    const key = p.eventKind === "DAVIS_PROBLEM" ? `problem:${p.eventId}` : `events:${p.name}|${owner}`;
+    const g = groups.get(key) ?? { p, devices: [], circuits: [], events: new Set<string>(), start: p.start };
+    g.events.add(p.eventId);
+    if (p.start && (!g.start || p.start < g.start)) g.start = p.start;
+    groups.set(key, g);
     return g;
   };
-  model.devices.forEach((d) => openProblems(d.problems).forEach((p) => put(p).devices.push(d)));
-  circuits.forEach((c) => openProblems(c.problems).forEach((p) => put(p).circuits.push(c)));
+  model.devices.forEach((d) => openProblems(d.problems).forEach((p) => { const g = put(p, `d:${d.name}`); if (!g.devices.includes(d)) g.devices.push(d); }));
+  circuits.forEach((c) => openProblems(c.problems).forEach((p) => { const g = put(p, `c:${c.id}`); if (!g.circuits.includes(c)) g.circuits.push(c); }));
 
-  const scopes: Scope[] = [...groups.values()].map(({ p, devices, circuits: cs }) => ({
-    id: `problem:${p.eventId}`, title: p.name, category: p.category, start: p.start || null,
-    incident: p.displayId || null, devices, circuits: cs, level: problemLevel(p),
+  const scopes: Scope[] = [...groups.entries()].map(([key, { p, devices, circuits: cs, events, start }]) => ({
+    id: key.startsWith("problem:") ? `problem:${p.eventId}` : key,
+    // an event group names its device (or circuit), or two groups of the same kind read the same
+    title: key.startsWith("problem:") ? p.name
+      : `${p.name} · ${devices[0] ? shortDevice(devices[0].name) : cs[0] ? `${cs[0].carrier} ${cs[0].kind} link` : "network"}${events.size > 1 ? ` · ${events.size} alerts` : ""}`,
+    category: p.category, start: start || null,
+    incident: key.startsWith("problem:") ? p.displayId || null : null, devices, circuits: cs, level: problemLevel(p),
   }));
 
   // 2. links that stopped answering while nothing is alerting on them — the gap is part of the message
@@ -137,8 +147,14 @@ export function buildCauses(model: NetworkModel, infos: SiteInfo[]): Cause[] {
       note: (names) => `Open on hosts, services or applications: ${names}. They are shown here because this environment is reporting them, not because the network is the cause.`,
     },
   ];
+  // everything outside the network is one entry, whatever domain it is in (applications, services,
+  // hosts or anything else): splitting the domains for the fault-domain reading must not hide them here
+  const OUTSIDE = new Set(["application", "service", "host", "other"]);
   unplaced.forEach(({ scope, title, note }) => {
-    const group = orphans.filter((a) => (a.scope ?? "environment") === scope);
+    const group = orphans.filter((a) => {
+      const s = a.scope ?? "environment";
+      return scope === "other" ? OUTSIDE.has(s) : s === scope;
+    });
     if (!group.length) return;
     const names = [...new Set(group.map((a) => a.name))].slice(0, 4).join(", ");
     scopes.push({

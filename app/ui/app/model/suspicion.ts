@@ -69,14 +69,15 @@ export interface Suspicion {
 
 const EMPTY_OUTSIDE: Record<NonNetworkScope, number> = { application: 0, service: 0, host: 0, other: 0 };
 
-/** Problems the platform raised outside the network inventory, counted by what they are about. */
+/** What the platform is alerting on outside the network: the one definition every count here uses. */
+export function outsideAlerts(model: NetworkModel): DeviceProblem[] {
+  return (model.unmappedAlerts ?? []).filter((a) => !a.muted && (a.scope === "application" || a.scope === "service" || a.scope === "host" || a.scope === "other"));
+}
+
+/** Those alerts counted by what they are about. */
 export function outsideCounts(model: NetworkModel): Record<NonNetworkScope, number> {
   const out = { ...EMPTY_OUTSIDE };
-  (model.unmappedAlerts ?? []).forEach((a) => {
-    if (a.muted) return;
-    const s = a.scope;
-    if (s === "application" || s === "service" || s === "host" || s === "other") out[s] += 1;
-  });
+  outsideAlerts(model).forEach((a) => { out[a.scope as NonNetworkScope] += 1; });
   return out;
 }
 
@@ -104,7 +105,7 @@ export function fallStart(users: Users | undefined, source: "sessions" | "reques
   const src = source === "requests" ? users?.requests : users;
   const series = (src?.series ?? []) as (number | null)[];
   const usual = (src?.typical ?? []) as number[];
-  let i = series.length - 2;
+  let i = src?.nowIndex ?? series.length - 2;
   if (i < 0) return NaN;
   const below = (k: number) => series[k] != null && usual[k] > 0 && ((series[k] as number) / usual[k]) * 100 < dropPct;
   if (!below(i)) return NaN;
@@ -140,16 +141,16 @@ export function suspicionFor(
   else if (!users) facts.push("Neither user sessions nor service requests are reaching this environment");
   if (outsideOpen) {
     // a problem and a raw event are both the platform alerting, but they are not the same thing: say which
-    const outsideList = (model.unmappedAlerts ?? []).filter((a) => !a.muted && a.scope && a.scope !== "network" && a.scope !== "environment");
-    const problems = outsideList.filter((a) => a.eventKind === "DAVIS_PROBLEM").length;
-    const events = outsideList.length - problems;
+    const list = outsideAlerts(model);
+    const problems = list.filter((a) => a.eventKind === "DAVIS_PROBLEM").length;
+    const events = list.length - problems;
     const label: Record<NonNetworkScope, string> = { application: "applications", service: "services", host: "hosts", other: "other entities" };
     const parts = (Object.keys(outside) as NonNetworkScope[]).filter((k) => outside[k]).map((k) => `${outside[k]} on ${label[k]}`);
     const kinds = [problems ? `${problems} problem${problems > 1 ? "s" : ""}` : "", events ? `${events} event${events > 1 ? "s" : ""} not folded into a problem` : ""].filter(Boolean).join(" and ");
     facts.push(`Dynatrace is alerting outside the network: ${kinds} — ${parts.join(", ")}`);
   }
   if (network) facts.push(`${network} alert(s) open on ${site ? "this site's network" : "the network"}`);
-  if (users && !users.anomalyWatched) facts.push("No traffic anomaly alert has fired on these applications, so this drop is the app's own measurement");
+  if (drop.dropped && !users?.anomalyWatched) facts.push("No traffic anomaly problem is open on these applications, so this drop is the app's own measurement");
   if (users && scope === "environment" && users.mapped === 0 && users.total > 0) {
     facts.push(`No client subnet matches a site (${users.total} sessions), so this is the whole environment, not one site`);
   }
@@ -162,12 +163,10 @@ export function suspicionFor(
   // When did the impact begin, and did a network alert open just before it?
   let burst: Suspicion["burst"];
   const ts = (v: string) => Date.parse(v.length === 17 ? v.replace("Z", ":00Z") : v);
-  const outsideStarts = (model.unmappedAlerts ?? []).filter((a) => !a.muted && a.scope && a.scope !== "network" && a.scope !== "environment")
-    .map((a) => ts(a.start)).filter((t) => Number.isFinite(t));
   const dropStart = drop.dropped ? fallStart(users, drop.source, dropPct) : NaN;
   // an alert is known to the minute, a fall only to the hour: a network alert that opened at any point of
   // the first low hour can explain that hour, so the fall's window runs to the end of it
-  const outsideList = (model.unmappedAlerts ?? []).filter((a) => !a.muted && a.scope && a.scope !== "network" && a.scope !== "environment" && Number.isFinite(ts(a.start)));
+  const outsideList = outsideAlerts(model).filter((a) => Number.isFinite(ts(a.start)));
   const impacts = [
     ...(site ? [] : outsideList.map((a) => ({ t: ts(a.start), after: 5 * 60000, what: `${a.name} (${a.scope})` }))),
     ...(Number.isFinite(dropStart) ? [{ t: dropStart, after: 3600000, what: `the fall in ${drop.source === "requests" ? "requests" : "sessions"}` }] : []),

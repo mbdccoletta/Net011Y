@@ -73,8 +73,9 @@ const NO_CIRCUIT = { "primary_tags.circuit_id": null, "primary_tags.circuit_role
 // ---------------- scenarios ----------------
 // 1) Carrier B outage for 6 South sites since 47 min ago: edge routers stop answering SNMP and ICMP.
 const outage = sites.filter((s) => !s.dc && carrierOf(s) === "Carrier B" && s.region === "South").slice(0, 6).map((s) => s.code);
-// the outage opens 20 minutes into the previous hour, so the last complete hour is the first low one
-const OUTAGE_SINCE = Math.floor(NOW / 3600e3) * 3600e3 - 40 * 60e3;
+// the outage opens 20 minutes into the hour before last: sessions are read from that settled hour (the
+// one after it is still filling), so it is the first low one
+const OUTAGE_SINCE = Math.floor(NOW / 3600e3) * 3600e3 - 100 * 60e3;
 // 2) Firewall CPU saturation in CPS1. 3) Uplink saturation in one large store. 4) CRC errors on a store switch.
 const SAT_SITE = sites.find((s) => s.size === "L" && !outage.includes(s.code)).code;
 const CRC_SITE = sites.find((s) => s.size === "M" && s.region === "Southeast").code;
@@ -380,13 +381,13 @@ writeFileSync(`${OUT}config/network-availability-monitors.json`, JSON.stringify(
 const DAY = [22, 14, 9, 7, 8, 14, 34, 62, 88, 104, 112, 118, 121, 116, 110, 108, 104, 96, 84, 70, 58, 46, 36, 28];
 const hourNow = new Date(NOW).getUTCHours();
 const typicalHour = (i, len) => DAY[(((hourNow - (len - 1 - i)) % 24) + 24) % 24] * 9;
-// demand falls from the hour the outage opened in (index 22, the last complete hour), never before it
-const sessions24 = Array.from({ length: 24 }, (_, i) => Math.round(typicalHour(i, 24) * (i >= 22 ? 0.15 : uni(0.9, 1.1))));
+// demand falls from the hour the outage opened in (index 21), never before it
+const sessions24 = Array.from({ length: 24 }, (_, i) => Math.round(typicalHour(i, 24) * (i >= 21 ? 0.15 : uni(0.9, 1.1))));
 const week = Array.from({ length: 168 }, (_, i) => Math.round(typicalHour(i, 168) * uni(0.92, 1.08)));
 results.sessions = [{ "dt.rum.application.type": "web", interval: "3600000000000", sessions: sessions24, timeframe: { start: iso(NOW - 24 * B1H), end: iso(NOW) } }];
 results.sessionsTypical = [{ interval: "3600000000000", sessions: week, timeframe: { start: iso(NOW - 168 * B1H), end: iso(NOW) } }];
 // requests served by the services: they fall with the outage too, less than the sessions
-results.requests = [{ interval: "3600000000000", req: sessions24.map((v, i) => Math.round(v * 400 * (i >= 22 ? 2.6 : 1))), timeframe: { start: iso(NOW - 24 * B1H), end: iso(NOW) } }];
+results.requests = [{ interval: "3600000000000", req: sessions24.map((v, i) => Math.round(v * 400 * (i >= 21 ? 2.6 : 1))), timeframe: { start: iso(NOW - 24 * B1H), end: iso(NOW) } }];
 results.requestsTypical = [{ interval: "3600000000000", req: week.map((v) => v * 400), timeframe: { start: iso(NOW - 168 * B1H), end: iso(NOW) } }];
 // client subnets: the ones that match a device /24 are the sites, the rest stay unattributed
 results.sessionNets = [

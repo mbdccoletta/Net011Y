@@ -157,11 +157,12 @@ export function isolationContext(model: NetworkModel, s: Suspicion, info?: SiteI
       counted: s.scope === "site" ? "for the whole environment (no per-site curve yet)" : "for the whole environment",
       threshold: `a fall counts only below ${dropPct}% of what that hour usually holds`,
       lastCompleteHour: {
-        hour: hourLabel(series.length - 2), value: drop.now, usual: drop.typical, pctOfUsual: drop.pct, fallBelowThreshold: drop.dropped,
+        hour: hourLabel(src?.nowIndex ?? series.length - 2), value: drop.now, usual: drop.typical, pctOfUsual: drop.pct, fallBelowThreshold: drop.dropped,
         // said in words as well: left with the numbers alone, the model called 56% of the usual "a fall"
         reading: drop.dropped ? `a fall: below ${dropPct}% of the usual for this hour` : `no fall: at or above ${dropPct}% of the usual for this hour, within the normal range`,
       },
-      hourly: series.slice(0, -1).map((v, i) => ({ hour: hourLabel(i), value: v, usual: usual[i] ?? null })),
+      // only settled hours: the ones after it are still filling
+      hourly: series.slice(0, (src?.nowIndex ?? series.length - 2) + 1).map((v, i) => ({ hour: hourLabel(i), value: v, usual: usual[i] ?? null })),
       trafficAnomalyAlertFired: u?.anomalyWatched ?? false,
     } : "no user sessions and no service requests in this environment",
     // what this reading could and could not use, so "what is missing" names real gaps and not a wish list
@@ -169,7 +170,7 @@ export function isolationContext(model: NetworkModel, s: Suspicion, info?: SiteI
       userSessions: u && u.series.length ? "received" : "not received",
       serviceRequests: u?.requests ? "received" : "not received",
       siteAttribution: u && u.total ? `${u.mapped} of ${u.total} sessions map to a site (site_cidr tag or a device /24)` : "not possible without sessions",
-      trafficAnomalyDetection: u?.anomalyWatched ? "raising problems" : "not raising problems on these applications",
+      trafficAnomalyDetection: u?.anomalyWatched ? "a traffic anomaly problem is open" : "no traffic anomaly problem open now (detection may still be configured)",
       perSiteDemandCurve: "not available yet: demand is read for the whole environment",
       networkFlowsFromHosts: "not used in this reading yet",
     },

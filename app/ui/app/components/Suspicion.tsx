@@ -30,8 +30,9 @@ export function SuspicionStrip({ s, users, assist }: { s: Suspicion; users: Netw
   const drop = trafficDrop(users, 0);
   const pct = drop.pct;
   return (
-    <section className={`sus ${TONE[s.kind]}`} aria-label="Network isolation">
+    <section className={`sus ${TONE[s.kind]}`} aria-label="Fault domain">
       <div className="sus__head">
+        <span className="sus__eyebrow">Fault domain</span>
         <span className="sus__mark">{MARK[s.kind]}</span>
         {s.fromMeasurement && <em className="sus__hint" title="No traffic anomaly alert fired: this comes from the app's own measurement">suspicion, not a problem</em>}
       </div>

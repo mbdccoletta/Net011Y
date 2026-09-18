@@ -18,7 +18,7 @@ import { AssistPanel } from "../components/AssistPanel";
 import { DataNeeds } from "../components/DataNeeds";
 import { PageEmpty } from "../components/PageEmpty";
 import { SuspicionStrip } from "../components/Suspicion";
-import { suspicionFor } from "../model/suspicion";
+import { suspicionFor, trafficDrop } from "../model/suspicion";
 import { useDropThreshold } from "../hooks/useDropThreshold";
 import { VIEW_NEEDS, type Need, type NeedKey } from "../data/requirements";
 import { CauseChain, EvidenceBadges, NetworkStatus } from "../components/CauseVisuals";
@@ -165,6 +165,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   const dcs = infos.filter((i) => i.site.dc).length;
   const lost = causes.reduce((a, c) => a + c.impact.sessionsLost, 0);
   const offline = causes.reduce((a, c) => a + c.impact.offline, 0);
+  const demand = trafficDrop(model.users, dropPct);
   const scopeDevices = cause ? cause.devices : causes.flatMap((c) => c.devices);
   const ips = scopeDevices.map((d) => d.ip).filter(Boolean).slice(0, 40);
   const maxSites = Math.max(1, ...causes.map((c) => c.sites.length));
@@ -230,10 +231,17 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
             <SiteTree infos={infos} levels={levels.length ? levels : defaultLevels} selected={group?.id ?? null}
               onGroup={(id, codes) => setGroup(id && codes ? { id, codes } : null)} onSite={onSite} />
           ) : (<>
-          <h2 className="lm-h">{causes.length ? `${causes.length} open problem${causes.length > 1 ? "s" : ""} · ${fmtInt(affected.length)} sites` : "No open problem on this network"}</h2>
+          <h2 className="lm-h">{causes.length ? `${fmtInt(causes.length)} cause${causes.length > 1 ? "s" : ""} · ${fmtInt(affected.length)} sites` : "Nothing is alerting on this network"}</h2>
           <div className="lm-stats">
             <span><b style={{ color: offline ? "var(--lm-bad)" : undefined }}>{fmtInt(offline)}</b>sites offline</span>
-            <span><b style={{ color: lost ? "var(--lm-bad)" : undefined }}>{lost ? `−${fmtInt(lost)}` : "0"}</b>sessions/h</span>
+            {/* demand as measured, when the environment reports it; the example network carries its own loss */}
+            {demand.pct != null ? (
+              <span title={`${demand.source === "requests" ? "Requests served" : "User sessions"} in the last settled hour against what that hour usually holds, whole environment`}>
+                <b style={{ color: demand.dropped ? "var(--lm-bad)" : undefined }}>{demand.pct}%</b>usual {demand.source === "requests" ? "requests" : "sessions"}
+              </span>
+            ) : lost ? (
+              <span><b style={{ color: "var(--lm-bad)" }}>−{fmtInt(lost)}</b>sessions/h</span>
+            ) : null}
           </div>
           <button type="button" className={`lm-cause lm-cause--all${cause ? "" : " is-on"}`} aria-pressed={!cause} onClick={() => onCause("all")}>
             <b><span className="lm-cause__title">Whole network</span><em>{fmtInt(affected.length)}/{fmtInt(infos.length)}</em></b>

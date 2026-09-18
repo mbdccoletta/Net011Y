@@ -29,8 +29,34 @@ const deadSince = (row: Rec, values: unknown[], dead: (i: number) => boolean): s
   return Number.isFinite(start) && Number.isFinite(step) ? new Date(start + i * step).toISOString() : null;
 };
 
-const CONVENTION = /^([A-Z]{2})-([A-Z]{2})-([A-Z0-9]{3,5})-([A-Z]+)\d*$/;
-const ROLE_CODES: Record<string, string> = { RTR: "edge", RTC: "edge", RTP: "edge", L2L: "edge", CON: "core", COR: "core", SWT: "switch", DISP: "switch", APW: "ap", WLC: "wlc", FWL: "firewall", LBL: "lb" };
+// COUNTRY-UF-SITE-ROLE[NNN | -NNN], with or without the DNS domain (BR-PI-URU1-SWA-001.corp.example.com)
+const CONVENTION = /^([A-Z]{2})-([A-Z]{2})-([A-Z0-9]{3,5})-([A-Z]{2,5})(?:-?\d+)?$/;
+const ROLE_CODES: Record<string, string> = {
+  RTR: "edge", RTC: "edge", RTP: "edge", L2L: "edge", CON: "core", COR: "core", SWT: "switch", DISP: "switch", APW: "ap", WLC: "wlc", FWL: "firewall", LBL: "lb",
+  SWA: "switch", SWD: "switch", LEF: "switch", SWC: "core", SPN: "core", FWC: "firewall", FW: "firewall",
+};
+
+/** Brazilian federative units: the name the region is shown as, and a centre to place a site at when
+ *  nothing gives its coordinates. A site placed this way is marked approximate. */
+const BR_UF: Record<string, [string, number, number]> = {
+  AC: ["Acre", -9.0, -70.5], AL: ["Alagoas", -9.6, -36.6], AP: ["Amapá", 1.4, -51.8], AM: ["Amazonas", -3.4, -64.7], BA: ["Bahia", -12.5, -41.7],
+  CE: ["Ceará", -5.2, -39.5], DF: ["Distrito Federal", -15.8, -47.9], ES: ["Espírito Santo", -19.6, -40.6], GO: ["Goiás", -15.9, -49.6], MA: ["Maranhão", -5.0, -45.3],
+  MT: ["Mato Grosso", -12.9, -55.9], MS: ["Mato Grosso do Sul", -20.5, -54.8], MG: ["Minas Gerais", -18.5, -44.6], PA: ["Pará", -3.8, -52.5], PB: ["Paraíba", -7.2, -36.8],
+  PR: ["Paraná", -24.6, -51.6], PE: ["Pernambuco", -8.4, -37.9], PI: ["Piauí", -7.7, -42.7], RJ: ["Rio de Janeiro", -22.2, -42.7], RN: ["Rio Grande do Norte", -5.8, -36.6],
+  RS: ["Rio Grande do Sul", -29.7, -53.2], RO: ["Rondônia", -10.9, -63.0], RR: ["Roraima", 2.0, -61.4], SC: ["Santa Catarina", -27.3, -50.5], SP: ["São Paulo", -22.2, -48.8],
+  SE: ["Sergipe", -10.6, -37.4], TO: ["Tocantins", -10.2, -48.3],
+};
+
+const slug = (v: string | null | undefined) => (v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+/** "City - CODE - Area" in the SNMP sysLocation: the city of a site, when the code in it matches. */
+function parseLocation(location: unknown, code: string | null): { city: string; code: string } | null {
+  const parts = String(location ?? "").split(/\s+-\s+/).map((x) => x.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  const c = parts[1].toUpperCase();
+  if (code ? c !== code : !/^[A-Z0-9]{3,5}$/.test(c)) return null;
+  return { city: parts[0], code: c };
+}
 const ROLE_RULES: [RegExp, string][] = [
   [/core-router/, "core"], [/edge-router/, "edge"], [/firewall|asa|fortigate|paloalto|palo-alto/, "firewall"],
   [/wlc/, "wlc"], [/-ap-|aironet|aruba-ap/, "ap"], [/big-ip|f5/, "lb"], [/switch|nexus|catalyst/, "switch"], [/ucs/, "compute"],
@@ -49,12 +75,12 @@ export function placeOf(code: string, name: string): { lat: number; lon: number;
   return hit ? { lat: hit[1], lon: hit[2], region: hit[3] } : null;
 }
 
-export function deriveTags(name: string, deviceType?: string): { site: string; role: string } {
-  const m = name.match(CONVENTION);
-  if (m) return { site: m[3], role: ROLE_CODES[m[4]] ?? "other" };
+export function deriveTags(name: string, deviceType?: string): { site: string; role: string; uf?: string; country?: string; matched: boolean } {
+  const m = name.split(".")[0].toUpperCase().match(CONVENTION);
+  if (m) return { site: m[3], role: ROLE_CODES[m[4]] ?? "other", country: m[1], uf: m[2], matched: true };
   const n = `${name} ${deviceType ?? ""}`.toLowerCase();
   const site = (name.split("-")[0] || "—").toUpperCase();
-  return { site, role: ROLE_RULES.find(([re]) => re.test(n))?.[1] ?? "other" };
+  return { site, role: ROLE_RULES.find(([re]) => re.test(n))?.[1] ?? "other", matched: false };
 }
 
 
@@ -84,17 +110,22 @@ const net24 = (ip: string) => ip.split(".").slice(0, 3).join(".");
  * Nothing here is a verdict: it is the measurement the suspicion is built from, and the suspicion is
  * never a status.
  */
-/** An hourly count against what each of those hours usually holds, read from a week of the same count. */
-function hourly(day: (number | null)[], week: (number | null)[]) {
+/**
+ * An hourly count against what each of those hours usually holds, read from a week of the same count.
+ * `settle` is how many hours back the reading is taken: the hour still filling is always skipped, and a
+ * session is only recorded when it ends, so the hour that has just closed keeps growing for a while
+ * (fxz0998d: the same hour went from 1479 to 1968 sessions in forty minutes) and read too early it
+ * always looks like a drop. Sessions settle one hour later than requests, which are metrics.
+ */
+function hourly(day: (number | null)[], week: (number | null)[], settle = 1) {
   const end = Date.now();
   const hourOf = (i: number, len: number) => new Date(end - (len - 1 - i) * 3600000).getUTCHours();
   const buckets = new Map<number, number[]>();
   week.forEach((v, i) => { const h = hourOf(i, week.length); buckets.set(h, [...(buckets.get(h) ?? []), v ?? 0]); });
   const median = (xs: number[]) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : 0);
   const typical = day.map((_, i) => median(buckets.get(hourOf(i, day.length)) ?? []));
-  // the last complete hour: the current one is still filling and always looks like a drop
-  const last = day.length - 2;
-  return { series: day, typical, now: last >= 0 ? day[last] ?? null : null, typicalNow: last >= 0 ? typical[last] ?? null : null };
+  const last = day.length - 1 - settle;
+  return { series: day, typical, nowIndex: last, now: last >= 0 ? day[last] ?? null : null, typicalNow: last >= 0 ? typical[last] ?? null : null };
 }
 
 function buildUsers(L: (k: string) => Rec[], devices: Map<string, Device>, siteTags: Map<string, Rec>, unmapped: DeviceProblem[]): Users | undefined {
@@ -109,7 +140,7 @@ function buildUsers(L: (k: string) => Rec[], devices: Map<string, Device>, siteT
     pts.forEach((v, i) => { if (v != null) day[i] = (day[i] ?? 0) + v; });
     byType[type] = (byType[type] ?? 0) + pts.reduce<number>((a, v) => a + (v ?? 0), 0);
   });
-  const sessions = hours ? hourly(day, (L("sessionsTypical")[0]?.sessions ?? []) as (number | null)[]) : null;
+  const sessions = hours ? hourly(day, (L("sessionsTypical")[0]?.sessions ?? []) as (number | null)[], 2) : null;
 
   // requests served, for environments monitored through their services rather than their users
   const reqDay = (L("requests")[0]?.req ?? []) as (number | null)[];
@@ -138,7 +169,7 @@ function buildUsers(L: (k: string) => Rec[], devices: Map<string, Device>, siteT
 
   return {
     scope: mapped > 0 ? "site" : "environment",
-    series: sessions?.series ?? [], typical: sessions?.typical ?? [], now: sessions?.now ?? null, typicalNow: sessions?.typicalNow ?? null,
+    series: sessions?.series ?? [], typical: sessions?.typical ?? [], nowIndex: sessions?.nowIndex ?? -1, now: sessions?.now ?? null, typicalNow: sessions?.typicalNow ?? null,
     byType, nets, mapped, total,
     // Davis is watching the traffic itself when it has raised one of its traffic anomalies here
     anomalyWatched: unmapped.some((a) => /traffic|low load/i.test(a.name)),
@@ -160,10 +191,25 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   }
   const devices = new Map<string, Device>();
   const siteTags = new Map<string, Rec>();
+  // what each site is known by, beyond its code: the city in sysLocation and the UF in the device name
+  const siteHints = new Map<string, { cities: string[]; uf?: string; country?: string }>();
   for (const [name, d] of byName) {
     const derived = deriveTags(name, d.device_type);
-    const site = tag(d, "site") ?? derived.site, role = tag(d, "device_role") ?? derived.role;
-    if (!siteTags.has(site) && tag(d, "site")) siteTags.set(site, d);
+    const loc = parseLocation(d.location, derived.matched ? derived.site : null);
+    const code = derived.matched ? derived.site : loc?.code ?? null;
+    const tagSite = tag(d, "site");
+    // A site tag is the customer's own word and wins; when it names the same place as the code the
+    // device already carries (the tag "currais-de-laranjeiras" on devices whose sysLocation is
+    // "Currais de Laranjeiras - LRJ1 - …"), the short code is kept so the site is not split in two.
+    const site = tagSite && !(code && loc && slug(tagSite) === slug(loc.city)) ? tagSite
+      : code ?? (d.location ? String(d.location).trim() : derived.site);
+    const role = tag(d, "device_role") ?? derived.role;
+    if (!siteTags.has(site) && tagSite) siteTags.set(site, d);
+    const hint = siteHints.get(site) ?? { cities: [] };
+    if (loc) hint.cities.push(loc.city);
+    hint.uf ??= derived.uf ?? tag(d, "federativeunit") ?? tag(d, "state") ?? tag(d, "uf") ?? undefined;
+    hint.country ??= derived.country ?? tag(d, "country") ?? undefined;
+    siteHints.set(site, hint);
     devices.set(name, {
       id: d.id, idClassic: d.id_classic ?? undefined, chassisMac: d.chassis_mac ?? undefined, name, site, role, vendor: d.device_type || "generic",
       ip: (Array.isArray(d.ip) ? d.ip[0] : d.ip) ?? d["snmp.ip"] ?? "", mode: d.monitoring_mode, desc: String(d.description ?? "").slice(0, 160),
@@ -497,24 +543,45 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   for (const d of devList) {
     if (!sites[d.site]) sites[d.site] = { code: d.site, name: d.site };
   }
+  const mostCommon = (xs: string[]) => [...xs].sort((a, b) => xs.filter((x) => x === b).length - xs.filter((x) => x === a).length)[0];
   for (const code of Object.keys(sites)) {
     const t = siteTags.get(code);
+    const hint = siteHints.get(code);
+    const city = hint?.cities.length ? mostCommon(hint.cities) : undefined;
+    const uf = hint?.uf?.toUpperCase();
+    const state = hint?.country && hint.country.toUpperCase() !== "BR" ? undefined : uf ? BR_UF[uf] : undefined;
     if (t) {
       const lat = num(tag(t, "geo_lat")), lon = num(tag(t, "geo_lon"));
       Object.assign(sites[code], {
-        name: tag(t, "site_name") ?? code, city: tag(t, "city") ?? undefined, uf: tag(t, "state") ?? undefined,
-        region: tag(t, "region") ?? undefined, hub: tag(t, "hub") ?? undefined, dc: tag(t, "site_type") === "datacenter",
+        name: tag(t, "site_name") ?? city ?? code, city: tag(t, "city") ?? city, uf: tag(t, "state") ?? uf,
+        region: tag(t, "region") ?? state?.[0], hub: tag(t, "hub") ?? undefined, dc: tag(t, "site_type") === "datacenter" || /^DC/.test(code),
         ...(lat != null && lon != null ? { lat, lon } : {}),
       });
       if (sites[code].hub === code) delete sites[code].hub;
-      continue;
+    } else {
+      // no site tag: the city from sysLocation, else the most common location text
+      const locs = devList.filter((d) => d.site === code && d.location).map((d) => String(d.location));
+      sites[code].name = city ?? mostCommon(locs) ?? code;
+      if (city) sites[code].city = city;
+      if (uf) sites[code].uf = uf;
+      if (state) sites[code].region = state[0];
+      if (/^DC/.test(code)) sites[code].dc = true;
+      const place = placeOf(code, sites[code].name);
+      if (place) Object.assign(sites[code], place);
     }
-    const locs = devList.filter((d) => d.site === code && d.location).map((d) => String(d.location));
-    const top = locs.sort((a, b) => locs.filter((x) => x === b).length - locs.filter((x) => x === a).length)[0];
-    if (top) sites[code].name = top;
-    const place = placeOf(code, sites[code].name);
-    if (place) Object.assign(sites[code], place);
+    // nothing gives coordinates: place the site at the centre of its state and say it is approximate
+    if (sites[code].lat == null && state) Object.assign(sites[code], { lat: state[1], lon: state[2], approx: "state" as const });
   }
+  // sites that share a state centre are spread a little around it, so none hides another
+  const byCentre = new Map<string, Site[]>();
+  Object.values(sites).filter((x) => x.approx === "state").forEach((x) => { const k = `${x.lat},${x.lon}`; byCentre.set(k, [...(byCentre.get(k) ?? []), x]); });
+  byCentre.forEach((group) => {
+    if (group.length < 2) return;
+    group.sort((a, b) => a.code.localeCompare(b.code)).forEach((x, i) => {
+      const a = (2 * Math.PI * i) / group.length;
+      x.lat = (x.lat as number) + 1.8 * Math.sin(a); x.lon = (x.lon as number) + 1.8 * Math.cos(a);
+    });
+  });
   circuits.forEach((c) => { c.siteName = sites[c.site]?.name ?? c.site; });
 
   // primary tags per site: the most common value of each primary_tags.* key among its devices

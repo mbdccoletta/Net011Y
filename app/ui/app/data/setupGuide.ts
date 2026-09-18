@@ -299,6 +299,19 @@ service:
     verify: "Settings shows the sessions received in the last 24 h and whether any client subnet could be matched to a site.",
     docs: [DOCS.rum, DOCS.rumAnomaly],
   },
+  requests: {
+    uses: "Isolating the network in or out when there is no Real User Monitoring: whether the services the sites reach are still being asked for work. Read as a count per hour only.",
+    source: "OneAgent on the services (the built-in metric dt.service.request.count).",
+    prerequisites: ["OneAgent on the hosts that run the services people use at the sites."],
+    steps: [
+      "Nothing to configure beyond OneAgent: the request count is a built-in service metric.",
+      "The app reads it for the whole environment. It is used when user sessions are missing; with both, sessions come first because they are the people themselves.",
+      "For the drop to be Dynatrace's judgement, keep anomaly detection for load on the services, so Davis raises Unexpected low load itself.",
+    ],
+    snippets: [{ title: "Requests per hour, as the app reads them", language: "dql", code: "timeseries req = sum(dt.service.request.count), from:now()-24h, interval:1h" }],
+    verify: "Settings shows how many requests the services served in the last hour.",
+    docs: [],
+  },
   assist: {
     uses: "Explanations, impact and next steps written by Dynatrace Intelligence on every page.",
     source: "Dynatrace Assist, called by the app with only the evidence shown on screen.",
@@ -340,6 +353,6 @@ export const DATA_GROUPS: { title: string; hint: string; keys: NeedKey[] }[] = [
   { title: "Alerts and events", hint: "What Dynatrace is alerting on, and what the devices report themselves", keys: ["alerts", "syslog", "traps"] },
   { title: "Topology and routing", hint: "How devices connect to each other", keys: ["lldp", "routing"] },
   { title: "Traffic and applications", hint: "Where the traffic goes and how applications feel it", keys: ["appFlows", "netflow"] },
-  { title: "User impact", hint: "Whether what the network did reached the people using the applications", keys: ["sessions"] },
+  { title: "User impact", hint: "Whether what the network did reached the people using the applications", keys: ["sessions", "requests"] },
   { title: "Intelligence", hint: "Explanations written by Dynatrace Intelligence", keys: ["assist"] },
 ];

@@ -167,6 +167,30 @@ check("Without user sessions, the traffic reading falls back to service requests
     `${a?.scope ?? "missing"} · ${(a?.entities ?? []).join(",")}`);
 }
 
+// everything alerting outside the network stays on the list of causes, whatever domain it is in
+{
+  const mk = (scope, i) => ({ eventId: `out-${scope}-${i}`, eventKind: "DAVIS_PROBLEM", displayId: `P-OUT${i}`, name: `${scope} trouble`, start: new Date().toISOString(), category: "AVAILABILITY", scope, entities: [`${scope}-x`] });
+  const m2 = { ...model, unmappedAlerts: [...(model.unmappedAlerts ?? []), mk("service", 1), mk("application", 2), mk("host", 3)] };
+  const c2 = buildCauses(m2, allSites(m2));
+  const out = c2.find((c) => c.id === "alerts:other");
+  check("Alerts on applications, services and hosts stay on the list of causes", !!out && /^\d+ alerts outside the network domain$/.test(out.title),
+    out ? `${out.title}` : "no outside entry");
+}
+// events that never became a problem are grouped by what they are and where, not listed one by one
+{
+  const dev = model.devices.find((d) => d.mode === "Extension") ?? model.devices[0];
+  const flood = Array.from({ length: 200 }, (_, k) => ({ eventId: `flap-${k}`, eventKind: "DAVIS_EVENT", displayId: "", name: "Interface operationally going down", start: new Date(Date.now() - k * 60e3).toISOString(), category: "AVAILABILITY" }));
+  const m3 = { ...model, devices: model.devices.map((d) => (d === dev ? { ...d, problems: [...(d.problems ?? []), ...flood] } : d)) };
+  const c3 = buildCauses(m3, allSites(m3));
+  const flap = c3.filter((c) => /Interface operationally going down/.test(c.title));
+  check("Two hundred events of one kind on one device are one cause", flap.length === 1 && /· 200 alerts$/.test(flap[0].title) && flap[0].title.includes(" · "),
+    `${flap.length} cause(s) · ${flap[0]?.title ?? "-"}`);
+}
+// sessions are read from a settled hour (the one just closed is still filling), requests from the last one
+check("Sessions are read from the settled hour, requests from the last complete one",
+  model.users && model.users.nowIndex === model.users.series.length - 3 && model.users.requests?.nowIndex === model.users.requests.series.length - 2,
+  `sessions index ${model.users?.nowIndex} of ${model.users?.series.length} · requests index ${model.users?.requests?.nowIndex} of ${model.users?.requests?.series.length}`);
+
 // nothing else invents a status
 const noAlert = model.devices.filter((d) => d.mode === "Extension" && !openOf(d).length);
 check("Devices without an alert stay healthy, whatever their counters say",

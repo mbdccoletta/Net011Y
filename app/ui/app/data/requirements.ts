@@ -5,7 +5,7 @@ import { QUERIES } from "./queries";
 
 export type NeedKey =
   | "devices" | "interfaces" | "traffic" | "cpu" | "availability" | "icmp" | "syslog" | "traps"
-  | "lldp" | "routing" | "netflow" | "appFlows" | "wan" | "sites" | "alerts" | "assist" | "sessions";
+  | "lldp" | "routing" | "netflow" | "appFlows" | "wan" | "sites" | "alerts" | "assist" | "sessions" | "requests";
 
 export type NeedStatus = "ok" | "partial" | "missing" | "loading" | "simulated" | "manual";
 
@@ -34,17 +34,18 @@ const CATALOG: Record<NeedKey, { label: string; how: string; queries?: string[] 
   sites: { label: "Sites, regions and locations", how: "Primary tags on each SNMP monitoring configuration: site, site_name, site_type, region, geo_lat, geo_lon and hub", queries: [] },
   alerts: { label: "Alerts and problems", how: "Alert templates for network devices in Infrastructure & Operations, plus any custom alert on the extension metrics. Every status in this app comes from the problems they raise", queries: [] },
   sessions: { label: "User sessions", how: "Real User Monitoring on the applications people use at the sites. The app reads only how many sessions there are per hour, to tell whether a network fault reached the users", queries: ["sessions", "sessionsTypical"] },
+  requests: { label: "Service requests", how: "OneAgent on the services the sites use. Read as a count per hour only, and used in place of user sessions when an environment has no Real User Monitoring", queries: ["requests", "requestsTypical"] },
   assist: { label: "Dynatrace Intelligence", how: "Dynatrace Assist enabled and the app permission davis-copilot:conversations:execute", queries: [] },
 };
 
 export const VIEW_NEEDS: Record<string, NeedKey[]> = {
-  map: ["alerts", "devices", "sites", "wan", "icmp", "sessions", "syslog", "traps", "lldp", "appFlows", "assist"],
-  sites: ["alerts", "devices", "sites", "wan", "icmp", "sessions", "appFlows", "assist"],
+  map: ["alerts", "devices", "sites", "wan", "icmp", "sessions", "requests", "syslog", "traps", "lldp", "appFlows", "assist"],
+  sites: ["alerts", "devices", "sites", "wan", "icmp", "sessions", "requests", "appFlows", "assist"],
   devices: ["alerts", "devices", "interfaces", "traffic", "cpu", "availability", "syslog", "traps", "assist"],
   links: ["alerts", "wan", "icmp", "syslog", "assist"],
-  site: ["alerts", "devices", "availability", "icmp", "wan", "sessions", "appFlows", "syslog", "assist"],
+  site: ["alerts", "devices", "availability", "icmp", "wan", "sessions", "requests", "appFlows", "syslog", "assist"],
   device: ["alerts", "interfaces", "traffic", "cpu", "availability", "syslog", "traps", "lldp", "routing", "assist"],
-  empty: ["devices", "alerts", "interfaces", "traffic", "cpu", "availability", "icmp", "syslog", "traps", "lldp", "routing", "netflow", "appFlows", "wan", "sites", "sessions", "assist"],
+  empty: ["devices", "alerts", "interfaces", "traffic", "cpu", "availability", "icmp", "syslog", "traps", "lldp", "routing", "netflow", "appFlows", "wan", "sites", "sessions", "requests", "assist"],
 };
 
 export function evaluateNeeds(counts: Record<string, number | null>, model: NetworkModel | null, source: "live" | "example"): Record<NeedKey, Need> {
@@ -92,9 +93,10 @@ export function evaluateNeeds(counts: Record<string, number | null>, model: Netw
         detail = rows === 0 ? "nothing received"
           : key === "devices" ? (shown === rows ? `${shown} devices` : `${shown} devices · ${rows} nodes discovered, ${rows - shown} merged into the device they belong to`)
           // sessions are read for one purpose, so the status says whether they can answer it
+          : key === "requests" && u?.requests ? `${(u.requests.now ?? 0).toLocaleString("en-US")} requests in the last hour${u.series.length ? " · sessions are the source in use" : " · the source in use, since there are no user sessions"}`
           : key === "sessions" && u ? `${u.total.toLocaleString("en-US")} sessions in 24 h · ${
               u.mapped ? `${u.nets.filter((n) => n.site).length} client subnet(s) matched to a site` : "no client subnet matches a site, so the reading is environment-wide"
-            }${u.anomalyWatched ? "" : " · no traffic anomaly alert is watching them"}`
+            }${u.anomalyWatched ? " · a traffic anomaly problem is open" : ""}`
           : `${rows.toLocaleString("en-US")} series/records`;
         if (key === "traffic" && status === "partial") status = "ok";
         if (key === "syslog" && status === "partial") status = "ok";

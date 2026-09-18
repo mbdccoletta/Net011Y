@@ -97,7 +97,7 @@ function DeviceStrips({ devices, onDevice }: { devices: Device[]; onDevice: (nam
         return (
           <button key={d.name} type="button" className="vz-strip" onClick={() => onDevice(d.name)} aria-label={`${d.name}, ${d.verdict}`}
             title={`${d.name} · ${d.verdict}${d.reasons[0] ? ` · ${d.reasons[0].text}` : ""}\nCells: SNMP answered each hour — the status mark also counts CPU, interfaces, ICMP and events`}>
-            <span className="vz-strip__name"><StatusShape verdict={d.verdict} />{shortDevice(d.name)}</span>
+            <span className="vz-strip__name" title={d.name}><StatusShape verdict={d.verdict} /><span className="vz-strip__label">{shortDevice(d.name)}</span></span>
             <span className="vz-strip__cells" aria-hidden="true">
               {cells ? cells.map((c, i) => <i key={i} style={{ background: c ? TONE.good : TONE.bad, opacity: c ? 0.5 : 1 }} />) : <em>not polled</em>}
             </span>
@@ -219,10 +219,15 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
   return (
     <div className="lm vz vz-details">
       <Head title={info.site.name} verdict={info.verdict} onClose={onClose}
-        subtitle={[info.code, info.site.region, info.site.dc ? "data center" : info.site.hub ? `via ${model.sites[info.site.hub]?.name ?? info.site.hub}` : null, since ? `since ${hhmm(since)}` : null].filter(Boolean).join(" · ")} />
+        subtitle={[info.code, info.site.region, info.site.dc ? "data center" : info.site.hub ? `via ${model.sites[info.site.hub]?.name ?? info.site.hub}` : null, info.site.approx ? "position approximate: centre of the state" : null, since ? `since ${hhmm(since)}` : null].filter(Boolean).join(" · ")} />
       <div className="vz-k3">
         <Tile tone={bad ? TONE.bad : TONE.good} title="Devices"><div className="vz-big">{bad}<small>/{info.devices.length}</small></div><div className="vz-cap">with issues</div></Tile>
-        <Tile tone={info.circuits.some((c) => c.status === "down") ? TONE.bad : TONE.accent} title="WAN links"><div className="vz-big">{info.circuits.filter((c) => c.status === "up").length}<small>/{info.circuits.length}</small></div><div className="vz-cap">up</div></Tile>
+        {/* a site with no circuit tagged says so, rather than reading "0/0 up" */}
+        <Tile tone={info.circuits.some((c) => c.status === "down") ? TONE.bad : TONE.accent} title="WAN links">
+          {info.circuits.length
+            ? <><div className="vz-big">{info.circuits.filter((c) => c.status === "up").length}<small>/{info.circuits.length}</small></div><div className="vz-cap">up</div></>
+            : <><div className="vz-big">—</div><div className="vz-cap">no circuit tagged here</div></>}
+        </Tile>
         {/* demand, not application detail: how many people and requests are still getting through */}
         <Tile tone={TONE.accent} title="Sessions · requests">
           <div className="vz-big">{demand.sessions}<small> / {demand.requests}</small></div>
@@ -245,7 +250,7 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
       )}
       {/* is what is degraded here explained by the network? A suspicion, and Assist to argue it */}
       {(model.users || (model.unmappedAlerts ?? []).some((a) => a.scope === "application" || a.scope === "service" || a.scope === "host")) && (
-        <Tile title="Network or not" right="isolation">
+        <Tile title="Fault domain" right="network or not">
           <SuspicionStrip s={suspicion} users={model.users}
             assist={<AssistPanel subject={`isolate|${info.code}`} questions={isolationQuestions(info.site.name)} object="impact"
               context={() => isolationContext(model, suspicion, info, dropPct)} />} />

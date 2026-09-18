@@ -264,6 +264,8 @@ export interface Site {
   y?: number;
   lat?: number;
   lon?: number;
+  /** "state" when nothing gave the site's coordinates and it is drawn at the centre of its state */
+  approx?: "state";
   wanVerdict?: Verdict;
   /** Primary Grail tags of the site's devices (primary_tags.<key> → value), most common value per key */
   tags?: Record<string, string>;
@@ -287,7 +289,8 @@ export interface Users {
   series: (number | null)[];
   /** what that hour of the day usually looks like, from the last 7 days (median per hour of day) */
   typical: number[];
-  /** sessions in the last complete hour, and the typical for that same hour */
+  /** the settled hour the reading is taken from (an index into series), and its sessions and typical */
+  nowIndex: number;
   now: number | null;
   typicalNow: number | null;
   /** sessions per application type over 24 h, e.g. { web: 567 } */
@@ -304,7 +307,7 @@ export interface Users {
    * only as a count, like the sessions: whether demand is still getting through, never how the services
    * perform. Environment-wide.
    */
-  requests?: { series: (number | null)[]; typical: number[]; now: number | null; typicalNow: number | null };
+  requests?: { series: (number | null)[]; typical: number[]; nowIndex: number; now: number | null; typicalNow: number | null };
 }
 
 export interface NetworkModel {

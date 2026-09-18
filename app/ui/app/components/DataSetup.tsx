@@ -20,7 +20,7 @@ const STATUS: Record<NeedStatus, { status: "ideal" | "good" | "neutral" | "warni
   manual: { status: "neutral", label: "Checked when used" },
 };
 
-const ORDER: NeedKey[] = ["alerts", "devices", "sites", "interfaces", "traffic", "cpu", "availability", "icmp", "wan", "syslog", "traps", "lldp", "routing", "appFlows", "netflow", "assist"];
+const ORDER: NeedKey[] = ["alerts", "devices", "sites", "interfaces", "traffic", "cpu", "availability", "icmp", "wan", "syslog", "traps", "lldp", "routing", "appFlows", "netflow", "sessions", "requests", "assist"];
 
 function NeedStatusIndicator({ need }: { need: Need }) {
   const s = STATUS[need.status];

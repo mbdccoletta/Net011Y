@@ -32,7 +32,9 @@ const uniqueProblems = (list: DeviceProblem[]) => [...new Map(list.map((p) => [p
 
 export function NativeDrill({ devices, circuits = [], focus, focusCircuit, since, demo, before, after, showNotebook = true }: Props) {
   const ips = devices.map((d) => d.ip).filter(Boolean).slice(0, 40);
-  const problems = demo ? [] : uniqueProblems([...devices.flatMap((d) => d.problems ?? []), ...circuits.flatMap((c) => c.problems ?? [])]);
+  // Davis problems only: an event that never became a problem is not something the Problems app opens,
+  // and counting thousands of them labelled the button "Problems · 170"
+  const problems = demo ? [] : uniqueProblems([...devices.flatMap((d) => d.problems ?? []), ...circuits.flatMap((c) => c.problems ?? [])].filter((p) => !p.muted && p.eventKind === "DAVIS_PROBLEM"));
   const one = problems.length === 1 ? problems[0] : null;
   const device = demo ? null : focus ?? (devices.length === 1 ? devices[0] : null);
   const circuit = demo ? null : focusCircuit ?? (circuits.length === 1 ? circuits[0] : null);
