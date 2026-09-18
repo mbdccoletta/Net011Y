@@ -10,6 +10,7 @@ import type { SiteInfo } from "../model/site";
 import { isBad } from "../model/verdict";
 import { fmtInt } from "../utils/format";
 import { MAP_COLORS } from "./LiveMap";
+import { useElementWidth } from "../hooks/useElementWidth";
 
 const parseTs = (s: string) => Date.parse(s.length === 17 ? s.replace("Z", ":00Z") : s);
 const compact = (n: number) => (Math.abs(n) >= 10000 ? `${(n / 1000).toFixed(0)}k` : fmtInt(n));
@@ -46,24 +47,53 @@ export function CauseChain({ cause }: { cause: Cause }) {
   );
 }
 
-/** Cumulative sites hit over time, with the replay cursor. */
+/**
+ * Cumulative sites hit over time, with the replay cursor. Drawn at the measured width of its box so one
+ * unit is one pixel: the steps stay square and the marks keep their shape on a wide monitor. No area
+ * fill — the steps themselves carry the reading, and a tinted block behind them only made the panel
+ * heavier.
+ */
 export function SpreadChart({ cause, start, end, at }: { cause: Cause; start: number; end: number; at: number }) {
-  const W = 300, H = 64;
+  const [box, W] = useElementWidth<HTMLDivElement>(300);
+  const H = 64, base = H - 6, top = 8;
+  const total = Math.max(1, cause.sites.length);
   const times = cause.sites.map((s) => { const t = cause.affectedAt[s.code] ?? cause.since; return t ? parseTs(t) : start; }).sort((a, b) => a - b);
   const x = (t: number) => ((Math.min(end, Math.max(start, t)) - start) / (end - start)) * W;
-  const y = (n: number) => H - 4 - (n / Math.max(1, cause.sites.length)) * (H - 10);
-  let d = `M0,${y(0)}`, count = 0;
-  times.forEach((t) => { count++; d += ` H${x(t).toFixed(1)} V${y(count).toFixed(1)}`; });
+  const y = (n: number) => base - (n / total) * (base - top);
+  let d = `M0,${y(0)}`;
+  const steps: { x: number; y: number }[] = [];
+  times.forEach((t, i) => {
+    const px = x(t), py = y(i + 1);
+    d += ` H${px.toFixed(1)} V${py.toFixed(1)}`;
+    steps.push({ x: px, y: py });
+  });
   d += ` H${W}`;
   const color = MAP_COLORS[cause.verdict];
+  const head = steps[steps.length - 1];
+  const cursor = x(at);
   return (
-    <svg className="lm-spread" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`${cause.sites.length} sites affected over time`}>
-      <line x1={0} x2={W} y1={H - 4} y2={H - 4} stroke="var(--lm-line)" />
-      {/* Strato area series: flat, translucent fill in the series color */}
-      <path d={`${d} V${H - 4} H0 Z`} style={{ fill: color, fillOpacity: 0.2 }} />
-      <path d={d} fill="none" stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" />
-      <line x1={x(at)} x2={x(at)} y1={0} y2={H} stroke="var(--lm-cyan)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-    </svg>
+    <div className="lm-spreadwrap" ref={box}>
+      <svg className="lm-spread" viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={`${cause.sites.length} sites affected over time`}>
+        {/* the scale: half and full of the sites this cause reaches */}
+        <line x1={0} x2={W} y1={y(total)} y2={y(total)} stroke="var(--lm-line)" strokeDasharray="2 4" />
+        <line x1={0} x2={W} y1={y(total / 2)} y2={y(total / 2)} stroke="var(--lm-line)" strokeDasharray="2 4" opacity={0.7} />
+        <line x1={0} x2={W} y1={base} y2={base} stroke="var(--lm-line)" />
+        {/* one tick per site on the baseline: when they were hit, before they are counted */}
+        {steps.length <= 60 && steps.map((p, i) => (
+          <line key={`t${i}`} x1={p.x} x2={p.x} y1={base} y2={base + 4} stroke={color} opacity={0.55} />
+        ))}
+        <path d={d} fill="none" stroke={color} strokeWidth={1.8} strokeLinejoin="miter" />
+        {steps.length <= 60 && steps.map((p, i) => (
+          <rect key={`s${i}`} x={p.x - 1.5} y={p.y - 1.5} width={3} height={3} fill={color} />
+        ))}
+        {head && <>
+          <circle cx={head.x} cy={head.y} r={7} fill={color} opacity={0.18} />
+          <circle cx={head.x} cy={head.y} r={3.2} fill={color} />
+        </>}
+        <line x1={cursor} x2={cursor} y1={0} y2={base + 4} stroke="var(--lm-cyan)" strokeWidth={1} />
+        <polygon points={`${cursor - 3},0 ${cursor + 3},0 ${cursor},4`} fill="var(--lm-cyan)" />
+      </svg>
+    </div>
   );
 }
 
