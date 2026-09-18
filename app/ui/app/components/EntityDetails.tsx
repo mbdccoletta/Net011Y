@@ -1,15 +1,18 @@
 // Details panel in the Delivery Chain look: a site as its end-to-end trail, its devices as
 // 24-hour strips and its WAN links against their SLA; a device as instruments; a link as
 // its SLA gauge. Explanations come from Dynatrace Assist; drill-downs open the native apps.
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ExternalLinkIcon } from "@dynatrace/strato-icons";
 import type { Circuit, Device, E2EPath, Iface, NetworkModel } from "../model/types";
 import { ownsPath, ROLE_LABEL, type SiteInfo } from "../model/site";
 import { isBad, ORDER, T } from "../model/verdict";
 import { fmtInt, fmtNum, hhmm } from "../utils/format";
-import { deviceContext, siteContext } from "../utils/assist";
-import { deviceQuestions, siteQuestions } from "../utils/prompts";
+import { deviceContext, isolationContext, siteContext } from "../utils/assist";
+import { deviceQuestions, isolationQuestions, siteQuestions } from "../utils/prompts";
 import { NativeDrill } from "./NativeDrill";
+import { SuspicionStrip } from "./Suspicion";
+import { suspicionFor } from "../model/suspicion";
+import { useDropThreshold } from "../hooks/useDropThreshold";
 import { AssistPanel } from "./AssistPanel";
 import { Gauge, LimitLine, StatusShape, Tile, TONE, verdictTone } from "./Visual";
 import { DeviceDetails, HopDetails } from "./Details";
@@ -201,7 +204,17 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
   const [hop, setHop] = useState<number | null>(null);
   useEffect(() => { setHop(null); }, [info.code]);
   const bad = info.devices.filter((d) => isBad(d.verdict)).length;
-  const app = path?.hops.find((h) => h.kind === "app");
+  const dropPct = useDropThreshold();
+  const suspicion = useMemo(() => suspicionFor(model, { site: info, dropPct }), [model, info, dropPct]);
+  const demand = useMemo(() => {
+    const u = model.users;
+    const siteSessions = (u?.nets ?? []).filter((n) => n.site === info.code).reduce((a, n) => a + n.sessions, 0);
+    const compact = (v: number | null | undefined) => (v == null ? "—" : v >= 1e6 ? `${fmtNum(v / 1e6, 1)}M` : v >= 1e3 ? `${fmtNum(v / 1e3, 1)}k` : fmtInt(v));
+    // a site has its own sessions only when a client subnet maps to it; requests are environment-wide
+    return siteSessions
+      ? { sessions: compact(siteSessions), requests: compact(u?.requests?.now), caption: "sessions 24 h here · requests/h environment" }
+      : { sessions: compact(u?.now), requests: compact(u?.requests?.now), caption: u ? "per hour, whole environment" : "not reported" };
+  }, [model, info]);
   const since = info.devices.map((d) => d.unreachableSince).concat(info.circuits.map((c) => c.since)).filter((t): t is string => !!t).sort()[0];
   return (
     <div className="lm vz vz-details">
@@ -210,9 +223,10 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
       <div className="vz-k3">
         <Tile tone={bad ? TONE.bad : TONE.good} title="Devices"><div className="vz-big">{bad}<small>/{info.devices.length}</small></div><div className="vz-cap">with issues</div></Tile>
         <Tile tone={info.circuits.some((c) => c.status === "down") ? TONE.bad : TONE.accent} title="WAN links"><div className="vz-big">{info.circuits.filter((c) => c.status === "up").length}<small>/{info.circuits.length}</small></div><div className="vz-cap">up</div></Tile>
-        <Tile tone={app && isBad(app.verdict) ? TONE.bad : TONE.accent} title={app?.title ?? "Application"}>
-          <div className="vz-big">{app?.stats.p90Ms != null ? `${fmtNum(app.stats.p90Ms / 1000, 1)}s` : app?.app?.baselineSessions ? `−${fmtInt(app.app.baselineSessions)}` : "—"}</div>
-          <div className="vz-cap">{app?.stats.p90Ms != null ? "p90" : app?.app?.baselineSessions ? "sessions/h" : "no data"}</div>
+        {/* demand, not application detail: how many people and requests are still getting through */}
+        <Tile tone={TONE.accent} title="Sessions · requests">
+          <div className="vz-big">{demand.sessions}<small> / {demand.requests}</small></div>
+          <div className="vz-cap">{demand.caption}</div>
         </Tile>
       </div>
       {path && (
@@ -227,6 +241,14 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
       {info.circuits.length > 0 && (
         <Tile title="WAN links" right="latency vs SLA">
           <SlaBars circuits={info.circuits} onLink={(id) => onSelect(`link:${id}`)} />
+        </Tile>
+      )}
+      {/* is what is degraded here explained by the network? A suspicion, and Assist to argue it */}
+      {(model.users || (model.unmappedAlerts ?? []).some((a) => a.scope === "application" || a.scope === "service" || a.scope === "host")) && (
+        <Tile title="Network or not" right="isolation">
+          <SuspicionStrip s={suspicion} users={model.users}
+            assist={<AssistPanel subject={`isolate|${info.code}`} questions={isolationQuestions(info.site.name)} object="impact"
+              context={() => isolationContext(model, suspicion, info, dropPct)} />} />
         </Tile>
       )}
       <Tile tone={TONE.violet}>

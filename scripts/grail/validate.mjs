@@ -1,6 +1,6 @@
 // Feeds the generated Grail results through the app's own model code and reports what every view gets.
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT } from "./out/app-model.mjs";
 
 const R = JSON.parse(readFileSync("out/results.json", "utf8"));
 const report = { schema: {}, needs: {}, views: {}, checks: [] };
@@ -84,6 +84,88 @@ check("Event already folded into a problem is not counted twice",
 check("Environment-level alert surfaced apart", (model.unmappedAlerts ?? []).some((a) => /Memory Free/i.test(a.name))
   && causes.some((c) => c.id === "alerts:environment"),
   `${(model.unmappedAlerts ?? []).map((a) => `${a.name} [${a.scope ?? "?"}]`).join("; ")} · causes ${causes.filter((c) => c.id.startsWith("alerts:")).map((c) => c.id).join(", ") || "none"}`);
+
+// ---- isolating the network in or out ----
+// the suspicion is a reading, never a status: it must not change a single verdict
+const beforeVerdicts = model.devices.map((d) => d.verdict).join(",");
+const sus = suspicionFor(model, { dropPct: 50 });
+check("A suspicion changes no verdict", model.devices.map((d) => d.verdict).join(",") === beforeVerdicts,
+  `${sus.kind} · ${sus.headline}`);
+check("Traffic collapse during a network outage reads as network implicated",
+  sus.kind === "network-implicated" && sus.network > 0,
+  `${sus.kind} · ${sus.network} network alerts · ${JSON.stringify(sus.outside)} outside · facts: ${sus.facts.join(" | ")}`);
+check("A drop the platform never alerted on is declared as the app's own measurement",
+  sus.fromMeasurement === true && sus.facts.some((f) => /app's own measurement/i.test(f)),
+  `fromMeasurement=${sus.fromMeasurement}`);
+// with the threshold below what the traffic did, there is nothing left to suspect from the traffic side
+const quiet = suspicionFor(model, { dropPct: 1 });
+check("Below the configured threshold the traffic raises no suspicion",
+  quiet.kind !== "network-implicated" || outsideCounts(model).application + outsideCounts(model).service > 0,
+  `${quiet.kind} · sessions ${model.users?.now}/${model.users?.typicalNow}`);
+check("Client subnets that match a site are attributed, the rest are not",
+  (model.users?.mapped ?? 0) > 0 && (model.users?.mapped ?? 0) < (model.users?.total ?? 0),
+  `${model.users?.mapped} of ${model.users?.total} sessions attributed to a site`);
+
+// without Real User Monitoring the same reading comes from the requests the services served
+const noRum = buildRealModel({ ...R, sessions: [], sessionsTypical: [], sessionNets: [] }, "services-only");
+const svc = suspicionFor(noRum, { dropPct: 50 });
+check("Without user sessions, the traffic reading falls back to service requests",
+  !!noRum.users?.requests && svc.facts.some((f) => /Requests served by the services at \d+%/.test(f)),
+  `${svc.kind} · ${svc.facts[0] ?? "no facts"}`);
+
+// alerts outside the network belong to the environment: a site with nothing of its own must not read
+// "not the network" because of a problem somewhere else
+{
+  const quietSite = infos.find((i) => !i.devices.some((d) => (d.problems ?? []).some((p) => !p.muted)) && !i.circuits.some((c) => (c.problems ?? []).some((p) => !p.muted)));
+  const siteSus = quietSite ? suspicionFor({ ...model, users: model.users && { ...model.users, now: model.users.typicalNow } }, { site: quietSite, dropPct: 50 }) : null;
+  check("Outside alerts do not make an unrelated site read as not the network",
+    !!siteSus && siteSus.kind !== "not-network",
+    `${quietSite?.code} · ${siteSus?.kind}`);
+}
+
+// Assist refuses an instruction over 2500 characters (HTTP 400): every question must fit, with room
+{
+  const qs = [...Prompts.networkQuestions(), ...Prompts.causeQuestions("A fairly long cause title · 14 sites"), ...Prompts.sitesQuestions(),
+    ...Prompts.siteQuestions("A long site name · Store 12", true), ...Prompts.deviceQuestions("BR-XX-LONG1-SWA-001", false), ...Prompts.deviceQuestions("BR-XX-LONG1-SWA-001", true),
+    ...Prompts.isolationQuestions("A long site name · Store 12"), ...Prompts.carrierQuestions("Carrier with a long name"), ...Prompts.carrierQuestions(null)];
+  const sizes = qs.map((q) => ({ l: q.label, n: `${INSTRUCTION} ${q.instruction ?? ""}`.length }));
+  const worst = sizes.reduce((a, b) => (b.n > a.n ? b : a));
+  check("Every Assist instruction fits the 2500-character limit", sizes.every((x) => x.n <= INSTRUCTION_LIMIT - 100),
+    `${qs.length} questions · largest ${worst.l} ${worst.n} chars`);
+}
+
+// a busy environment always has network alerts and other alerts open at once: without a time link it is
+// coincidence, not a cause (fxz0998d: 1879 interfaces down and unrelated database outages hours apart)
+{
+  const shift = (list) => (list ?? []).map((p) => ({ ...p, start: new Date(Date.parse(p.start) - 6 * 3600e3).toISOString() }));
+  const old = { ...model, devices: model.devices.map((d) => ({ ...d, problems: shift(d.problems) })), circuits: (model.circuits ?? []).map((c) => ({ ...c, problems: shift(c.problems) })) };
+  const r = suspicionFor(old, { dropPct: 50 });
+  check("Network alerts that opened hours before the impact are not read as its cause",
+    r.kind !== "network-implicated" && r.facts.some((f) => /did not start within/.test(f)), `${r.kind} · ${r.facts.find((f) => /did not start/.test(f)) ?? "no time fact"}`);
+}
+// ports that flap all day raise network alerts at a steady pace: that background, however close in time,
+// is not a burst and must not be read as the cause of what is degraded
+{
+  const now = Date.now();
+  const noise = Array.from({ length: 48 }, (_, k) => ({ eventId: `noise-${k}`, eventKind: "DAVIS_EVENT", displayId: "", name: "Interface operationally going down", start: new Date(now - k * 10 * 60e3).toISOString(), category: "AVAILABILITY" }));
+  const quiet = (list) => (list ?? []).map((p) => ({ ...p, start: new Date(Date.parse(p.start) - 30 * 3600e3).toISOString() }));
+  const base = { ...model, devices: model.devices.map((d, i) => ({ ...d, problems: i === 0 ? [...quiet(d.problems), ...noise] : quiet(d.problems) })), circuits: (model.circuits ?? []).map((c) => ({ ...c, problems: quiet(c.problems) })) };
+  const r = suspicionFor(base, { dropPct: 50 });
+  check("A steady stream of network alerts is background, not the cause", r.kind !== "network-implicated" && r.facts.some((f) => /background, not a burst/.test(f)),
+    `${r.kind} · ${r.facts.find((f) => /background/.test(f)) ?? "no background fact"}`);
+}
+// newer environments name entities only as Smartscape objects; those problems must still be classified
+{
+  const R2 = { ...R, problems: [...(R.problems ?? []), {
+    "event.id": "fxz-1", "event.kind": "DAVIS_PROBLEM", display_id: "P-FXZ1", "event.name": "Postgres availability",
+    "event.start": new Date().toISOString(), "event.category": "AVAILABILITY", "dt.davis.mute.status": "NOT_MUTED",
+    "smartscape.affected_entities": [{ id: "DB_INSTANCE_POSTGRES-9301E4FF70EB4B27", type: "DB_INSTANCE_POSTGRES", name: "pg-15" }],
+  }] };
+  const m2 = buildRealModel(R2, "smartscape-format");
+  const a = (m2.unmappedAlerts ?? []).find((x) => x.displayId === "P-FXZ1");
+  check("A problem that names its entity only as a Smartscape object is classified", a?.scope === "service" && (a.entities ?? []).includes("pg-15"),
+    `${a?.scope ?? "missing"} · ${(a?.entities ?? []).join(",")}`);
+}
 
 // nothing else invents a status
 const noAlert = model.devices.filter((d) => d.mode === "Extension" && !openOf(d).length);

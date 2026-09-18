@@ -85,13 +85,17 @@ function wanCell(i: SiteInfo) {
   return <Status verdict={p.verdict} label={p.latencyMs != null ? `${fmtNum(p.latencyMs)} ms` : "Not measured"} />;
 }
 
-export function SitesPage({ infos, filters, onFilters, selected, onSelect }: PageProps) {
+export function SitesPage({ model, infos, filters, onFilters, selected, onSelect }: PageProps) {
   const regions = useMemo(() => uniq(infos.map((i) => i.site.region)), [infos]);
   const data = useMemo(() => infos.filter((i) =>
     matchStatus(i.verdict, filters.status) && (!filters.region || i.site.region === filters.region)
     && contains(`${i.site.name} ${i.code} ${i.cause ?? ""} ${i.incident ?? ""}`, filters.q)) as SiteRow[], [infos, filters]);
   const hasWan = infos.some((i) => i.circuits.length);
-  const hasApp = infos.some((i) => i.path?.hops.some((h) => h.kind === "app"));
+  const siteSessions = useMemo(() => {
+    const m = new Map<string, number>();
+    (model.users?.nets ?? []).forEach((n) => { if (n.site) m.set(n.site, (m.get(n.site) ?? 0) + n.sessions); });
+    return m;
+  }, [model]);
 
   const columns = useMemo<DataTableColumnDef<SiteRow>[]>(() => [
     { id: "status", header: "Status", accessor: (i) => i.verdict, width: 120, cell: ({ rowData }) => <Status verdict={rowData.verdict} /> },
@@ -100,13 +104,14 @@ export function SitesPage({ infos, filters, onFilters, selected, onSelect }: Pag
     { id: "cause", header: "Probable cause", accessor: (i) => i.cause ?? "", width: "2.2fr",
       cell: ({ rowData }) => rowData.cause ? <Two top={rowData.cause} bottom={<>{rowData.causeLayer}{rowData.incident ? <> · <Incident id={rowData.incident} /></> : null}</>} /> : <span className="np-muted">—</span> },
     ...(hasWan ? [{ id: "wan", header: "Primary WAN link", accessor: (i: SiteRow) => i.circuits.find((c) => c.kind === "primary")?.latencyMs ?? -1, width: 150, cell: ({ rowData }: { rowData: SiteRow }) => wanCell(rowData) } as DataTableColumnDef<SiteRow>] : []),
-    ...(hasApp ? [{
-      id: "app", header: "App response p90", accessor: (i: SiteRow) => i.path?.hops.find((h) => h.kind === "app")?.stats.p90Ms ?? -1, width: 150, alignment: "right",
-      cell: ({ rowData }: { rowData: SiteRow }) => { const v = rowData.path?.hops.find((h) => h.kind === "app")?.stats.p90Ms; return <span className="np-mono">{v != null ? `${fmtNum(v / 1000, 1)} s` : "—"}</span>; },
+    // demand from each site, when its client subnets are known — a count, not how the applications perform
+    ...(siteSessions.size ? [{
+      id: "sessions", header: "Sessions, 24 h", accessor: (i: SiteRow) => siteSessions.get(i.code) ?? -1, width: 130, alignment: "right",
+      cell: ({ rowData }: { rowData: SiteRow }) => <span className="np-mono">{siteSessions.has(rowData.code) ? fmtNum(siteSessions.get(rowData.code)!) : "—"}</span>,
     } as DataTableColumnDef<SiteRow>] : []),
     { id: "devices", header: "Devices with issues", accessor: (i) => i.devices.filter((d) => isBad(d.verdict)).length, width: 140, alignment: "right",
       cell: ({ rowData }) => <span className="np-mono">{rowData.devices.filter((d) => isBad(d.verdict)).length} / {rowData.devices.length}</span> },
-  ], [regions.length, hasWan, hasApp]);
+  ], [regions.length, hasWan, siteSessions]);
 
   const active = selected?.startsWith("site:") ? data.findIndex((i) => i.code === selected.slice(5)) : -1;
   return (

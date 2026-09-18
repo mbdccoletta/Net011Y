@@ -10,9 +10,9 @@ app/.dt-app/
 # Generated fixtures and, above all, records sampled from a real tenant
 scripts/grail/out/
 
-# Local data and backups of earlier prototypes
-data/
-backups/
+# Local data and backups of earlier prototypes (the root folder only: app/ui/app/data holds source code)
+/data/
+/backups/
 
 .DS_Store
 

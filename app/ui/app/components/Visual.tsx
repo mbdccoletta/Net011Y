@@ -107,13 +107,15 @@ export function Gauge({ value, label, warn, crit, size = 110, verdict }: { value
  * a grid line at the half, the band under the curve, the run of the series and a lit head on the last
  * reading with the value beside it. The tone comes from that last reading, never from a verdict.
  */
-export function Spark({ values, max = 100, unit = "%", w = 108, h = 30 }: { values: number[]; max?: number; unit?: string; w?: number; h?: number }) {
+export function Spark({ values, max = 100, unit = "%", w = 84, h = 26 }: { values: number[]; max?: number; unit?: string; w?: number; h?: number }) {
   if (values.length < 2) return <span className="np-muted">—</span>;
   const last = values[values.length - 1];
   const tone = last >= 90 ? TONE.bad : last >= 70 ? TONE.warn : TONE.cyan;
   const top = Math.max(max, ...values);
-  const x = (i: number) => (i / (values.length - 1)) * (w - 30);
-  const y = (v: number) => h - 4 - (v / top) * (h - 9);
+  // the curve keeps a margin for its end dot; the value sits in its own box beside it, so it can never
+  // run into the next column the way a label drawn at the edge of the SVG did
+  const x = (i: number) => 2 + (i / (values.length - 1)) * (w - 6);
+  const y = (v: number) => h - 3 - (v / top) * (h - 7);
   const line = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const id = `sp${Math.round(top)}-${values.length}`;
   return (
@@ -125,12 +127,12 @@ export function Spark({ values, max = 100, unit = "%", w = 108, h = 30 }: { valu
             <stop offset="100%" stopColor={tone} stopOpacity="0" />
           </linearGradient>
         </defs>
-        <line x1={0} x2={w - 30} y1={y(top / 2)} y2={y(top / 2)} stroke="var(--lm-line)" strokeDasharray="2 3" />
-        <path d={`${line} L${x(values.length - 1).toFixed(1)},${h - 4} L0,${h - 4} Z`} fill={`url(#${id})`} />
+        <line x1={2} x2={w - 4} y1={y(top / 2)} y2={y(top / 2)} stroke="var(--lm-line)" strokeDasharray="2 3" />
+        <path d={`${line} L${x(values.length - 1).toFixed(1)},${h - 3} L2,${h - 3} Z`} fill={`url(#${id})`} />
         <path d={line} fill="none" stroke={tone} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
-        <circle cx={x(values.length - 1)} cy={y(last)} r={2.6} fill={tone} />
-        <text x={w} y={h / 2 + 4} textAnchor="end" className="vz-spark__v" fill={tone}>{Math.round(last)}</text>
+        <circle cx={x(values.length - 1)} cy={y(last)} r={2.4} fill={tone} />
       </svg>
+      <b className="vz-spark__v" style={{ color: tone }}>{Math.round(last)}</b>
     </span>
   );
 }

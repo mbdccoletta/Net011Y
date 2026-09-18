@@ -73,7 +73,8 @@ const NO_CIRCUIT = { "primary_tags.circuit_id": null, "primary_tags.circuit_role
 // ---------------- scenarios ----------------
 // 1) Carrier B outage for 6 South sites since 47 min ago: edge routers stop answering SNMP and ICMP.
 const outage = sites.filter((s) => !s.dc && carrierOf(s) === "Carrier B" && s.region === "South").slice(0, 6).map((s) => s.code);
-const OUTAGE_SINCE = NOW - 47 * 60e3;
+// the outage opens 20 minutes into the previous hour, so the last complete hour is the first low one
+const OUTAGE_SINCE = Math.floor(NOW / 3600e3) * 3600e3 - 40 * 60e3;
 // 2) Firewall CPU saturation in CPS1. 3) Uplink saturation in one large store. 4) CRC errors on a store switch.
 const SAT_SITE = sites.find((s) => s.size === "L" && !outage.includes(s.code)).code;
 const CRC_SITE = sites.find((s) => s.size === "M" && s.region === "Southeast").code;
@@ -373,6 +374,30 @@ const monitors = [
 ];
 writeFileSync(`${OUT}config/snmp-monitoring-configurations.json`, JSON.stringify(snmpConfigs, null, 1));
 writeFileSync(`${OUT}config/network-availability-monitors.json`, JSON.stringify(monitors, null, 1));
+// ---------------- real user sessions ----------------
+// The outage takes sites off the air, so the last hours hold a fraction of the usual traffic. No traffic
+// anomaly problem is generated on purpose: this is the case where the app reports a suspicion of its own.
+const DAY = [22, 14, 9, 7, 8, 14, 34, 62, 88, 104, 112, 118, 121, 116, 110, 108, 104, 96, 84, 70, 58, 46, 36, 28];
+const hourNow = new Date(NOW).getUTCHours();
+const typicalHour = (i, len) => DAY[(((hourNow - (len - 1 - i)) % 24) + 24) % 24] * 9;
+// demand falls from the hour the outage opened in (index 22, the last complete hour), never before it
+const sessions24 = Array.from({ length: 24 }, (_, i) => Math.round(typicalHour(i, 24) * (i >= 22 ? 0.15 : uni(0.9, 1.1))));
+const week = Array.from({ length: 168 }, (_, i) => Math.round(typicalHour(i, 168) * uni(0.92, 1.08)));
+results.sessions = [{ "dt.rum.application.type": "web", interval: "3600000000000", sessions: sessions24, timeframe: { start: iso(NOW - 24 * B1H), end: iso(NOW) } }];
+results.sessionsTypical = [{ interval: "3600000000000", sessions: week, timeframe: { start: iso(NOW - 168 * B1H), end: iso(NOW) } }];
+// requests served by the services: they fall with the outage too, less than the sessions
+results.requests = [{ interval: "3600000000000", req: sessions24.map((v, i) => Math.round(v * 400 * (i >= 22 ? 2.6 : 1))), timeframe: { start: iso(NOW - 24 * B1H), end: iso(NOW) } }];
+results.requestsTypical = [{ interval: "3600000000000", req: week.map((v) => v * 400), timeframe: { start: iso(NOW - 168 * B1H), end: iso(NOW) } }];
+// client subnets: the ones that match a device /24 are the sites, the rest stay unattributed
+results.sessionNets = [
+  ...sites.filter((x) => !x.dc).slice(0, 8).map((s, i) => {
+    const d = devices.find((x) => x.site === s && x.role === "RTR");
+    return { ip: `${d.ip.split(".").slice(0, 3).join(".")}.0`, sessions: S(140 - i * 11) };
+  }),
+  { ip: "172.30.4.0", sessions: S(96) },
+  { ip: "172.30.9.0", sessions: S(61) },
+];
+
 writeFileSync(`${OUT}results.json`, JSON.stringify(results));
 writeFileSync(`${OUT}scenario.json`, JSON.stringify({ generatedFor: iso(NOW), outage: { carrier: "Carrier B", sites: outage, since: iso(OUTAGE_SINCE) },
  firewallCpu: fwName, uplinkSaturation: SAT_SITE, crcErrors: CRC_SITE, slowCircuit: SLOW_SITE, silentCircuit: SILENT_SITE,

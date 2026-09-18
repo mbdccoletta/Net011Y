@@ -7,7 +7,7 @@ import { Tab, Tabs } from "@dynatrace/strato-components/navigation";
 import { XmarkIcon } from "@dynatrace/strato-icons";
 import type { NeedKey, Need } from "../data/requirements";
 import type { NetworkModel } from "../model/types";
-import { AppConfigSection, DataSourceSection, PagesSection, SendDataSection } from "./DataSetup";
+import { AppConfigSection, DataSourceSection, PagesSection, SendDataSection, SuspicionSection } from "./DataSetup";
 import { SiteHierarchySettings } from "./SiteHierarchySettings";
 
 interface Props {
@@ -39,6 +39,7 @@ export function SettingsSheet({ show, onDismiss, model, needs, source, onSource,
           <div className="ds">
             <DataSourceSection source={source} onSource={onSource} />
             <SiteHierarchySettings model={model} />
+            <SuspicionSection />
           </div>
         </Tab>
         <Tab title="Data">

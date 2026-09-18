@@ -198,11 +198,21 @@
 .lm-chain__link { height: 2px; align-self: start; margin-top: 21px; background: repeating-linear-gradient(90deg, var(--lm-accent) 0 4px, transparent 4px 7px); background-size: 7px 2px; animation: lm-flow 0.7s linear infinite; opacity: .8; }
 @keyframes lm-flow { to { background-position: 7px 0; } }
 
-.lm-spreadbox { position: relative; border: 1px solid var(--lm-line); border-radius: 10px; padding: 8px 10px 6px; }
-.lm-spreadwrap { display: block; width: 100%; min-width: 0; }
-.lm-spread { display: block; width: 100%; height: 64px; overflow: visible; }
-.lm-spreadbox__label { position: absolute; top: 6px; left: 10px; display: inline-flex; align-items: baseline; gap: 3px; font-family: var(--np-mono); font-size: 12px; color: var(--lm-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.lm-spreadbox__label b { color: var(--lm-ink); font-size: 16px; line-height: 1; }
+/* The isolation strip. Its colour is deliberately not the status palette: a suspicion is not a verdict,
+   so it never borrows the red and amber that only open alerts are allowed to use. */
+.sus { display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--lm-line-2); border-left: 3px solid var(--lm-neutral); background: color-mix(in srgb, var(--lm-ink-hi) 4%, transparent); }
+.sus.is-net { border-left-color: var(--lm-violet); }
+.sus.is-out { border-left-color: var(--lm-cyan); }
+.sus.is-calm, .sus.is-blind { border-left-color: var(--lm-neutral); }
+.sus__head { display: flex; align-items: center; gap: 8px; }
+.sus__mark { font: 600 12px var(--lm-sans); letter-spacing: .04em; text-transform: uppercase; color: var(--lm-ink-2); }
+.sus__hint { font-style: normal; font-size: 12px; color: var(--lm-ink-3); }
+.sus__line { margin: 0; font-size: 14px; line-height: 1.4; color: var(--lm-ink); }
+.sus__facts { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--lm-ink-3); }
+.sus__facts span { display: inline-flex; align-items: baseline; gap: 4px; }
+.sus__facts b { font-size: 14px; color: var(--lm-ink); font-variant-numeric: tabular-nums; }
+.sus__acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.sus__acts .lm-btn { display: inline-flex; align-items: center; gap: 6px; }
 
 .lm-badges { display: flex; flex-wrap: wrap; gap: 6px; }
 .lm-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--lm-tone) 45%, transparent); background: color-mix(in srgb, var(--lm-tone) 10%, transparent); color: var(--lm-ink); font-size: 12px; cursor: pointer; }
@@ -366,9 +376,9 @@
 .vz-bubbles { display: block; width: 100%; height: auto; }
 .vz-gauge { margin: 0; display: grid; justify-items: center; gap: 4px; }
 .vz-gauge figcaption { font-size: 12px; color: var(--lm-ink-3); text-align: center; }
-.vz-spark { display: inline-flex; align-items: center; }
-.vz-spark svg { display: block; overflow: visible; }
-.vz-spark__v { font: 500 12px var(--np-mono); font-variant-numeric: tabular-nums; }
+.vz-spark { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; margin-right: 12px; }
+.vz-spark svg { display: block; flex: none; }
+.vz-spark__v { flex: none; min-width: 3ch; text-align: right; font: 500 12px var(--np-mono); font-variant-numeric: tabular-nums; }
 .vz-svg-label { font: 600 12px var(--lm-mono); fill: var(--lm-ink-3); }
 .vz-svg-cap { font: 500 12px var(--lm-mono); fill: var(--lm-ink-3); }
 .vz-dot { cursor: pointer; }

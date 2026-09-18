@@ -8,6 +8,8 @@ import { ExternalLink, Heading, List, Paragraph, Strong, Text } from "@dynatrace
 import type { Need, NeedKey, NeedStatus } from "../data/requirements";
 import { APP_PERMISSIONS, DATA_GROUPS, PAGE_NEEDS, SETUP } from "../data/setupGuide";
 import { openNotebook } from "../utils/drilldown";
+import { useDropThreshold, setDropThreshold } from "../hooks/useDropThreshold";
+import { DEFAULT_DROP_PCT } from "../model/suspicion";
 
 const STATUS: Record<NeedStatus, { status: "ideal" | "good" | "neutral" | "warning" | "critical"; label: string }> = {
   ok: { status: "ideal", label: "Received" },
@@ -50,6 +52,30 @@ export function DataSourceSection({ source, onSource }: Pick<Props, "source" | "
           This environment reads what your Dynatrace environment already stores. The example network is a fictitious retail company with about 400 sites, so you can explore the app before sending data.
         </Text>
       </section>
+  );
+}
+
+/** The one number the isolation reading uses, kept where the customer can see and change it. */
+export function SuspicionSection() {
+  const pct = useDropThreshold();
+  return (
+    <section className="ds-block" aria-labelledby="ds-drop">
+      <Heading level={5} id="ds-drop">Traffic drop worth suspecting</Heading>
+      <Select value={String(pct)} onChange={(v) => setDropThreshold(Number(v ?? DEFAULT_DROP_PCT))}>
+        <Select.Trigger placeholder="Threshold" />
+        <Select.Content>
+          {[30, 40, 50, 60, 70].map((v) => (
+            <Select.Option key={v} value={String(v)} textValue={`${v}% of the usual`}>Below {v}% of the usual</Select.Option>
+          ))}
+        </Select.Content>
+      </Select>
+      <Text textStyle="small">
+        When an hour holds fewer sessions than this share of what that hour usually holds, the app reports a
+        suspicion next to the network alerts — never a status: red and amber keep coming only from the problems
+        Dynatrace has open. With traffic anomaly detection enabled on the applications, the drop is Dynatrace&apos;s
+        judgement and this number only decides when the app brings it up.
+      </Text>
+    </section>
   );
 }
 

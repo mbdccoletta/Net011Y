@@ -179,19 +179,30 @@ export function DevicesVisual(p: VisualProps) {
   const W = Math.max(480, bubbleW);
   const layout = useMemo(() => {
     const circles = groups.map((g) => ({ ...g, r: Math.max(34, Math.min(120, 16 + Math.sqrt(g.devices.length) * 3.3)) }));
+    // A cell is as wide as the bubble or its two lines of text, whichever is wider: "WIRELESS CONTROLLER"
+    // is wider than its bubble, and a cell sized to the bubble alone let it run into its neighbour.
+    const bad = (c: (typeof circles)[number]) => c.devices.filter((d) => isBad(d.verdict)).length;
+    const textW = (c: (typeof circles)[number]) => Math.max(
+      (ROLE_LABEL[c.role] ?? c.role).length * 9.2,
+      `${c.devices.length}${bad(c) ? ` · ${bad(c)} with issues` : ""}`.length * 6.8,
+    );
+    const cellW = (c: (typeof circles)[number]) => Math.max(c.r * 2 + 24, textW(c) + 24, 130);
+    // rows are tracked by their index: grouping them by cy - r, as before, split a row whenever a radius
+    // was fractional, and each piece was centred on its own — on top of the others
+    const rows: { items: (typeof circles[number] & { cx: number; cy: number })[]; used: number }[] = [];
     let x = 0, y = 0, rowH = 0;
-    const placed = circles.map((c) => {
-      const d = Math.max(c.r * 2 + 24, 130);
-      if (x + d > W && x > 0) { x = 0; y += rowH; rowH = 0; }
-      const out = { ...c, cx: x + d / 2, cy: y + c.r + 8 };
-      x += d; rowH = Math.max(rowH, c.r * 2 + 48);
-      return out;
+    let row: (typeof rows)[number] = { items: [], used: 0 };
+    circles.forEach((c) => {
+      const d = cellW(c);
+      if (x + d > W && x > 0) { rows.push(row); row = { items: [], used: 0 }; x = 0; y += rowH; rowH = 0; }
+      row.items.push({ ...c, cx: x + d / 2, cy: y + c.r + 8 });
+      row.used += d;
+      x += d; rowH = Math.max(rowH, c.r * 2 + 60);
     });
-    const rows = new Map<number, typeof placed>();
-    placed.forEach((c) => rows.set(c.cy - c.r, [...(rows.get(c.cy - c.r) ?? []), c]));
-    rows.forEach((row) => { const used = row.reduce((a, c) => a + Math.max(c.r * 2 + 24, 130), 0); const shift = (W - used) / 2; row.forEach((c) => { c.cx += shift; }); });
-    return { placed, h: y + rowH };
-  }, [groups]);
+    if (row.items.length) rows.push(row);
+    rows.forEach((rw) => { const shift = Math.max(0, (W - rw.used) / 2); rw.items.forEach((c) => { c.cx += shift; }); });
+    return { placed: rows.flatMap((rw) => rw.items), h: y + rowH };
+  }, [groups, W]);
 
   const n = (v: Verdict) => count(model.devices, (d) => d.verdict === v);
   const setStatus = (s: string) => onFilters({ status: filters.status === s ? null : s });

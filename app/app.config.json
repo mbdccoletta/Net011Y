@@ -1,8 +1,8 @@
 {
-  "environmentUrl": "https://eob14444.apps.dynatrace.com",
+  "environmentUrl": "https://fxz0998d.dev.apps.dynatracelabs.com",
   "app": {
     "name": "NetO11y",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "Sites, devices and WAN links on one map, with the alerts open on them",
     "icon": "./assets/icon.svg",
     "id": "my.net.o11y",
@@ -22,6 +22,10 @@
       {
         "name": "storage:events:read",
         "comment": "OneAgent network flows (default_network_flows bucket) for the application hop"
+      },
+      {
+        "name": "storage:user.sessions:read",
+        "comment": "Real user session counts per hour and per client subnet, to tell whether a network fault reached the users. No page, action or user detail is read"
       },
       {
         "name": "storage:buckets:read",

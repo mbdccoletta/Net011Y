@@ -3,6 +3,9 @@
 
 export type Verdict = "Critical" | "Warning" | "Healthy" | "Not monitored";
 
+/** What an alert outside the network inventory is about, for isolating the network in or out. */
+export type NonNetworkScope = "application" | "service" | "host" | "other";
+
 export interface Reason {
   level: Verdict;
   text: string;
@@ -65,9 +68,11 @@ export interface DeviceProblem {
    * "network" — it names a network entity (a monitor, a device, an interface) that this environment's
    *   inventory does not contain, so the app can see it but cannot place it;
    * "environment" — it names no entity at all, typically a metric event bound to the environment;
-   * "other" — it belongs to another domain (a host, a service, an application).
+   * "application" / "service" / "host" / "other" — it belongs to another domain. The app shows no detail
+   *   of these: it counts them, so it can say whether something outside the network is alerting too, and
+   *   links out to the native app for the detail.
    */
-  scope?: "network" | "environment" | "other";
+  scope?: "network" | "environment" | NonNetworkScope;
   /** what the alert says it affects, so the app can name it even when it cannot place it */
   entities?: string[];
 }
@@ -271,7 +276,40 @@ export interface FlowExporter {
   protocols: { proto: string; gb: number; flows: number }[];
 }
 
+/**
+ * Real user sessions, kept deliberately thin: the app does not report on applications, it only needs to
+ * know whether people were still using them while the network misbehaved.
+ */
+export interface Users {
+  /** "site" when at least one client subnet maps to a site exactly, "environment" otherwise */
+  scope: "site" | "environment";
+  /** sessions per hour over the last 24 h, oldest first; null where the hour has no data yet */
+  series: (number | null)[];
+  /** what that hour of the day usually looks like, from the last 7 days (median per hour of day) */
+  typical: number[];
+  /** sessions in the last complete hour, and the typical for that same hour */
+  now: number | null;
+  typicalNow: number | null;
+  /** sessions per application type over 24 h, e.g. { web: 567 } */
+  byType: Record<string, number>;
+  /** client subnets, with the site each one was matched to when the match is exact */
+  nets: { net: string; sessions: number; site?: string; series?: (number | null)[] }[];
+  /** how much of the traffic could be attributed to a site at all */
+  mapped: number;
+  total: number;
+  /** true when Dynatrace has traffic anomaly detection raising problems on these applications */
+  anomalyWatched: boolean;
+  /**
+   * Requests served by the services, per hour, for environments where the services are monitored. Read
+   * only as a count, like the sessions: whether demand is still getting through, never how the services
+   * perform. Environment-wide.
+   */
+  requests?: { series: (number | null)[]; typical: number[]; now: number | null; typicalNow: number | null };
+}
+
 export interface NetworkModel {
+  /** Real user sessions, for isolating whether a network fault reached the people using the apps */
+  users?: Users;
   /** Alerts Dynatrace raised that name no network entity (for example a metric event bound to the environment) */
   unmappedAlerts?: DeviceProblem[];
   demo?: boolean;

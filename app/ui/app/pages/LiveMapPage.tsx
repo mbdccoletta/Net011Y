@@ -12,13 +12,16 @@ import { logsQuery, openLogs } from "../utils/drilldown";
 import { NativeDrill } from "../components/NativeDrill";
 import { SiteTree } from "../components/SiteTree";
 import { useSiteHierarchy } from "../hooks/useSiteHierarchy";
-import { causeContext, networkContext } from "../utils/assist";
-import { causeQuestions, networkQuestions } from "../utils/prompts";
+import { causeContext, isolationContext, networkContext } from "../utils/assist";
+import { causeQuestions, isolationQuestions, networkQuestions } from "../utils/prompts";
 import { AssistPanel } from "../components/AssistPanel";
 import { DataNeeds } from "../components/DataNeeds";
 import { PageEmpty } from "../components/PageEmpty";
+import { SuspicionStrip } from "../components/Suspicion";
+import { suspicionFor } from "../model/suspicion";
+import { useDropThreshold } from "../hooks/useDropThreshold";
 import { VIEW_NEEDS, type Need, type NeedKey } from "../data/requirements";
-import { CauseChain, EvidenceBadges, NetworkStatus, SpreadChart } from "../components/CauseVisuals";
+import { CauseChain, EvidenceBadges, NetworkStatus } from "../components/CauseVisuals";
 import { ExternalLinkIcon, PauseIcon, PlayIcon } from "@dynatrace/strato-icons";
 
 interface Props {
@@ -155,6 +158,8 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
     [wide, replayable],
   );
 
+  const dropPct = useDropThreshold();
+  const suspicion = useMemo(() => suspicionFor(model, { dropPct }), [model, dropPct]);
   const affected = infos.filter((i) => isBad(i.verdict));
   const regions = new Set(infos.map((i) => i.site.region).filter(Boolean)).size;
   const dcs = infos.filter((i) => i.site.dc).length;
@@ -245,10 +250,6 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
             <>
               <h2 className="lm-title"><Marker verdict={cause.verdict} /><span>{cause.title}</span>{cause.since && <em>{clock(parseTs(cause.since))}</em>}</h2>
               <CauseChain cause={cause} />
-              <div className="lm-spreadbox">
-                <SpreadChart cause={cause} start={start} end={end} at={at} />
-                <span className="lm-spreadbox__label"><b>{hitCount ?? cause.sites.length}</b>/{cause.sites.length}</span>
-              </div>
               <EvidenceBadges cause={cause} onLogs={() => openLogs(logsQuery(ips, cause.since))} />
             </>
           ) : (
@@ -256,6 +257,13 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
               <h2 className="lm-title"><span>Whole network</span></h2>
               <NetworkStatus infos={infos} onRegion={(region) => onSites({ status: "issues", region, q: "" })} />
             </>
+          )}
+          {/* is what is degraded explained by the network? A suspicion for the whole environment, with the
+              analysis handed to Assist. Only shown when there is something to compare it against. */}
+          {suspicion.kind !== "blind" && suspicion.kind !== "watching" && (
+            <SuspicionStrip s={suspicion} users={model.users}
+              assist={<AssistPanel subject={`isolate|network`} questions={isolationQuestions("this network")} object="impact"
+                context={() => isolationContext(model, suspicion, undefined, dropPct)} />} />
           )}
           <NativeDrill devices={scopeDevices} since={cause?.since} demo={model.demo}
             // a carrier cause spans many routers and links: no single device to open; a device or data center cause has one
