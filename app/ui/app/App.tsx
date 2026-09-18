@@ -1,4 +1,4 @@
-// NetworkPlane — network health per site, device and WAN link, with the probable cause.
+// NetO11y — network health per site, device and WAN link, with the probable cause.
 //
 // Structured like Infrastructure & Operations: AppHeader navigation per entity type, a
 // FilterBar and DataTable per page, and the selected entity in PageLayout.Details.
@@ -18,12 +18,12 @@ import { EntityDetails } from "./components/EntityDetails";
 import type { Filters } from "./pages/EntityPages";
 import { DevicesVisual, LinksVisual, SitesVisual } from "./pages/VisualPages";
 import { LiveMapPage } from "./pages/LiveMapPage";
-import { evaluateNeeds, VIEW_NEEDS } from "./data/requirements";
+import { evaluateNeeds, VIEW_NEEDS, type NeedKey } from "./data/requirements";
 import { DataNeeds } from "./components/DataNeeds";
 import { SettingsSheet } from "./components/SettingsSheet";
 import { SettingIcon } from "@dynatrace/strato-icons";
 
-const APP_NAME = "NetworkPlane";
+const APP_NAME = "NetO11y";
 const LABEL: Record<Page, string> = { causes: "Live map", sites: "Sites", devices: "Devices", links: "WAN links" };
 const NO_FILTERS: Filters = { status: null, region: null, role: null, carrier: null, q: "" };
 const DOCS = {
@@ -54,6 +54,9 @@ export function App() {
   const net = useNetwork(url.source);
   const model = net.model;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // a page can ask Settings to open on the data type it is missing, instead of repeating the steps itself
+  const [settingsFocus, setSettingsFocus] = useState<NeedKey | null>(null);
+  const openSettings = (focus: NeedKey | null = null) => { setSettingsFocus(focus); setSettingsOpen(true); };
 
   const infos = useMemo(() => (model ? allSites(model) : []), [model]);
   const needs = useMemo(() => evaluateNeeds(net.counts, model, url.source), [JSON.stringify(net.counts), model, url.source]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -91,7 +94,7 @@ export function App() {
             {net.loading ? `Loading ${net.done} of ${net.total}` : `Updated ${model?.meta.generatedAt.slice(11, 16) ?? "—"} UTC`}
           </AppHeader.ActionButton>
         )}
-        <AppHeader.ActionButton onClick={() => setSettingsOpen(true)} aria-label="Settings" prefixIcon={<SettingIcon />} showLabel={false}>Settings</AppHeader.ActionButton>
+        <AppHeader.ActionButton onClick={() => openSettings()} aria-label="Settings" prefixIcon={<SettingIcon />} showLabel={false}>Settings</AppHeader.ActionButton>
       </AppHeader.ActionItems>
       <AppHeader.Menus>
         <HelpMenu entries={{
@@ -109,7 +112,7 @@ export function App() {
   );
 
   const settings = (
-    <SettingsSheet show={settingsOpen} onDismiss={() => setSettingsOpen(false)} model={model} needs={needs} source={url.source}
+    <SettingsSheet show={settingsOpen} onDismiss={() => setSettingsOpen(false)} model={model} needs={needs} source={url.source} focus={settingsFocus}
       onSource={(source) => setUrl({ source, page: "causes", cause: null, sel: null, ...NO_FILTERS })} />
   );
 
@@ -153,7 +156,7 @@ export function App() {
 
         <PageLayout.Content>
           {page === "causes" ? (
-            <LiveMapPage model={model} infos={infos} causeId={url.cause} failed={net.failed} needs={needs} onExample={onExample} onCause={(cause) => setUrl({ cause }, false)}
+            <LiveMapPage model={model} infos={infos} causeId={url.cause} failed={net.failed} needs={needs} onExample={onExample} onSettings={() => openSettings("sites")} onCause={(cause) => setUrl({ cause }, false)}
               onSite={(code) => select(`site:${code}`)} onDevice={(name) => select(`device:${name}`)}
               onSites={(patch) => setUrl({ page: "sites", sel: null, ...NO_FILTERS, ...patch })} />
           ) : page === "devices" ? <DevicesVisual {...visualProps} /> : page === "links" ? <LinksVisual {...visualProps} /> : <SitesVisual {...visualProps} />}

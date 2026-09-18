@@ -1,4 +1,4 @@
-"""The single verdict definition for NetworkPlane.
+"""The single verdict definition for NetworkO11y.
 
 Every build (real GRU data and the simulated example) and therefore every
 screen of the prototype judges health through these functions only.

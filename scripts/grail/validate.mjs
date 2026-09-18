@@ -79,9 +79,11 @@ check("Event already folded into a problem is not counted twice",
   `${dup?.name} ${openOf(dup).map((p) => p.name).join("; ")}`);
 
 // an alert bound to the environment names no device: it must surface instead of being dropped
+// unplaced alerts are grouped by why they could not be placed: environment-bound, on a network element
+// outside this inventory, or outside the network domain
 check("Environment-level alert surfaced apart", (model.unmappedAlerts ?? []).some((a) => /Memory Free/i.test(a.name))
-  && causes.some((c) => c.id === "alerts:unmapped"),
-  `${(model.unmappedAlerts ?? []).map((a) => a.name).join("; ")}`);
+  && causes.some((c) => c.id === "alerts:environment"),
+  `${(model.unmappedAlerts ?? []).map((a) => `${a.name} [${a.scope ?? "?"}]`).join("; ")} · causes ${causes.filter((c) => c.id.startsWith("alerts:")).map((c) => c.id).join(", ") || "none"}`);
 
 // nothing else invents a status
 const noAlert = model.devices.filter((d) => d.mode === "Extension" && !openOf(d).length);

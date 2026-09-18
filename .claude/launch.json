@@ -34,6 +34,17 @@
         "app"
       ],
       "port": 3000
+    },
+    {
+      "name": "networko11y-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "start",
+        "--prefix",
+        "app"
+      ],
+      "port": 3000
     }
   ]
 }

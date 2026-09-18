@@ -4,6 +4,7 @@
 Every verdict is decided here (one place), so every screen of the prototype
 agrees: Critical / Warning / Healthy / Not monitored.
 """
+import os
 import json, re, collections, datetime, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -288,7 +289,7 @@ paths = [
 tag_preview = [{"name": n, "site": d["site"], "role": d["role"], "mode": d["mode"]} for n, d in sorted(devices.items())]
 
 data = {
-    "meta": {"tenant": "guu84124", "generatedAt": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%MZ"),
+    "meta": {"tenant": os.environ.get("DT_CONTEXT", "live"), "generatedAt": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%MZ"),
              "windows": {"metrics": "2h @5m", "availability": "24h @1h", "syslog": "24h", "flows": "1h", "oneagent": "24h"},
              "thresholds": T, "neighborDupes": neighbor_dupes},
     "sites": {k: {"code": k, "name": v} for k, v in SITE_NAMES.items()},

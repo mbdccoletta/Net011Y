@@ -9,6 +9,7 @@ import { isBad, ORDER, T } from "../model/verdict";
 import { fmtInt, fmtNum, stripDevice } from "../utils/format";
 import { NativeDrill } from "../components/NativeDrill";
 import { carrierContext, deviceContext, networkContext } from "../utils/assist";
+import { carrierQuestions, deviceQuestions, sitesQuestions } from "../utils/prompts";
 import { AssistPanel } from "../components/AssistPanel";
 import { DeviceBubbles } from "../components/DeviceBubbles";
 import { Chips, Gauge, KpiTile, LimitLine, PageBar, StatusShape, Tile, TONE, verdictTone, type View } from "../components/Visual";
@@ -112,7 +113,7 @@ export function SitesVisual(p: VisualProps) {
             })}
           </div>
           <Tile tone={TONE.violet} className="vz-assist-row">
-            <AssistPanel subject={`sites|${filters.status}|${filters.carrier}|${kind}`} questions={[{ label: "Summarize sites", prompt: "Summarize the sites" }, { label: "Find hotspots", prompt: "Which region needs attention?" }]} object="sites"
+            <AssistPanel subject={`sites|${filters.status}|${filters.carrier}|${kind}`} questions={sitesQuestions()} object="sites"
               context={() => ({ ...networkContext(model, infos, buildCauses(model, infos)), filter: { status: filters.status, carrier: filters.carrier, type: kind } })} />
           </Tile>
         </div>
@@ -146,8 +147,8 @@ function DeviceInstrument({ model, infos, device, onDetails }: { model: NetworkM
         <span className="vz-stat"><b>{fmtInt(device.traps)}</b>traps</span>
       </div>
       <NativeDrill devices={[device]} focus={device} since={device.unreachableSince} demo={model.demo}
-        before={<button type="button" className="lm-btn" onClick={onDetails}>Details</button>} />
-      <AssistPanel subject={`device|${device.name}`} questions={[{ label: "Explain status", prompt: `Why is ${shortDevice(device.name)} ${device.verdict === "Healthy" ? "healthy" : "unhealthy"}?` }, { label: "Suggest next steps", prompt: "What are the next steps?" }]} object="device"
+        before={<button type="button" className="lm-btn" onClick={onDetails}><b>Details</b><small>in this app</small></button>} />
+      <AssistPanel subject={`device|${device.name}`} questions={deviceQuestions(device.name, device.verdict === "Healthy")} object="device"
         context={() => deviceContext(model, device, behind)} />
     </Tile>
   );
@@ -169,8 +170,11 @@ export function DevicesVisual(p: VisualProps) {
   const worst = useMemo(() => [...model.devices].sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || b.impact - a.impact || sitesBehind(infos, b, model) - sitesBehind(infos, a, model))[0], [model, infos]);
   const device = model.devices.find((d) => d.name === picked) ?? worst;
 
-  // bubble layout: one circle per role, dots on a sunflower spiral, problems drawn last and larger
-  const W = 640;
+  // bubble layout: one circle per role, dots on a sunflower spiral, problems drawn last and larger.
+  // Drawn at the measured width of its tile (1 unit = 1 px), so the labels keep their type size on a wide
+  // monitor instead of the whole drawing being scaled up.
+  const [bubbleRef, bubbleW] = useElementWidth<HTMLDivElement>(640);
+  const W = Math.max(480, bubbleW);
   const layout = useMemo(() => {
     const circles = groups.map((g) => ({ ...g, r: Math.max(34, Math.min(120, 16 + Math.sqrt(g.devices.length) * 3.3)) }));
     let x = 0, y = 0, rowH = 0;
@@ -210,7 +214,9 @@ export function DevicesVisual(p: VisualProps) {
           {regions.length > 0 && <div className="vz-filters"><Chips label="Region" options={regions.map((r) => ({ key: r, label: r }))} value={filters.region} onChange={(region) => onFilters({ region })} /></div>}
           <div className="vz-split">
             <Tile title={`${fmtInt(model.devices.length)} devices by role`} right="size = devices">
-              <DeviceBubbles groups={layout.placed} width={W} height={layout.h} visible={visible} selected={device?.name ?? null} onPick={setPicked} />
+              <div className="vz-fluid" ref={bubbleRef}>
+                <DeviceBubbles groups={layout.placed} width={W} height={layout.h} visible={visible} selected={device?.name ?? null} onPick={setPicked} />
+              </div>
               <div className="vz-top" role="list" aria-label="Most impactful devices">
                 {[...model.devices].filter((d) => isBad(d.verdict) && visible(d)).sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || sitesBehind(infos, b, model) - sitesBehind(infos, a, model)).slice(0, 6).map((d) => (
                   <button key={d.name} type="button" role="listitem" className={`vz-chip${device?.name === d.name ? " is-on" : ""}`} style={{ "--c": verdictTone(d.verdict) } as React.CSSProperties} onClick={() => setPicked(d.name)}>
@@ -399,7 +405,7 @@ export function LinksVisual(p: VisualProps) {
                 devices={circuits.filter((c) => c.status === "down" && (!focusCarrier || c.carrier === focusCarrier)).map((c) => model.devices.find((d) => d.site === c.site && d.role === "edge")).filter((d): d is Device => !!d).slice(0, 40)} />
             </Tile>
             <Tile tone={TONE.violet}>
-              <AssistPanel subject={`carrier|${focusCarrier ?? "all"}`} questions={focusCarrier ? [{ label: "Summarize carrier", prompt: `Summarize ${focusCarrier}` }, { label: "Draft ticket", prompt: `Draft a ticket for ${focusCarrier}` }] : [{ label: "Compare carriers", prompt: "Which carrier is worst?" }, { label: "Draft ticket", prompt: "Draft a carrier ticket" }]} object="carriers"
+              <AssistPanel subject={`carrier|${focusCarrier ?? "all"}`} questions={carrierQuestions(focusCarrier)} object="carriers"
                 context={() => carrierContext(model, focusCarrier, circuits.filter((c) => !focusCarrier || c.carrier === focusCarrier))} />
             </Tile>
           </div>

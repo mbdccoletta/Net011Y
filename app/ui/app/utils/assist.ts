@@ -12,10 +12,16 @@ export interface AssistAnswer {
 }
 
 const INSTRUCTION = [
-  "You are a senior network operations analyst.",
-  "Answer only from the supplementary context. Status there comes from the problems and alerts Dynatrace has open on the network entities; the numbers come from SNMP, syslog, traps, synthetic ICMP and application sessions.",
-  "Name the open problem that explains the situation, quantify the impact, and give concrete next steps.",
-  "Use at most 5 short bullet points in Markdown. Do not invent devices, carriers or numbers.",
+  // The contract the answers are held to. It mirrors how the app itself decides things, so the text on
+  // screen and the text from Assist can never contradict each other.
+  "You are a senior network operations analyst writing for an operator on shift who is looking at this exact screen.",
+  "Answer only from the supplementary context. It is the complete set of facts available; anything not in it is not reported, and you say so instead of estimating, averaging or assuming.",
+  "Status comes from the problems and alerts Dynatrace has open on the network entities. Counters (CPU, interface utilization, errors, discards, availability, syslog, traps) are evidence for an alert, never a verdict on their own: never call an element unhealthy because a counter looks high, and never call an alert a false positive.",
+  "The single exception is WAN latency against the sla_ms tag the customer set on that circuit: latency above that number is a real breach, and each carrier is judged against its own SLA.",
+  "An element with no open alert is not healthy by proof, it is simply not alerting; an element that reports nothing is 'not monitored'. Say which of the two it is.",
+  "Name entities exactly as the context spells them, keep problem ids (P-…), timestamps and units as given, and prefer the specific element (this interface, this circuit id, this monitor) over the general one.",
+  "Never invent devices, sites, carriers, interfaces, ids, numbers or times. Never recommend enabling data the context shows as already arriving.",
+  "Write in the language of the question. Be concrete and short: an operator reads this while the incident is open.",
 ].join(" ");
 
 export async function askAssist(question: string, context: unknown, abortSignal?: AbortSignal): Promise<AssistAnswer> {
@@ -42,7 +48,7 @@ export async function askAssist(question: string, context: unknown, abortSignal?
 
 const siteFacts = (s: SiteInfo) => ({
   code: s.code, name: s.site.name, region: s.site.region, status: s.verdict, probableCause: s.cause, incident: s.incident,
-  wanLinks: s.circuits.map((c) => ({ kind: c.kind, carrier: c.carrier, tech: c.tech, status: c.status, latencyMs: c.latencyMs, slaMs: c.slaMs, lossPct: c.lossPct, since: c.since })),
+  wanLinks: s.circuits.map((c) => ({ circuitId: c.id, kind: c.kind, carrier: c.carrier, tech: c.tech, status: c.status, latencyMs: c.latencyMs, slaMs: c.slaMs, lossPct: c.lossPct, since: c.since })),
 });
 
 export function causeContext(model: NetworkModel, cause: Cause) {
@@ -61,13 +67,23 @@ export function causeContext(model: NetworkModel, cause: Cause) {
 }
 
 export function networkContext(model: NetworkModel, infos: SiteInfo[], causes: Cause[]) {
+  const open = model.devices.filter((d) => (d.problems ?? []).some((p) => !p.muted)).length;
   return {
     dataSource: model.demo ? "simulated example network" : `Dynatrace environment ${model.meta.tenant}`,
     generatedAt: model.meta.generatedAt,
     sites: infos.length,
     sitesWithIssues: infos.filter((i) => isBad(i.verdict)).length,
+    sitesWithNoPathLeft: infos.filter((i) => i.circuits.length > 0 && i.circuits.every((c) => c.status === "down")).length,
     devices: model.devices.length,
-    causes: causes.map((c) => ({ title: c.title, kind: c.kind, status: c.verdict, since: c.since, impact: c.impact, incident: c.incident })),
+    devicesWithAnOpenAlert: open,
+    devicesNotMonitored: model.devices.filter((d) => d.verdict === "Not monitored").length,
+    // so an answer can say "nothing is alerting" without implying the network was proven healthy
+    alertsNotPlacedOnTheMap: (model.unmappedAlerts ?? []).length,
+    causes: causes.map((c) => ({
+      id: c.id, title: c.title, kind: c.kind, status: c.verdict, since: c.since, impact: c.impact, incident: c.incident,
+      devices: c.devices.slice(0, 5).map((d) => d.name),
+      carriers: [...new Set(c.sites.flatMap((s) => s.circuits.filter((x) => x.status === "down").map((x) => x.carrier)))],
+    })),
   };
 }
 
@@ -99,8 +115,24 @@ export function carrierContext(model: NetworkModel, carrier: string | null, circ
     generatedAt: model.meta.generatedAt,
     carrier: carrier ?? "all carriers",
     circuits: circuits.length,
-    down: circuits.filter((c) => c.status === "down").map((c) => ({ site: c.siteName, region: model.sites[c.site]?.region, kind: c.kind, tech: c.tech, since: c.since, incident: c.incident })),
-    overSla: circuits.filter((c) => c.status === "up" && isBad(c.verdict)).map((c) => ({ site: c.siteName, kind: c.kind, latencyMs: c.latencyMs, slaMs: c.slaMs, lossPct: c.lossPct, jitterMs: c.jitterMs })),
-    byCarrier: [...new Set(circuits.map((c) => c.carrier))].map((name) => ({ name, links: circuits.filter((c) => c.carrier === name).length, down: circuits.filter((c) => c.carrier === name && c.status === "down").length })),
+    down: circuits.filter((c) => c.status === "down").map((c) => ({ circuitId: c.id, carrier: c.carrier, site: c.siteName, region: model.sites[c.site]?.region, kind: c.kind, tech: c.tech, since: c.since, incident: c.incident })),
+    overSla: circuits.filter((c) => c.status === "up" && isBad(c.verdict)).map((c) => ({ circuitId: c.id, carrier: c.carrier, site: c.siteName, kind: c.kind, latencyMs: c.latencyMs, slaMs: c.slaMs, lossPct: c.lossPct, jitterMs: c.jitterMs })),
+    // each carrier against the SLA tagged on its own circuits, so the comparison is like for like
+    byCarrier: [...new Set(circuits.map((c) => c.carrier))].map((name) => {
+      const own = circuits.filter((c) => c.carrier === name);
+      const up = own.filter((c) => c.status === "up" && c.latencyMs != null);
+      const ratios = up.map((c) => c.latencyMs! / c.slaMs).sort((a, b) => a - b);
+      const ms = up.map((c) => c.latencyMs!).sort((a, b) => a - b);
+      const at = (xs: number[], p: number) => (xs.length ? xs[Math.min(xs.length - 1, Math.floor(p * xs.length))] : null);
+      const median = at(ratios, 0.5);
+      return {
+        name, links: own.length,
+        down: own.filter((c) => c.status === "down").length,
+        overSla: own.filter((c) => c.status === "up" && isBad(c.verdict)).length,
+        slaMs: [...new Set(own.map((c) => c.slaMs))],
+        medianLatencyMs: at(ms, 0.5), worstLatencyMs: at(ms, 0.95),
+        medianPctOfSla: median == null ? null : Math.round(median * 100),
+      };
+    }),
   };
 }

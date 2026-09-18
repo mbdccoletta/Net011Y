@@ -8,6 +8,7 @@ import { ownsPath, ROLE_LABEL, type SiteInfo } from "../model/site";
 import { isBad, ORDER, T } from "../model/verdict";
 import { fmtInt, fmtNum, hhmm } from "../utils/format";
 import { deviceContext, siteContext } from "../utils/assist";
+import { deviceQuestions, siteQuestions } from "../utils/prompts";
 import { NativeDrill } from "./NativeDrill";
 import { AssistPanel } from "./AssistPanel";
 import { Gauge, LimitLine, StatusShape, Tile, TONE, verdictTone } from "./Visual";
@@ -232,7 +233,7 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
         <NativeDrill devices={info.devices} circuits={info.circuits} since={since} demo={model.demo}
           focus={info.causeDevice ?? info.devices.find((d) => d.role === "edge") ?? null}
           focusCircuit={info.circuits.find((c) => c.status === "down") ?? info.circuits.find((c) => isBad(c.verdict)) ?? info.circuits.find((c) => c.kind === "primary") ?? null} />
-        <AssistPanel subject={`site|${info.code}`} questions={[{ label: "Explain site", prompt: "Explain this site" }, ...(info.circuits.some((c) => c.kind === "backup") ? [{ label: "Check backup", prompt: "Is the backup link working?" }] : []), { label: "Suggest next steps", prompt: "What are the next steps?" }]} object="site"
+        <AssistPanel subject={`site|${info.code}`} questions={siteQuestions(info.site.name, info.circuits.some((c) => c.kind === "backup"))} object="site"
           context={() => siteContext(model, info)} />
       </Tile>
       <DataNeeds keys={VIEW_NEEDS.site} needs={needs} compact />
@@ -272,7 +273,7 @@ export function EntityDetails(props: Props) {
           </Tile>
           <Tile tone={TONE.violet}>
             <NativeDrill devices={[d]} focus={d} since={d.unreachableSince} demo={model.demo} />
-            <AssistPanel subject={`device|${d.name}`} questions={[{ label: "Explain device", prompt: "Explain this device" }, { label: "Suggest next steps", prompt: "What are the next steps?" }]} object="device" context={() => deviceContext(model, d, behind)} />
+            <AssistPanel subject={`device|${d.name}`} questions={deviceQuestions(d.name, d.verdict === "Healthy")} object="device" context={() => deviceContext(model, d, behind)} />
           </Tile>
           <DataNeeds keys={VIEW_NEEDS.device} needs={needs} compact />
           <Tile title="Interfaces and events"><div className="vz-legacy"><DeviceDetails model={model} device={d} onDevice={(n) => onSelect(`device:${n}`)} /></div></Tile>

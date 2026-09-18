@@ -17,9 +17,11 @@ interface Props {
   needs: Record<NeedKey, Need>;
   source: "live" | "example";
   onSource: (source: "live" | "example") => void;
+  /** Data type the caller wants explained: opens the Data tab with that entry expanded */
+  focus?: NeedKey | null;
 }
 
-export function SettingsSheet({ show, onDismiss, model, needs, source, onSource }: Props) {
+export function SettingsSheet({ show, onDismiss, model, needs, source, onSource, focus }: Props) {
   return (
     <Sheet
       title="Settings"
@@ -31,7 +33,8 @@ export function SettingsSheet({ show, onDismiss, model, needs, source, onSource 
         </Button>
       }
     >
-      <Tabs defaultIndex={0} panelOverflow="scroll-y">
+      {/* remounted per focus so a page that asks for one data type lands on the Data tab, on that entry */}
+      <Tabs key={`${focus ?? "settings"}-${show}`} defaultIndex={focus ? 1 : 0} panelOverflow="scroll-y">
         <Tab title="General">
           <div className="ds">
             <DataSourceSection source={source} onSource={onSource} />
@@ -41,7 +44,7 @@ export function SettingsSheet({ show, onDismiss, model, needs, source, onSource 
         <Tab title="Data">
           <div className="ds">
             <PagesSection needs={needs} />
-            <SendDataSection needs={needs} source={source} />
+            <SendDataSection needs={needs} source={source} focus={focus} />
           </div>
         </Tab>
         <Tab title="App">

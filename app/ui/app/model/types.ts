@@ -1,4 +1,4 @@
-// NetworkPlane data model. Every screen reads this shape, whether it was built from
+// NetO11y data model. Every screen reads this shape, whether it was built from
 // live DQL results (buildRealModel) or from the bundled, clearly labelled example.
 
 export type Verdict = "Critical" | "Warning" | "Healthy" | "Not monitored";

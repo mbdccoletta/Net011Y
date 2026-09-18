@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # LEGACY: predates the alert-driven model. The app no longer judges health from thresholds;
 # status comes from the problems and alerts Dynatrace raises. Kept only to rebuild the old prototype data.
-"""Simulated Brazilian branch network for the NetworkPlane prototype.
+"""Simulated Brazilian branch network for the NetworkO11y prototype.
 
 Everything here is fictitious and is labelled as an example in the UI. It uses the
 same verdict rules (verdict.py) and E2E aggregation (e2e.py) as the real GRU build,

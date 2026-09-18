@@ -1,4 +1,4 @@
-/* NetworkPlane — every color is a Strato design token; the fallbacks only apply outside the platform. */
+/* NetO11y — every color is a Strato design token; the fallbacks only apply outside the platform. */
 .np-root {
   --np-crit: var(--dt-colors-text-critical-default, #bb0731);
   --np-crit-accent: var(--dt-colors-background-container-critical-accent, #c62239);
@@ -81,7 +81,9 @@
   font-family: var(--lm-sans);
   -webkit-font-smoothing: antialiased;
   background: radial-gradient(1200px 700px at 55% 45%, color-mix(in srgb, var(--lm-accent) var(--lm-haze), var(--lm-bg)) 0%, var(--lm-bg) 70%);
-  color: var(--lm-ink); min-height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+  /* the app owns the height of its scroll container, so the stage row is exactly what is left below the
+     bars: no measuring, and nothing can be drawn past the bottom of the page */
+  color: var(--lm-ink); height: 100%; min-height: 100%; display: grid; grid-template-rows: auto auto minmax(min-content, 1fr); }
 :root:not([data-theme="dark"]) .lm {
   /* Light mode is built from the Strato light tokens, with the surface hierarchy Dynatrace uses:
      the shell is the stage, panels and tiles are white surfaces on top of it, and the grid of the map
@@ -142,7 +144,9 @@
 /* The map fills the stage, and the replay bar floats over its last strip: without this the dotted grid
    keeps going under the bar and past the end of the page. The drawing fades out before that edge. */
 .lm-stage.is-wide .lm-map { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 30px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 30px), transparent); }
-.lm-map--empty { display: grid; place-items: center; color: var(--lm-muted); padding: 24px; text-align: center; }
+.lm-map--empty { display: grid; place-items: center; align-content: center; gap: 12px; color: var(--lm-muted); padding: 24px; text-align: center; }
+.lm-map--empty p { margin: 0; max-width: 46ch; line-height: 1.5; }
+.lm-map__acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .lm-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .lm-tip { position: absolute; transform: translate(14px, -50%); pointer-events: none; z-index: 5; display: grid; gap: 2px; max-width: 280px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--lm-tint) 94%, transparent); border: 1px solid var(--lm-line-2); font-family: var(--lm-mono); font-size: 12px; color: var(--lm-muted); }
 .lm-tip b { display: flex; align-items: center; gap: 6px; color: var(--lm-ink); font-size: 12px; }
@@ -167,6 +171,8 @@
 .lm-btn { border: 1px solid var(--lm-line-2); background: color-mix(in srgb, var(--lm-ink-hi) 4%, transparent); border-radius: 8px; padding: 6px 10px; font: 600 12px var(--lm-mono); cursor: pointer; }
 .lm-btn:hover { border-color: var(--lm-accent); background: var(--lm-accent-dim); }
 .lm-btn--primary { background: var(--lm-accent); border-color: var(--lm-accent); color: var(--lm-ink-hi); font-weight: 600; }
+.lm-btn--quiet { border-style: dashed; border-color: var(--lm-line); background: transparent; color: var(--lm-ink-3); }
+.lm-btn--quiet:hover { border-style: solid; border-color: var(--lm-line-2); background: transparent; }
 
 .lm-stats span { display: grid; font: 500 12px var(--lm-mono); color: color-mix(in srgb, var(--lm-ink-hi) 66%, transparent); }
 .lm-stats b { font-family: var(--lm-sans); font-size: 24px; font-weight: 600; color: var(--lm-ink-hi); line-height: 1.15; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px color-mix(in srgb, var(--lm-ink-hi) 25%, transparent); }
@@ -187,7 +193,7 @@
 .lm-chain__icon { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: var(--lm-tone); border: 1.5px solid var(--lm-tone);
   background: color-mix(in srgb, var(--lm-tone) 14%, transparent); box-shadow: 0 0 16px color-mix(in srgb, var(--lm-tone) 35%, transparent); }
 .lm-chain__icon svg { width: 20px; height: 20px; }
-.lm-chain__node b { font: 600 18px var(--lm-sans); color: var(--lm-ink-hi); line-height: 1.2; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px color-mix(in srgb, var(--lm-ink-hi) 25%, transparent); }
+.lm-chain__node b { font: 600 20px var(--lm-sans); color: var(--lm-ink-hi); line-height: 1.2; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px color-mix(in srgb, var(--lm-ink-hi) 25%, transparent); }
 .lm-chain__node span { font: 500 12px var(--lm-mono); color: color-mix(in srgb, var(--lm-ink-hi) 66%, transparent); line-height: 1.2; }
 .lm-chain__link { height: 2px; align-self: start; margin-top: 21px; background: repeating-linear-gradient(90deg, var(--lm-accent) 0 4px, transparent 4px 7px); background-size: 7px 2px; animation: lm-flow 0.7s linear infinite; opacity: .8; }
 @keyframes lm-flow { to { background-position: 7px 0; } }
@@ -214,11 +220,18 @@
 .lm-region__bar i { display: block; height: 100%; }
 .lm-region b { font-family: var(--np-mono); font-size: 12px; text-align: right; }
 
-.lm-drill { display: flex; flex-wrap: wrap; gap: 6px; }
+/* One grid of equal cards: every drill-down is the same size whatever its label, so the row reads as a
+   set of destinations instead of a ragged line of buttons. */
+.lm-drill { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 8px; align-items: stretch; }
 .lm-btn { display: inline-flex; align-items: center; gap: 5px; }
 .lm-btn svg { width: 12px; height: 12px; }
 
-.lm-assist { border-radius: 12px; padding: 12px; border: 1px solid color-mix(in srgb, var(--lm-violet) 55%, transparent); background: linear-gradient(165deg, color-mix(in srgb, var(--lm-violet) 26%, var(--lm-tint)), color-mix(in srgb, var(--lm-violet) 10%, var(--lm-tint-2))); box-shadow: 0 0 22px color-mix(in srgb, var(--lm-violet) 22%, transparent); display: grid; gap: 10px; }
+.lm-assist { border-radius: 12px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--lm-violet) 55%, transparent); background: linear-gradient(165deg, color-mix(in srgb, var(--lm-violet) 26%, var(--lm-tint)), color-mix(in srgb, var(--lm-violet) 10%, var(--lm-tint-2))); box-shadow: 0 0 22px color-mix(in srgb, var(--lm-violet) 22%, transparent); display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; row-gap: 8px; column-gap: 12px; }
+/* the label and its questions share one line: with no answer on screen the panel is a single row, not a
+   block of empty space the width of the page */
+.lm-assist > .lm-assist__head { grid-column: 1; }
+.lm-assist > .lm-assist__chips { grid-column: 2; }
+.lm-assist > .lm-assist__body { grid-column: 1 / -1; }
 .lm-assist__head { display: flex; align-items: center; gap: 8px; font: 600 12px var(--lm-mono); color: var(--lm-ink-hi); }
 .lm-assist__head svg { width: 18px; height: 18px; }
 .lm-assist__chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -246,7 +259,7 @@
   .lm-stage:not(.is-wide) .lm-left { margin-right: 0; }
   .lm-stage:not(.is-wide) .lm-right { margin-left: 0; }
 }
-.lm-stage.is-wide { display: block; height: max(640px, calc(100vh - 110px)); padding: 0; }
+.lm-stage.is-wide { display: block; height: 100%; min-height: 320px; padding: 0; }
 .lm-stage.is-wide .lm-map { position: absolute; inset: 0; height: auto; }
 .lm-stage.is-wide .lm-panel { position: absolute; margin: 0; z-index: 2; background: var(--lm-tint); }
 .lm-stage.is-wide .lm-left { top: 16px; left: 16px; width: 304px; max-height: calc(100% - 120px); overflow-y: auto; }
@@ -350,6 +363,11 @@
 .vz-assist-row .lm-assist { border: 0; background: transparent; box-shadow: none; padding: 0; }
 
 .vz-bubbles { display: block; width: 100%; height: auto; }
+.vz-gauge { margin: 0; display: grid; justify-items: center; gap: 4px; }
+.vz-gauge figcaption { font-size: 12px; color: var(--lm-ink-3); text-align: center; }
+.vz-spark { display: inline-flex; align-items: center; }
+.vz-spark svg { display: block; overflow: visible; }
+.vz-spark__v { font: 500 12px var(--np-mono); font-variant-numeric: tabular-nums; }
 .vz-svg-label { font: 600 12px var(--lm-mono); fill: var(--lm-ink-3); }
 .vz-svg-cap { font: 500 12px var(--lm-mono); fill: var(--lm-ink-3); }
 .vz-dot { cursor: pointer; }
@@ -368,13 +386,13 @@
 .vz-ruler--fit { min-width: 0; }
 .vz-fluid { width: 100%; min-width: 0; overflow: hidden; }
 /* Drill-down row: each button says which native app it opens and on what */
-.lm-drill__note { flex: 1 1 100%; font-size: 12px; color: var(--lm-warn); }
+.lm-drill__note { grid-column: 1 / -1; font-size: 12px; color: var(--lm-warn); }
 .lm-drill .lm-btn:disabled { opacity: .45; cursor: not-allowed; }
-.lm-drill__lead { font: 600 11px var(--lm-sans); letter-spacing: .04em; text-transform: uppercase; color: var(--lm-ink-3); align-self: center; margin-right: 2px; }
-.lm-drill .lm-btn { display: inline-grid; grid-template-columns: auto auto; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 6px 12px; }
-.lm-drill .lm-btn b { grid-column: 1; font: 600 13px var(--lm-sans); }
-.lm-drill .lm-btn small { grid-column: 1; grid-row: 2; font: 400 11px var(--lm-sans); color: var(--lm-ink-3); }
-.lm-drill .lm-btn svg { grid-column: 2; grid-row: 1 / span 2; width: 14px; height: 14px; opacity: .7; }
+.lm-drill__lead { grid-column: 1 / -1; font: 500 12px var(--lm-sans); letter-spacing: .04em; text-transform: uppercase; color: var(--lm-ink-3); }
+.lm-drill .lm-btn { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; align-content: center; justify-items: start; text-align: left; padding: 8px 12px; min-height: 48px; }
+.lm-drill .lm-btn b { grid-column: 1; grid-row: 1; font: 600 14px var(--lm-sans); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-drill .lm-btn small { grid-column: 1; grid-row: 2; font: 400 12px var(--lm-sans); color: var(--lm-ink-3); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-drill .lm-btn svg { grid-column: 2; grid-row: 1 / span 2; align-self: center; width: 14px; height: 14px; opacity: .7; }
 .vz-fluid > svg { display: block; max-width: 100%; }
 /* Carrier meters: the status LED breathes while Dynatrace has something open on that carrier */
 .vz-led { transform-box: fill-box; transform-origin: center; }
@@ -385,7 +403,7 @@
 /* details panel */
 .lm.vz-details { padding: 14px; display: grid; gap: 12px; align-content: start; min-height: 100%; }
 .vz-dhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.vz-dhead h2 { margin: 0; display: flex; align-items: center; gap: 8px; font: 600 18px var(--lm-sans); color: var(--lm-ink-hi); overflow-wrap: anywhere; }
+.vz-dhead h2 { margin: 0; display: flex; align-items: center; gap: 8px; font: 600 20px var(--lm-sans); color: var(--lm-ink-hi); overflow-wrap: anywhere; }
 .vz-details .vz-big { font-size: 24px; }
 .vz-trail { display: block; width: 100%; height: auto; }
 .vz-trail__hop { cursor: pointer; outline: none; }
@@ -487,7 +505,18 @@
 .lm.vz-details { grid-template-rows: none; grid-auto-rows: max-content; }
 
 /* Settings: data setup guide (Strato spacing: 32px between groups, 16px between elements, 8px related) */
-.ds { display: grid; gap: 32px; max-width: 880px; padding-bottom: 32px; }
+.ds {
+  /* the sheet renders in a portal, outside .np-root, so the status colours are defined here from the
+     Strato tokens instead of being inherited */
+  --ds-ok: var(--dt-colors-charts-status-ideal-default, #2ab06f);
+  --ds-warn: var(--dt-colors-charts-status-warning-default, #eea746);
+  --ds-bad: var(--dt-colors-background-container-critical-accent, #c62239);
+  --ds-idle: var(--dt-colors-charts-status-neutral-default, #8c8fa8);
+  --ds-primary: var(--dt-colors-text-primary-default, #4a4fd4);
+  display: grid; gap: 32px; max-width: 880px; padding-bottom: 32px;
+}
+/* Only the entry a page sent the user to is marked. Every row already carries its own status indicator,
+   so painting all of them would compete with it instead of pointing anywhere. */
 .ds-block { display: grid; gap: 16px; }
 .ds-block > div { display: grid; gap: 8px; }
 .ds-page { display: grid; gap: 8px; padding-bottom: 8px; }
@@ -495,6 +524,10 @@
 .ds-page__grouptitle { color: var(--dt-colors-text-neutral-subdued, #5d5f78); text-transform: uppercase; letter-spacing: .04em; }
 .ds-page__needs { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; }
 .ds-label { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; }
+.ds-label__name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+/* the entry a page sent the user to: named, tinted and given room above it when it is scrolled into view */
+.ds-label--focus { scroll-margin: 96px 0; font-weight: 600; border-radius: 4px; padding: 3px 8px 3px 10px; border-left: 3px solid var(--ds-primary); background: color-mix(in srgb, var(--ds-primary) 14%, transparent); }
+.ds-focus-chip { font-style: normal; font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--ds-primary) 26%, transparent); box-shadow: inset 0 0 0 1px var(--ds-primary); white-space: nowrap; }
 .ds-guide { display: grid; gap: 16px; padding: 4px 0 16px; }
 .ds-guide > div { display: grid; gap: 8px; }
 .ds-guide p { margin: 0; }
@@ -531,7 +564,8 @@
 
 /* Left panel: causes or sites by primary tag hierarchy */
 .lm-lefttabs { display: inline-flex; margin-bottom: 12px; }
-.st { display: grid; gap: 8px; }
+.st { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.st > *, .st-tree li, .st-tree ul { min-width: 0; }
 .st-levels { font-size: 12px; color: var(--lm-ink-3); text-transform: capitalize; }
 .st-tree, .st-tree ul { list-style: none; margin: 0; padding: 0; }
 .st-row { display: flex; align-items: center; gap: 4px; min-width: 0; border-radius: 6px; }
@@ -543,7 +577,7 @@
 .st-row--site { width: 100%; font-size: 12px; }
 .st-group:hover, .st-row--site:hover { background: color-mix(in srgb, var(--lm-ink-hi) 6%, transparent); }
 .st-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.st-count { font-style: normal; font-size: 12px; color: var(--lm-ink-3); font-variant-numeric: tabular-nums; }
+.st-count { font-style: normal; font-size: 12px; color: var(--lm-ink-3); font-variant-numeric: tabular-nums; flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-hint { font-size: 12px; color: var(--lm-ink-3); }
 .st-group:focus-visible, .st-row--site:focus-visible, .st-chev:focus-visible { outline: 2px solid var(--lm-accent); outline-offset: 1px; }
 /* Settings: hierarchy levels */

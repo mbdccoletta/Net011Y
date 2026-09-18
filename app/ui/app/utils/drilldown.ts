@@ -37,6 +37,16 @@ export function openNative(app: NativeApp) {
   openInNewTab(getAppLink(APPS[app]), () => openApp(APPS[app]));
 }
 
+/**
+ * The network device list in Infrastructure & Operations, on the Network devices explorer and sorted by
+ * health: the app home opens on Hosts, which is not what this app's buttons are about.
+ */
+export function openInfraDevices() {
+  const base = getAppLink(APPS.infra);
+  if (!isEnvironmentLink(base)) { openApp(APPS.infra); return; }
+  openInNewTab(`${base.replace(/\/+$/, "")}/explorer/Network/Network%20devices?perspective=Health&sort=healthIndicators%3Adescending`, () => openApp(APPS.infra));
+}
+
 /** Any DQL query: lets the platform offer every app that handles dt.query. */
 export function openQuery(query: string) {
   openInNewTab(getIntentLink({ "dt.query": query }), () => sendIntent({ "dt.query": query }));

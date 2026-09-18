@@ -13,6 +13,7 @@ import { NativeDrill } from "../components/NativeDrill";
 import { SiteTree } from "../components/SiteTree";
 import { useSiteHierarchy } from "../hooks/useSiteHierarchy";
 import { causeContext, networkContext } from "../utils/assist";
+import { causeQuestions, networkQuestions } from "../utils/prompts";
 import { AssistPanel } from "../components/AssistPanel";
 import { DataNeeds } from "../components/DataNeeds";
 import { PageEmpty } from "../components/PageEmpty";
@@ -33,6 +34,8 @@ interface Props {
   onSites: (patch: { status: string; region: string | null; q: string }) => void;
   /** Offered while the environment has no network data yet. */
   onExample?: () => void;
+  /** Opens Settings › Data, where every item says what to send and links to its documentation */
+  onSettings?: () => void;
 }
 
 const parseTs = (s: string) => Date.parse(s.length === 17 ? s.replace("Z", ":00Z") : s);
@@ -50,7 +53,7 @@ function causeMeta(c: Cause) {
   ].filter(Boolean).join(" · ");
 }
 
-export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onSite, onDevice, onSites, onExample }: Props) {
+export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onSite, onDevice, onSites, onExample, onSettings }: Props) {
   const causes = useMemo(() => buildCauses(model, infos), [model, infos]);
   const shared = causes.filter((c) => c.sites.length > 1 || c.kind === "carrier" || c.kind === "datacenter");
   const isolated = causes.filter((c) => !shared.includes(c));
@@ -107,25 +110,6 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  // wide stage fills exactly the visible height below the page bar, so the replay bar is never cut
-  const [stageH, setStageH] = useState<number | null>(null);
-  useEffect(() => {
-    const el = stage.current;
-    if (!el) return;
-    const measure = () => {
-      let box: HTMLElement | null = el.parentElement;
-      while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
-      const container = box ?? document.documentElement;
-      const top = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
-      setStageH(Math.max(560, Math.floor(container.clientHeight - top - 16)));
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(document.documentElement);
-    window.addEventListener("resize", measure);
-    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
-  }, []);
-  const insets = useMemo<Insets>(() => (wide ? { top: 24, left: 336, right: 376, bottom: 104 } : { top: 16, left: 16, right: 16, bottom: 16 }), [wide]);
 
   // replay
   const end = parseTs(model.meta.generatedAt);
@@ -160,6 +144,16 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   }, [cause, causes]);
   const hitAt = useMemo(() => (cursor >= 1 ? () => true : (code: string) => { const ts = affectedAt.get(code); return ts == null || ts <= at; }), [cursor, at, affectedAt]);
   const hitCount = cause ? cause.sites.filter((s) => hitAt(s.code)).length : null;
+  // there is only something to replay when the environment reported when things went wrong: with no
+  // timed alert the bar would be an empty timeline, so it is not shown at all and the map takes the space
+  const replayable = useMemo(
+    () => affectedAt.size > 0 && moments.some((m) => !Number.isNaN(parseTs(m.t))),
+    [affectedAt, moments],
+  );
+  const insets = useMemo<Insets>(
+    () => (wide ? { top: 24, left: 336, right: 376, bottom: replayable ? 104 : 28 } : { top: 16, left: 16, right: 16, bottom: 16 }),
+    [wide, replayable],
+  );
 
   const affected = infos.filter((i) => isBad(i.verdict));
   const regions = new Set(infos.map((i) => i.site.region).filter(Boolean)).size;
@@ -208,11 +202,18 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
       </div>
 
       <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.map} needs={needs} compact /></div>
-      <div ref={stage} className={`lm-stage${wide ? " is-wide" : ""}`} style={wide && stageH ? { height: stageH } : undefined}>
+      <div ref={stage} className={`lm-stage${wide ? " is-wide" : ""}`}>
         {mapSites.length ? (
           <LiveMap sites={mapSites} links={mapLinks} focus={focus} hitAt={hitAt} insets={insets} onSite={onSite} />
         ) : (
-          <div className="lm-map lm-map--empty">No site has a known location yet. Add coordinates to the site table to see the map.</div>
+          // no coordinates: the steps live in Settings › Data, so this points there instead of repeating them
+          <div className="lm-map lm-map--empty">
+            <p>No site has coordinates yet, so there is nothing to place on the map. The sites, devices and alerts of this environment are in the list beside it.</p>
+            <span className="lm-map__acts">
+              {onSettings && <button type="button" className="lm-btn lm-btn--primary" onClick={onSettings}>Settings › Sites, regions and locations</button>}
+              {onExample && <button type="button" className="lm-btn" onClick={onExample}>See it with example data</button>}
+            </span>
+          </div>
         )}
 
         <aside className="lm-panel lm-left" aria-label={leftTab === "sites" ? "Sites" : "Probable causes"}>
@@ -260,15 +261,14 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
             // a carrier cause spans many routers and links: no single device to open; a device or data center cause has one
             focus={cause && cause.kind !== "carrier" && cause.devices.length === 1 ? cause.devices[0] : null}
             circuits={cause ? cause.sites.flatMap((s) => s.circuits.filter((c) => c.status === "down" || isBad(c.verdict))) : []}
-            after={<button type="button" className="lm-btn" onClick={() => onSites({ status: "issues", region: cause?.impact.regions.length === 1 ? cause.impact.regions[0] : null, q: "" })}>Sites</button>} />
+            after={<button type="button" className="lm-btn" onClick={() => onSites({ status: "issues", region: cause?.impact.regions.length === 1 ? cause.impact.regions[0] : null, q: "" })}><b>Sites</b><small>in this app</small></button>} />
           <AssistPanel subject={cause?.id ?? "network"}
-            questions={cause
-              ? [{ label: "Explain cause", prompt: "Explain this cause" }, { label: "Assess impact", prompt: "What is the business impact?" }, { label: "Suggest next steps", prompt: "What are the next steps?" }]
-              : [{ label: "Summarize network", prompt: "Summarize the network" }, { label: "Prioritize fixes", prompt: "What should be fixed first?" }]}
+            questions={cause ? causeQuestions(cause.title) : networkQuestions()}
             object={cause ? "cause" : "network"}
             context={() => (cause ? causeContext(model, cause) : networkContext(model, infos, causes))} />
         </aside>
 
+        {replayable && (
         <div className="lm-panel lm-time" role="group" aria-label="Replay">
           <button type="button" className="lm-play" onClick={() => { if (cursor >= 1) setCursor(0); setPlaying((p) => !p); }} aria-label={playing ? "Pause replay" : "Replay how it spread"}>
             {playing ? <PauseIcon /> : <PlayIcon />}
@@ -293,6 +293,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
             {hitCount != null && cursor < 1 && <small>{hitCount} of {cause!.impact.sites} sites hit</small>}
           </span>
         </div>
+        )}
       </div>
     </div>
   );

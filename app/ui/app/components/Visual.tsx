@@ -1,4 +1,4 @@
-// Shared visual vocabulary of the NetworkPlane pages (UX Delivery Chain look): tinted tiles
+// Shared visual vocabulary of the NetO11y pages (UX Delivery Chain look): tinted tiles
 // with corner brackets, KPI tiles, filter chips, the page bar and the visual/table toggle.
 import React from "react";
 import type { NetworkModel, Verdict } from "../model/types";
@@ -88,13 +88,50 @@ export function Gauge({ value, label, warn, crit, size = 110, verdict }: { value
   const R = 44, C = 2 * Math.PI * R, pct = value == null ? 0 : Math.max(0, Math.min(100, value));
   const tone = verdict ? verdictTone(verdict)
     : value == null ? TONE.neutral : value >= crit ? TONE.bad : value >= warn ? TONE.warn : TONE.good;
+  // the reading sits alone inside the ring; the caption goes under it, where it has the whole width of
+  // the tile and cannot run into the number or over the ring
   return (
-    <svg viewBox="0 0 110 110" width={size} height={size} role="img" aria-label={`${label} ${value == null ? "not measured" : `${Math.round(pct)}%`}`}>
-      <circle cx={55} cy={55} r={R} fill="none" stroke="var(--lm-line)" strokeWidth={11} />
-      <circle cx={55} cy={55} r={R} fill="none" stroke={tone} strokeWidth={11} strokeLinecap="round" strokeDasharray={`${(pct / 100) * C} ${C}`} transform="rotate(-90 55 55)" />
-      <text x={55} y={59} textAnchor="middle" fill="var(--lm-ink-hi)" fontSize={22} fontWeight={700} style={{ fontFamily: "var(--lm-sans)" }}>{value == null ? "—" : `${Math.round(pct)}%`}</text>
-      <text x={55} y={75} textAnchor="middle" fill="var(--lm-ink-3)" fontSize={9}>{label.toUpperCase()}</text>
-    </svg>
+    <figure className="vz-gauge">
+      <svg viewBox="0 0 110 110" width={size} height={size} role="img" aria-label={`${label} ${value == null ? "not measured" : `${Math.round(pct)}%`}`}>
+        <circle cx={55} cy={55} r={R} fill="none" stroke="var(--lm-line)" strokeWidth={11} />
+        <circle cx={55} cy={55} r={R} fill="none" stroke={tone} strokeWidth={11} strokeLinecap="round" strokeDasharray={`${(pct / 100) * C} ${C}`} transform="rotate(-90 55 55)" />
+        <text x={55} y={64} textAnchor="middle" fill="var(--lm-ink-hi)" fontSize={24} fontWeight={700} style={{ fontFamily: "var(--lm-sans)" }}>{value == null ? "—" : `${Math.round(pct)}%`}</text>
+      </svg>
+      <figcaption>{label}</figcaption>
+    </figure>
+  );
+}
+
+/**
+ * Table sparkline. Drawn at the cell's own scale (0-100 % for CPU), so two rows can be compared by eye:
+ * a grid line at the half, the band under the curve, the run of the series and a lit head on the last
+ * reading with the value beside it. The tone comes from that last reading, never from a verdict.
+ */
+export function Spark({ values, max = 100, unit = "%", w = 108, h = 30 }: { values: number[]; max?: number; unit?: string; w?: number; h?: number }) {
+  if (values.length < 2) return <span className="np-muted">—</span>;
+  const last = values[values.length - 1];
+  const tone = last >= 90 ? TONE.bad : last >= 70 ? TONE.warn : TONE.cyan;
+  const top = Math.max(max, ...values);
+  const x = (i: number) => (i / (values.length - 1)) * (w - 30);
+  const y = (v: number) => h - 4 - (v / top) * (h - 9);
+  const line = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const id = `sp${Math.round(top)}-${values.length}`;
+  return (
+    <span className="vz-spark" title={`${values.length} h · last ${Math.round(last)}${unit} · peak ${Math.round(Math.max(...values))}${unit}`}>
+      <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label={`last ${Math.round(last)}${unit}`}>
+        <defs>
+          <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={tone} stopOpacity="0.38" />
+            <stop offset="100%" stopColor={tone} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <line x1={0} x2={w - 30} y1={y(top / 2)} y2={y(top / 2)} stroke="var(--lm-line)" strokeDasharray="2 3" />
+        <path d={`${line} L${x(values.length - 1).toFixed(1)},${h - 4} L0,${h - 4} Z`} fill={`url(#${id})`} />
+        <path d={line} fill="none" stroke={tone} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={x(values.length - 1)} cy={y(last)} r={2.6} fill={tone} />
+        <text x={w} y={h / 2 + 4} textAnchor="end" className="vz-spark__v" fill={tone}>{Math.round(last)}</text>
+      </svg>
+    </span>
   );
 }
 

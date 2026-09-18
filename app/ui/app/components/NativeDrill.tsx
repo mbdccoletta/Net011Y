@@ -8,7 +8,7 @@ import { Menu } from "@dynatrace/strato-components/navigation";
 import type { Circuit, Device, DeviceProblem } from "../model/types";
 import {
   circuitMetricsQuery, deviceHealthQuery, deviceMetricsQuery, hoursBack, logsQuery,
-  openDevice, openLogs, openMonitor, openNative, openNotebook, openProblem,
+  openDevice, openInfraDevices, openLogs, openMonitor, openNative, openNotebook, openProblem,
 } from "../utils/drilldown";
 
 interface Props {
@@ -65,23 +65,23 @@ export function NativeDrill({ devices, circuits = [], focus, focusCircuit, since
             ))}
           </Menu.Content>
         </Menu>
-      ) : (
+      ) : one ? (
         <button type="button" className="lm-btn lm-btn--primary" disabled={demo}
-          title={demo ? "Simulated data: nothing to open" : one ? `Open ${one.displayId} · ${one.name} in Problems` : "No open problem on these components: opens the Problems app, unfiltered"}
-          onClick={() => (one ? openProblem(one.eventId, one.eventKind) : openNative("problems"))}>
-          <b>{one ? (one.displayId ? `Problem ${one.displayId}` : "Alert") : "Problems"}</b>
-          <small>{one ? "this alert in Davis" : "Davis · all problems"}</small><ExternalLinkIcon />
+          title={demo ? "Simulated data: nothing to open" : `Open ${one.displayId} · ${one.name} in Problems`}
+          onClick={() => openProblem(one.eventId, one.eventKind)}>
+          <b>{one.displayId ? `Problem ${one.displayId}` : "Alert"}</b>
+          <small>this alert in Davis</small><ExternalLinkIcon />
         </button>
-      )}
+      ) : null}
       {devices.length > 0 && (
         <button type="button" className="lm-btn" disabled={demo} title={demo ? "Simulated data: nothing to open" : `Syslog and SNMP traps of ${devices.length === 1 ? devices[0].name : `${devices.length} devices`} in Logs`}
           onClick={() => openLogs(logsQuery(ips, since), hoursBack(since))}>
           <b>Logs</b><small>syslog and traps</small><ExternalLinkIcon />
         </button>
       )}
-      <button type="button" className="lm-btn" disabled={demo} title={demo ? "Simulated data: nothing to open" : device ? `Open ${device.name} in Infrastructure & Operations` : "Several devices: open Infrastructure & Operations"}
-        onClick={() => (device ? openDevice(device.id) : openNative("infra"))}>
-        <b>Infra &amp; Ops</b><small>{device ? "this device" : "device list"}</small><ExternalLinkIcon />
+      <button type="button" className="lm-btn" disabled={demo} title={demo ? "Simulated data: nothing to open" : device ? `Open ${device.name} in Infrastructure & Operations` : "Several devices: open the network device list in Infrastructure & Operations"}
+        onClick={() => (device ? openDevice(device.id) : openInfraDevices())}>
+        <b>Infra &amp; Ops</b><small>{device ? "this device" : "network devices"}</small><ExternalLinkIcon />
       </button>
       {(monitorId || circuits.length > 0) && (
         <button type="button" className="lm-btn" disabled={demo} title={demo ? "Simulated data: nothing to open" : monitorId ? `Open the monitor of ${circuit ? `${circuit.siteName} · ${circuit.kind} link` : device?.name} in Synthetic` : "Several circuits: open Synthetic"}
@@ -92,6 +92,14 @@ export function NativeDrill({ devices, circuits = [], focus, focusCircuit, since
       {showNotebook && (
         <button type="button" className="lm-btn" disabled={demo} title={demo ? "Simulated data: nothing to open" : `${notebook.title} in Notebooks`} onClick={() => openNotebook(notebook.q, notebook.title)}>
           <b>Notebook</b><small>editable DQL</small><ExternalLinkIcon />
+        </button>
+      )}
+      {!problems.length && (
+        // nothing is open on these components, so Problems is not the next step: it stays last and quiet
+        <button type="button" className="lm-btn lm-btn--quiet" disabled={demo}
+          title={demo ? "Simulated data: nothing to open" : "No open problem on these components: opens the Problems app, unfiltered"}
+          onClick={() => openNative("problems")}>
+          <b>Problems</b><small>none open here</small><ExternalLinkIcon />
         </button>
       )}
       {after}

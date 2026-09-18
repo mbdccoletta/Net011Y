@@ -119,8 +119,8 @@ export function NetworkStatus({ infos, onRegion }: { infos: SiteInfo[]; onRegion
           offset += len;
           return el;
         })}
-        <text x={60} y={58} textAnchor="middle" fontSize={26} fontWeight={700} fill="var(--lm-ink)">{bad}</text>
-        <text x={60} y={76} textAnchor="middle" fontSize={11} fill="var(--lm-muted)">of {fmtInt(infos.length)}</text>
+        <text x={60} y={58} textAnchor="middle" fontSize={24} fontWeight={700} fill="var(--lm-ink)">{bad}</text>
+        <text x={60} y={76} textAnchor="middle" fontSize={12} fill="var(--lm-muted)">of {fmtInt(infos.length)}</text>
       </svg>
       <div className="lm-regions">
         {regions.map(({ r, list }) => (

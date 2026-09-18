@@ -1,4 +1,4 @@
-# NetworkPlane
+# NetO11y
 
 A Dynatrace AppEngine app that shows a network the way an operator reads it: sites on a map, devices by
 role, WAN circuits against their SLA, and the open problems that explain what is wrong — with a drill-down
@@ -35,8 +35,8 @@ Settings › Data documents every item, what each page uses it for, and how to s
 
 ## Running it
 
-The tenant's local-dev link only resolves on port 3000, and `environmentUrl` in `app/app.config.json`
-must point at the tenant being opened.
+The local-dev link only resolves on port 3000, and `environmentUrl` in `app/app.config.json` must point
+at the environment being opened.
 
 ```bash
 cd app && npm install && npm start
@@ -49,7 +49,7 @@ cd scripts/grail
 node build.mjs        # rebuilds the model and query bundles from app/ui/app
 node generate.mjs     # writes Grail-shaped fixtures for a 62-site network
 node validate.mjs     # 17 scenario checks against the app's own model
-node gru_regression.mjs   # the same model against a live tenant, with invariants
+DT_CONTEXT=<dtctl-context> node live_check.mjs   # the same model against a live environment
 node perf.mjs 20000 10    # scale test: 20k devices through the model
 ```
 

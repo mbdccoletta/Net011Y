@@ -36,19 +36,19 @@ function Timeline({ model, device }: { model: NetworkModel; device: Device }) {
     <div className="vz-fluid" ref={box}>
     <svg className="np-svg" viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label="Syslog errors, SNMP availability and traps over 24 hours">
       <line x1={pad} x2={w - 10} y1={90} y2={90} stroke="var(--np-line)" />
-      <text x={0} y={30} fontSize={10}>syslog</text><text x={0} y={42} fontSize={10}>errors/h</text>
+      <text x={0} y={30} fontSize={12}>syslog</text><text x={0} y={42} fontSize={12}>errors/h</text>
       {device.syslogErrTs.map((v, i) => (
         <rect key={i} x={x(i) + 1} y={90 - (v / max) * 64} width={bw} height={(v / max) * 64} fill="var(--np-crit-accent)" opacity={0.55}><title>{`${v} syslog errors`}</title></rect>
       ))}
-      <text x={0} y={113} fontSize={10}>SNMP</text>
+      <text x={0} y={113} fontSize={12}>SNMP</text>
       {(device.availTs ?? []).map((v, i) => <rect key={`a${i}`} x={x(i) + 1} y={104} width={bw} height={10} fill={v ? "var(--np-good)" : "var(--np-crit-accent)"} />)}
-      <text x={0} y={129} fontSize={10}>traps</text>
+      <text x={0} y={129} fontSize={12}>traps</text>
       {traps.map((t, k) => {
         const hoursAgo = (end - Date.parse(t.t)) / 3.6e6;
         if (!(hoursAgo >= 0 && hoursAgo <= 24)) return null;
         return <line key={k} x1={x(hours - hoursAgo)} x2={x(hours - hoursAgo)} y1={120} y2={132} stroke="var(--np-primary)" strokeWidth={2}><title>{t.oid}</title></line>;
       })}
-      {[0, 6, 12, 18, 24].map((i) => <text key={i} x={x(i)} y={h - 1} fontSize={10} textAnchor="middle">{i === 24 ? "now" : `-${24 - i}h`}</text>)}
+      {[0, 6, 12, 18, 24].map((i) => <text key={i} x={x(i)} y={h - 1} fontSize={12} textAnchor="middle">{i === 24 ? "now" : `-${24 - i}h`}</text>)}
     </svg>
     </div>
   );

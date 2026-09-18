@@ -97,8 +97,37 @@ export function PagesSection({ needs }: Pick<Props, "needs">) {
   );
 }
 
-export function SendDataSection({ needs, source }: Pick<Props, "needs" | "source">) {
+export function SendDataSection({ needs, source, focus }: Pick<Props, "needs" | "source"> & { focus?: NeedKey | null }) {
   const received = ORDER.filter((k) => needs[k]?.status === "ok").length;
+  // Opened from a page that is missing this data: that entry is expanded, marked, and placed at the top
+  // of the panel. The work hangs off the ref, not off an effect: the sheet attaches this node while its
+  // panel is still hidden and can re-attach it when it opens, and a hidden panel cannot be scrolled.
+  const target = React.useRef<HTMLSpanElement | null>(null);
+  const timer = React.useRef<number | null>(null);
+  const place = React.useCallback(() => {
+    const el = target.current;
+    if (!el || !el.getBoundingClientRect().height) return false;
+    let box: HTMLElement | null = el.parentElement;
+    while (box && !(/(auto|scroll)/.test(getComputedStyle(box).overflowY) && box.scrollHeight > box.clientHeight + 4)) box = box.parentElement;
+    if (!box) return false;
+    const delta = el.getBoundingClientRect().top - box.getBoundingClientRect().top - 24;
+    if (Math.abs(delta) < 8) return true;
+    box.scrollTop += delta;
+    return Math.abs(el.getBoundingClientRect().top - box.getBoundingClientRect().top - 24) < 8;
+  }, []);
+  const focusRef = React.useCallback((node: HTMLSpanElement | null) => {
+    target.current = node;
+    if (timer.current) { window.clearInterval(timer.current); timer.current = null; }
+    if (!node) return;
+    // the entry is attached while the sheet is still opening, so keep trying until it has a box to place
+    let tries = 0;
+    timer.current = window.setInterval(() => {
+      // a hidden tab throttles timers, so waiting there must not use up the attempts
+      if (document.hidden) return;
+      if (place() || ++tries > 40) { window.clearInterval(timer.current!); timer.current = null; }
+    }, 120);
+  }, [place]);
+  React.useEffect(() => () => { if (timer.current) window.clearInterval(timer.current); }, []);
   return (
       <section className="ds-block" aria-labelledby="ds-send">
         <Heading level={5} id="ds-send">How to send each data type</Heading>
@@ -109,14 +138,20 @@ export function SendDataSection({ needs, source }: Pick<Props, "needs" | "source
           <div key={group.title} className="ds-group">
             <Text textStyle="base-emphasized">{group.title}</Text>
             <Text textStyle="small">{group.hint}</Text>
-            <Accordion multiple>
+            <Accordion multiple defaultExpanded={focus && group.keys.includes(focus) ? [focus] : []}>
               {group.keys.map((key) => {
                 const need = needs[key], guide = SETUP[key];
                 if (!need || !guide) return null;
                 return (
                   <Accordion.Section key={key} id={key}>
                     <Accordion.SectionLabel aria-label={`${need.label}, ${STATUS[need.status].label}`}>
-                      <span className="ds-label"><span>{need.label}</span><NeedStatusIndicator need={need} /></span>
+                      <span className={`ds-label${key === focus ? " ds-label--focus" : ""}`} ref={key === focus ? focusRef : undefined}>
+                        <span className="ds-label__name">
+                          {need.label}
+                          {key === focus && <em className="ds-focus-chip">what you came to configure</em>}
+                        </span>
+                        <NeedStatusIndicator need={need} />
+                      </span>
                     </Accordion.SectionLabel>
                     <Accordion.SectionContent>
                       <div className="ds-guide">

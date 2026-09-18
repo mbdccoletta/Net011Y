@@ -8,6 +8,7 @@ import type { Circuit, Device, NetworkModel, Verdict } from "../model/types";
 import { ROLE_LABEL, type SiteInfo } from "../model/site";
 import { isBad } from "../model/verdict";
 import { Status } from "../components/Status";
+import { Spark } from "../components/Visual";
 import { fmtNum, hhmm } from "../utils/format";
 
 export interface Filters {
@@ -124,15 +125,8 @@ export function SitesPage({ infos, filters, onFilters, selected, onSelect }: Pag
 
 type DeviceRow = Device & Record<string, unknown>;
 
-/** Sparkline cells render a Timeseries: hourly CPU points ending now. */
-function cpuSeries(d: Device) {
-  if (!d.cpu.length) return null;
-  const hour = 3600 * 1000, end = Math.floor(Date.now() / hour) * hour;
-  return {
-    name: "CPU", unit: "percent",
-    datapoints: d.cpu.map((value, i) => ({ start: new Date(end - (d.cpu.length - i) * hour), end: new Date(end - (d.cpu.length - i - 1) * hour), value })),
-  };
-}
+/** The trend cell sorts on the last reading; the curve itself is drawn by <Spark />. */
+const cpuLast = (d: Device) => (d.cpu.length ? d.cpu[d.cpu.length - 1] : -1);
 
 export function DevicesPage({ model, filters, onFilters, selected, onSelect }: PageProps) {
   const regions = useMemo(() => uniq(Object.values(model.sites).map((s) => s.region)), [model]);
@@ -147,7 +141,8 @@ export function DevicesPage({ model, filters, onFilters, selected, onSelect }: P
     { id: "name", header: "Device", accessor: (d) => d.name, width: "1.4fr", cell: ({ rowData }) => <Two top={rowData.name} bottom={`${ROLE_LABEL[rowData.role] ?? rowData.role} · ${rowData.ip}`} mono /> },
     { id: "site", header: "Site", accessor: (d) => model.sites[d.site]?.name ?? d.site, width: "1fr" },
     { id: "cpu", header: "CPU", accessor: (d) => d.cpuNow, columnType: "meterbar", config: { min: 0, max: 100 }, width: 130 },
-    { id: "cpuTrend", header: "CPU, 24 h", accessor: (d) => cpuSeries(d), columnType: "sparkline", width: 130 },
+    { id: "cpuTrend", header: "CPU, 24 h", accessor: cpuLast, width: 140, alignment: "right",
+      cell: ({ rowData }) => <Spark values={rowData.cpu} /> },
     { id: "avail", header: "Availability", accessor: (d) => d.availPct ?? -1, width: 110, alignment: "right",
       cell: ({ rowData }) => <span className="np-mono">{rowData.availPct != null ? `${fmtNum(rowData.availPct)}%` : "—"}</span> },
     { id: "rtt", header: "ICMP RTT", accessor: (d) => d.icmp?.rttMs ?? -1, width: 100, alignment: "right",

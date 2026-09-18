@@ -1,9 +1,9 @@
 {
-  "environmentUrl": "https://guu84124.apps.dynatrace.com",
+  "environmentUrl": "https://eob14444.apps.dynatrace.com",
   "app": {
-    "name": "NetworkPlane",
+    "name": "NetO11y",
     "version": "0.1.0",
-    "description": "End-to-end network health per site, with the probable cause",
+    "description": "Sites, devices and WAN links on one map, with the alerts Dynatrace already raises on them",
     "icon": "./assets/icon.svg",
     "id": "my.network.pulse",
     "scopes": [

@@ -162,8 +162,8 @@ export function DeviceBubbles({ groups, width: W, height: H, visible, selected, 
                   acc += len;
                   return seg;
                 })}
-                <text x={g.cx} y={g.cy + g.r + 14 / Math.sqrt(k)} textAnchor="middle" className="vz-svg-label" style={{ fontSize: 10 / Math.sqrt(k) }}>{(ROLE_LABEL[g.role] ?? g.role).toUpperCase()}</text>
-                <text x={g.cx} y={g.cy + g.r + 27 / Math.sqrt(k)} textAnchor="middle" className="vz-svg-cap" style={{ fontSize: 9 / Math.sqrt(k) }}>{fmtInt(nDots)}{bad ? ` · ${bad} with issues` : ""}</text>
+                <text x={g.cx} y={g.cy + g.r + 18 / Math.sqrt(k)} textAnchor="middle" className="vz-svg-label" style={{ fontSize: 14 / Math.sqrt(k) }}>{(ROLE_LABEL[g.role] ?? g.role).toUpperCase()}</text>
+                <text x={g.cx} y={g.cy + g.r + 34 / Math.sqrt(k)} textAnchor="middle" className="vz-svg-cap" style={{ fontSize: 12 / Math.sqrt(k) }}>{fmtInt(nDots)}{bad ? ` · ${bad} with issues` : ""}</text>
                 {g.devices.map((d, i) => {
                   const idx = nDots - 1 - i;
                   const a = idx * 2.39996 + (few ? -Math.PI / 2 : 0), rad = nDots === 1 ? 0 : Math.sqrt((idx + 0.5) / nDots) * spread;
@@ -183,7 +183,7 @@ export function DeviceBubbles({ groups, width: W, height: H, visible, selected, 
                         <title>{`${d.name} · ${d.verdict}${d.reasons[0] ? ` · ${d.reasons[0].text}` : ""}`}</title>
                       </circle>
                       {on && (sel || (detailed && problem && focus === g.role)) && k > 1.01 && (
-                        <text x={x + r + 2 / k} y={y + 3 / k} className="vz-dot-label" style={{ fontSize: 10 / k, strokeWidth: 3 / k }}>{`${d.site} · ${shortDevice(d.name)}`}</text>
+                        <text x={x + r + 2 / k} y={y + 3 / k} className="vz-dot-label" style={{ fontSize: 12 / k, strokeWidth: 3 / k }}>{`${d.site} · ${shortDevice(d.name)}`}</text>
                       )}
                     </g>
                   );

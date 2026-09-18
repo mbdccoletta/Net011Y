@@ -1,7 +1,7 @@
 {
   "name": "network-pulse",
   "version": "0.1.0",
-  "description": "NetworkPlane: end-to-end network health per site, from access to carrier links to the application, with probable cause.",
+  "description": "NetO11y: sites, devices and WAN links on one map, with the alerts Dynatrace already raises on them",
   "private": true,
   "scripts": {
     "start": "dt-app dev",

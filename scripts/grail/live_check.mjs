@@ -3,11 +3,11 @@ import { execFileSync } from "node:child_process";
 import { buildRealModel, evaluateNeeds, allSites, buildCauses } from "./out/app-model.mjs";
 const R = {};
 for (const [n, q] of Object.entries(QUERIES)) {
-  const j = JSON.parse(execFileSync("dtctl", ["--context", "gru", "query", q.query, "-o", "json", "--plain", "--chunk-size", "0"], { encoding: "utf8", maxBuffer: 512e6 }));
+  const j = JSON.parse(execFileSync("dtctl", ["--context", process.env.DT_CONTEXT ?? "default", "query", q.query, "-o", "json", "--plain", "--chunk-size", "0"], { encoding: "utf8", maxBuffer: 512e6 }));
   R[n] = (j.result ?? j).records ?? j;
 }
 for (const [n, rows] of Object.entries(R)) if (!Array.isArray(rows)) throw new Error(`query ${n} did not return records: ${JSON.stringify(rows).slice(0, 200)}`);
-const m = buildRealModel(R, "guu84124");
+const m = buildRealModel(R, process.env.DT_CONTEXT ?? "live");
 const needs = evaluateNeeds(Object.fromEntries(Object.entries(R).map(([k, v]) => [k, v.length])), m, "live");
 const causes = buildCauses(m, allSites(m));
 // invariants that must hold against the live environment, whatever it happens to contain today
