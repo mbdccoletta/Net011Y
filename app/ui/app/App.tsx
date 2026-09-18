@@ -147,7 +147,7 @@ export function App() {
 
   const pageProps = { model, infos, filters, onFilters: (patch: Partial<Filters>) => setUrl(patch, false), selected: url.sel, onSelect: select };
   const onExample = url.source === "live" ? () => setUrl({ source: "example", page: "causes", cause: null, sel: null, ...NO_FILTERS }) : undefined;
-  const visualProps = { ...pageProps, needs, failed: net.failed, view: url.view, onView: (view: "visual" | "table") => setUrl({ view }, false), onExample };
+  const visualProps = { ...pageProps, needs, failed: net.failed, view: url.view, onView: (view: "visual" | "table") => setUrl({ view }, false), onExample, onSettings: openSettings };
 
   return (
     <div className="np-root">
@@ -156,7 +156,7 @@ export function App() {
 
         <PageLayout.Content>
           {page === "causes" ? (
-            <LiveMapPage model={model} infos={infos} causeId={url.cause} failed={net.failed} needs={needs} onExample={onExample} onSettings={() => openSettings("sites")} onCause={(cause) => setUrl({ cause }, false)}
+            <LiveMapPage model={model} infos={infos} causeId={url.cause} failed={net.failed} needs={needs} onExample={onExample} onSettings={openSettings} onCause={(cause) => setUrl({ cause }, false)}
               onSite={(code) => select(`site:${code}`)} onDevice={(name) => select(`device:${name}`)}
               onSites={(patch) => setUrl({ page: "sites", sel: null, ...NO_FILTERS, ...patch })} />
           ) : page === "devices" ? <DevicesVisual {...visualProps} /> : page === "links" ? <LinksVisual {...visualProps} /> : <SitesVisual {...visualProps} />}

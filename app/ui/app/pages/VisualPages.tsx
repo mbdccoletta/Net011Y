@@ -28,6 +28,8 @@ interface VisualProps extends PageProps {
   onView: (v: View) => void;
   /** Offered when a page has no data yet and the environment is the live one. */
   onExample?: () => void;
+  /** Opens Settings › Data on the entry a page is waiting for */
+  onSettings?: (key: NeedKey) => void;
 }
 
 const STATUS_CHIPS = [
@@ -75,7 +77,7 @@ export function SitesVisual(p: VisualProps) {
       </PageBar>
       <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.sites} needs={p.needs} compact /></div>
       {!infos.length ? (
-        <PageEmpty title="No sites yet" onExample={p.onExample} needs={p.needs} keys={VIEW_NEEDS.sites}
+        <PageEmpty title="No sites yet" onExample={p.onExample} onSettings={p.onSettings} configure="sites" needs={p.needs} keys={VIEW_NEEDS.sites}
           detail="Sites come from the primary tags on the SNMP monitoring configurations. Once the devices carry a site tag, they group here by region and carrier." />
       ) : p.view === "table" ? <div className="vz-table"><SitesPage {...p} /></div> : (
         <div className="vz-body">
@@ -201,7 +203,7 @@ export function DevicesVisual(p: VisualProps) {
       </PageBar>
       <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.devices} needs={p.needs} compact /></div>
       {!model.devices.length ? (
-        <PageEmpty title="No network devices yet" onExample={p.onExample} needs={p.needs} keys={VIEW_NEEDS.devices}
+        <PageEmpty title="No network devices yet" onExample={p.onExample} onSettings={p.onSettings} configure="devices" needs={p.needs} keys={VIEW_NEEDS.devices}
           detail="Devices come from the SNMP extensions. Each router, switch, firewall and access point they monitor appears here with its interfaces, CPU and events." />
       ) : p.view === "table" ? <div className="vz-table"><DevicesPage {...p} /></div> : (
         <div className="vz-body">
@@ -302,7 +304,7 @@ export function LinksVisual(p: VisualProps) {
       </PageBar>
       <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.links} needs={p.needs} compact /></div>
       {!circuits.length ? (
-        <PageEmpty title="No WAN circuits yet" onExample={p.onExample} needs={p.needs} keys={VIEW_NEEDS.links}
+        <PageEmpty title="No WAN circuits yet" onExample={p.onExample} onSettings={p.onSettings} configure="wan" needs={p.needs} keys={VIEW_NEEDS.links}
           detail="Circuits come from ICMP network availability monitors tagged with site, circuit_id, circuit_role, carrier, circuit_tech and sla_ms. This page shows their latency against the SLA." />
       ) : p.view === "table" ? <div className="vz-table"><LinksPage {...p} /></div> : (
         <div className="vz-body">

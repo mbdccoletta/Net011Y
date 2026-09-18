@@ -7,7 +7,7 @@ import { stateClient } from "@dynatrace-sdk/client-state";
 import { getEnvironmentId } from "@dynatrace-sdk/app-environment";
 import type { NetworkModel, Site } from "../model/types";
 
-const KEY = "network-pulse.site-hierarchy";
+const KEY = "net-o11y.site-hierarchy";
 // the browser copy is per environment: in local development every tenant shares the same localhost origin,
 // and one environment's hierarchy must never show up in another
 const LOCAL_KEY = (() => { try { return `${KEY}@${getEnvironmentId()}`; } catch { return KEY; } })();

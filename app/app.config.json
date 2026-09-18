@@ -5,7 +5,7 @@
     "version": "0.1.0",
     "description": "Sites, devices and WAN links on one map, with the alerts open on them",
     "icon": "./assets/icon.svg",
-    "id": "my.network.pulse",
+    "id": "my.net.o11y",
     "scopes": [
       {
         "name": "storage:smartscape:read",

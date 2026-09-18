@@ -14,7 +14,7 @@ const APPS = {
   assist: "dynatrace.davis.copilot",
 } as const;
 
-export const APP_ID = "my.network.pulse";
+export const APP_ID = "my.net.o11y";
 
 export type NativeApp = keyof typeof APPS;
 

@@ -35,7 +35,7 @@ interface Props {
   /** Offered while the environment has no network data yet. */
   onExample?: () => void;
   /** Opens Settings › Data, where every item says what to send and links to its documentation */
-  onSettings?: () => void;
+  onSettings?: (key: NeedKey) => void;
 }
 
 const parseTs = (s: string) => Date.parse(s.length === 17 ? s.replace("Z", ":00Z") : s);
@@ -181,7 +181,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
           <span className="lm-pill lm-pill--live"><span className="lm-live" aria-hidden="true" />Live {hhmm(model.meta.generatedAt)}</span>
           <span className="lm-pill">no sites yet</span>
         </div>
-        <PageEmpty title="No network data yet" onExample={onExample} needs={needs} keys={VIEW_NEEDS.empty}
+        <PageEmpty title="No network data yet" onExample={onExample} onSettings={onSettings} configure="devices" needs={needs} keys={VIEW_NEEDS.empty}
           detail="Send the data below to Dynatrace to fill the app. Every page stays open: each one shows what it can as soon as its data arrives." />
       </div>
     );
@@ -210,7 +210,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
           <div className="lm-map lm-map--empty">
             <p>No site has coordinates yet, so there is nothing to place on the map. The sites, devices and alerts of this environment are in the list beside it.</p>
             <span className="lm-map__acts">
-              {onSettings && <button type="button" className="lm-btn lm-btn--primary" onClick={onSettings}>Settings › Sites, regions and locations</button>}
+              {onSettings && <button type="button" className="lm-btn lm-btn--primary" onClick={() => onSettings("sites")}>Settings › Sites, regions and locations</button>}
               {onExample && <button type="button" className="lm-btn" onClick={onExample}>See it with example data</button>}
             </span>
           </div>
