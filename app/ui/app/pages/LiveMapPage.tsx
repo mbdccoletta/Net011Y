@@ -2,7 +2,7 @@
 // selected one on the right, and a replay of how it spread along the bottom. Every action
 // drills down into the native Dynatrace apps.
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { NetworkModel, Verdict } from "../model/types";
+import type { Device, Iface, NetworkModel, Verdict } from "../model/types";
 import type { SiteInfo } from "../model/site";
 import { isBad, worst } from "../model/verdict";
 import { buildCauses, type Cause } from "../model/causes";
@@ -81,17 +81,36 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
       id: `wan:${i.code}`, a: i.code, b: i.site.hub!, verdict: i.site.wanVerdict ?? (i.causeLayer === "Carrier" ? i.verdict : "Healthy"),
       bps: i.circuits.length && i.circuits.every((c) => c.status === "down") ? 0 : trafficOf(i.code),
     }));
-    if (hubLinks.length) return hubLinks;
-    const siteOf = new Map(model.devices.map((d) => [d.name, d]));
-    const seen = new Set<string>();
-    return model.links.flatMap((l) => {
-      const a = siteOf.get(l.a), b = siteOf.get(l.b);
-      if (!a || !b || a.site === b.site || !placed.has(a.site) || !placed.has(b.site)) return [];
+    // links the devices themselves report (CDP/LLDP): a cable between two sites is real communication,
+    // measured on the port it leaves from
+    const devOf = new Map(model.devices.map((d) => [d.name, d]));
+    const tagged = new Set(hubLinks.map((l) => [l.a, l.b].sort().join("|")));
+    const pairs = new Map<string, { a: string; b: string; ports: Iface[]; unmeasured: number; devs: Device[] }>();
+    for (const l of model.links) {
+      const a = devOf.get(l.a), b = devOf.get(l.b);
+      if (!a || !b || a.site === b.site || !placed.has(a.site) || !placed.has(b.site)) continue;
       const key = [a.site, b.site].sort().join("|");
-      if (seen.has(key)) return [];
-      seen.add(key);
-      return [{ id: `lldp:${key}`, a: a.site, b: b.site, verdict: worst([a.verdict, b.verdict]), bps: trafficOf(a.site) }];
+      if (tagged.has(key)) continue;
+      const p = pairs.get(key) ?? { a: a.site, b: b.site, ports: [], unmeasured: 0, devs: [] };
+      const port = a.interfaces.find((f) => (l.ifAId && f.id === l.ifAId) || (l.ifA && f.name === l.ifA));
+      if (port && (port.in.length || port.out.length)) p.ports.push(port); else p.unmeasured++;
+      p.devs.push(a, b);
+      pairs.set(key, p);
+    }
+    const cabled = [...pairs].map(([key, p]) => {
+      const down = p.ports.length > 0 && p.ports.every((f) => !f.oper.startsWith("up"));
+      const bps = p.ports.length ? p.ports.reduce((s, f) => s + (f.oper.startsWith("up") ? (f.in[f.in.length - 1] ?? 0) + (f.out[f.out.length - 1] ?? 0) : 0), 0) : null;
+      return { id: `lldp:${key}`, a: p.a, b: p.b, verdict: down ? "Critical" as Verdict : worst(p.devs.map((d) => d.verdict)), bps: down ? 0 : bps };
     });
+    // traffic NetFlow places between two sites: a route with its real volume, even where no cable is
+    // reported (a routed WAN hides the far end from CDP and LLDP)
+    const flowRate = new Map((model.flowMap?.pairs ?? []).map((p) => [[p.a, p.b].sort().join("|"), (p.bytes * 8) / ((model.flowMap?.windowMs ?? 3600000) / 1000)]));
+    const drawn = new Set([...hubLinks, ...cabled].map((l) => [l.a, l.b].sort().join("|")));
+    const measured = [...hubLinks, ...cabled].map((l) => (l.bps == null && flowRate.has([l.a, l.b].sort().join("|")) ? { ...l, bps: flowRate.get([l.a, l.b].sort().join("|"))! } : l));
+    const flowed = (model.flowMap?.pairs ?? []).filter((p) => placed.has(p.a) && placed.has(p.b) && !drawn.has([p.a, p.b].sort().join("|"))).map((p) => ({
+      id: `flow:${p.a}|${p.b}`, a: p.a, b: p.b, verdict: worst(infos.filter((i) => i.code === p.a || i.code === p.b).map((i) => i.verdict)), bps: flowRate.get([p.a, p.b].sort().join("|")) ?? null,
+    }));
+    return [...measured, ...flowed];
   }, [infos, mapSites, model]);
   // left panel: the problems Dynatrace has open, or sites grouped by the primary tag hierarchy chosen in Settings
   const { levels } = useSiteHierarchy();

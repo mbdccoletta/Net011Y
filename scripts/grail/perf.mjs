@@ -18,7 +18,7 @@ const B1H = 3600e3, N1H = 24, B5 = 300e3, N5 = 24;
 
 const t0 = process.hrtime.bigint();
 const results = { devices: [], interfaces: [], cpu: [], uptime: [], icmp: [], icmpNow: [], trCisco: [], errCisco: [],
-  syslogSum: [], syslogTs: [], syslogRecent: [], traps: [], lldp: [], routing: [], flowTs: [], flowProto: [], flowTop: [],
+  deviceLogs: [], deviceLogsRecent: [], lldp: [], routing: [], flowTs: [],
   cloud: [], cloudTop: [], problems: [], alerts: [] };
 
 for (let s = 0; s < SITES; s++) {
@@ -62,7 +62,7 @@ for (let s = 0; s < SITES; s++) {
     probe(key, bucket, n, { monitor: `MULTIPROTOCOL_MONITOR-${hex(s)}`, name: `Site ${code}`, target: rtr, tags: siteTags });
     probe(key, bucket, n, { monitor: `MULTIPROTOCOL_MONITOR-${hex(s + 1e6)}`, name: `WAN CIR-${code}`, target: `10.200.${(s >> 8) & 255}.${s & 255}`, tags: circTags });
   }
-  results.syslogSum.push({ "dt.ingest.source.ip": rtr, loglevel: "ERROR", n: S(3 + (s % 5)) });
+  results.deviceLogs.push({ ip: rtr, kind: "syslog", loglevel: "ERROR", n: [S(3 + (s % 5))] });
 }
 
 // what Dynatrace is alerting on: 1% of the devices, plus interface and monitor level alerts

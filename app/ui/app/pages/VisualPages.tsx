@@ -145,7 +145,7 @@ function DeviceInstrument({ model, infos, device, onDetails }: { model: NetworkM
       <div className="vz-chipline">
         <span className="vz-stat"><b>{upIfs}/{device.interfaces.length}</b>interfaces up</span>
         <span className="vz-stat"><b>{device.availPct != null ? `${fmtNum(device.availPct, 1)}%` : "—"}</b>availability</span>
-        <span className="vz-stat"><b>{fmtInt(device.syslog.ERROR)}</b>syslog errors</span>
+        <span className="vz-stat"><b>{fmtInt(device.syslog.ERROR)}</b>syslog errors · 6 h</span>
         <span className="vz-stat"><b>{fmtInt(device.traps)}</b>traps</span>
       </div>
       <NativeDrill devices={[device]} focus={device} since={device.unreachableSince} demo={model.demo}

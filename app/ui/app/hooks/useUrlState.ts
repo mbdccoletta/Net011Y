@@ -2,8 +2,8 @@
 // (Dynatrace guideline: keep entity, filters and active tab in the URL).
 import { useCallback, useEffect, useState } from "react";
 
-export type Page = "causes" | "sites" | "devices" | "links";
-const PAGES: Page[] = ["causes", "sites", "devices", "links"];
+export type Page = "causes" | "sites" | "devices" | "links" | "traffic";
+const PAGES: Page[] = ["causes", "sites", "devices", "links", "traffic"];
 
 export interface UrlState {
   page: Page;

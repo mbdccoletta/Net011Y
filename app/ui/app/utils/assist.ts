@@ -5,7 +5,9 @@ import type { DeviceProblem, NetworkModel } from "../model/types";
 import type { Cause } from "../model/causes";
 import { trafficDrop, type Suspicion } from "../model/suspicion";
 import type { SiteInfo } from "../model/site";
-import { isBad } from "../model/verdict";
+import { isBad } from "../model/verdict";import { environmentFindings, trafficInsights } from "../model/traffic";
+import { buildJourney } from "../model/journey";
+
 
 export interface AssistAnswer {
   text: string;
@@ -90,6 +92,12 @@ export function networkContext(model: NetworkModel, infos: SiteInfo[], causes: C
       devices: c.devices.slice(0, 5).map((d) => d.name),
       carriers: [...new Set(c.sites.flatMap((s) => s.circuits.filter((x) => x.status === "down").map((x) => x.carrier)))],
     })),
+    // NetFlow of the last hour, reduced to what stands out: the heaviest routes and each site's findings
+    traffic: model.flowMap ? {
+      window: "last hour",
+      routesBetweenSites: model.flowMap.pairs.slice(0, 5).map((p) => ({ between: [model.sites[p.a]?.name ?? p.a, model.sites[p.b]?.name ?? p.b], volume: `${(p.bytes / 1e9).toFixed(2)} GB` })),
+      findings: Object.entries(model.flowMap.sites).flatMap(([code, t]) => trafficInsights(t, model.flowMap!, code).map((text) => ({ site: model.sites[code]?.name ?? code, text }))).slice(0, 10),
+    } : "no NetFlow in this environment",
   };
 }
 
@@ -151,6 +159,21 @@ export function isolationContext(model: NetworkModel, s: Suspicion, info?: SiteI
       id: a.displayId || a.eventId, kind: a.eventKind === "DAVIS_PROBLEM" ? "problem" : "event",
       about: a.scope, name: a.name, openedAt: a.start,
     })),
+    // the network as the applications feel it, decided by the app against the environment's own usual level
+    retransmissionsRose: s.app?.rising ?? false,
+    applicationsNetwork: s.app ? (() => {
+      const a = s.app!, n = model.appNet!;
+      const clock = (t: number) => `${new Date(t).toISOString().slice(11, 16)}Z`;
+      const last = n.retrPct.length - 2;
+      return {
+        source: `OneAgent ${n.source === "flows" ? "network flows" : "process network metrics"} (TCP), whole environment`,
+        retransmittedPct: { last10min: a.now, usual: a.usual, rising: a.rising, since: a.startAt ? clock(a.startAt) : null },
+        roundTripMs: { measure: n.rttKind === "p90" ? "90th percentile" : "average", last10min: a.rttNow, usual: a.rttUsual, rising: a.rttRising },
+        workloadsWhereItRose: a.workloads,
+        // settled 10-minute buckets of the last two hours, labelled
+        recent: n.retrPct.slice(Math.max(0, last - 11), last + 1).map((v, i) => ({ at: clock(n.start + (Math.max(0, last - 11) + i) * n.interval), retransmittedPct: v })),
+      };
+    })() : "no OneAgent network flows in this environment",
     demandFell: drop.dropped,
     demand: drop.source ? {
       source: drop.source === "sessions" ? "real user sessions" : "requests served by the services",
@@ -172,7 +195,7 @@ export function isolationContext(model: NetworkModel, s: Suspicion, info?: SiteI
       siteAttribution: u && u.total ? `${u.mapped} of ${u.total} sessions map to a site (site_cidr tag or a device /24)` : "not possible without sessions",
       trafficAnomalyDetection: u?.anomalyWatched ? "a traffic anomaly problem is open" : "no traffic anomaly problem open now (detection may still be configured)",
       perSiteDemandCurve: "not available yet: demand is read for the whole environment",
-      networkFlowsFromHosts: "not used in this reading yet",
+      networkFlowsFromHosts: model.appNet ? "received (OneAgent network flows)" : "not received: OneAgent network monitoring would show whether the applications feel the network",
     },
     appReading: { kind: s.kind, headline: s.headline, facts: s.facts },
   };
@@ -186,6 +209,47 @@ export function siteContext(model: NetworkModel, info: SiteInfo) {
     devices: info.devices.map((d) => ({ name: d.name, role: d.role, status: d.verdict, reasons: d.reasons.map((r) => r.text), unreachableSince: d.unreachableSince, openAlerts: (d.problems ?? []).filter((x) => !x.muted).map((x) => x.name), cpu: d.cpuNow })),
     endToEndPath: info.path?.hops.map((h) => ({ layer: h.layer, title: h.title, status: h.verdict, reason: h.topReason, consequenceOnly: h.consequenceOnly })) ?? [],
     recentEvents: info.devices.flatMap((d) => d.events.map((e) => ({ device: d.name, time: e.t, level: e.level, text: e.text }))).sort((a, b) => b.time.localeCompare(a.time)).slice(0, 20),
+    traffic: siteTrafficFacts(model, info.code),
+  };
+}
+
+/** NetFlow of the last hour at one site, in the units an operator reads, with the app's own findings. */
+function siteTrafficFacts(model: NetworkModel, code: string) {
+  const f = model.flowMap, t = f?.sites[code];
+  if (!f || !t) return "no NetFlow from this site's devices";
+  const gb = (b: number) => `${(b / 1e9).toFixed(2)} GB`;
+  return {
+    window: "last hour", exporters: t.exporters, total: gb(t.bytes), flows: t.flows,
+    split: { otherSites: gb(t.toSites), internet: gb(t.internet), privateRangesNoSiteClaims: gb(t.private), insideTheSite: gb(t.local) },
+    talksTo: t.peers.map((p) => ({ peer: p.kind === "site" ? model.sites[p.site!]?.name ?? p.name : p.name, kind: p.kind, volume: gb(p.bytes), flows: p.flows })),
+    applications: t.apps.map((a) => ({ app: a.name ?? `${a.proto}/${a.port}`, port: `${a.proto}/${a.port}`, volume: gb(a.bytes), flows: a.flows })),
+    insights: trafficInsights(t, f, code),
+  };
+}
+
+/** The Traffic page: sources, heaviest paths, findings, and how the applications feel it. */
+export function trafficContext(model: NetworkModel, site?: string) {
+  const f = model.flowMap;
+  const gb = (b: number) => `${(b / 1e9).toFixed(2)} GB`;
+  const j = f ? buildJourney(f.conversations, f.denies, model.sites, { site }) : null;
+  const label = (id: string) => j?.nodes.find((n) => n.id === id)?.label ?? id;
+  return {
+    dataSource: model.demo ? "simulated example network" : `Dynatrace environment ${model.meta.tenant}`,
+    generatedAt: model.meta.generatedAt,
+    scope: site ? { site: model.sites[site]?.name ?? site } : "the whole network",
+    window: "last hour",
+    sources: {
+      netflow: f?.sources.netflow ? `${f.sources.netflow.exporters} exporters, ${gb(f.sources.netflow.bytes)}` : "not received",
+      firewallLogs: f?.sources.firewall ? `${f.sources.firewall.firewalls} firewalls, ${f.sources.firewall.connections} connections, ${f.sources.firewall.denies} denies${f.sources.firewall.capped ? ", list reached its query limit" : ""}` : "not received",
+      oneAgent: model.appNet ? model.appNet.source : "not received",
+      siteAddressRanges: f ? `${f.subnetsTagged} site_cidr ranges tagged, ${f.subnetsKnown} subnets known in total` : "n/a",
+    },
+    heaviestPaths: j ? j.links.filter((l) => l.to !== "denied" && j.nodes.find((n) => n.id === l.from)?.col === 1).sort((a, b) => b.bytes - a.bytes).slice(0, 8)
+      .map((l) => ({ through: label(l.from), to: label(l.to), volume: gb(l.bytes), count: l.count })) : [],
+    sourcesOfTraffic: j ? j.nodes.filter((n) => n.col === 0).sort((a, b) => b.bytes - a.bytes).map((n) => ({ from: n.label, kind: n.kind, volume: gb(n.bytes) })) : [],
+    denied: (f?.denies ?? []).filter((d) => !site || d.site === site).slice(0, 8).map((d) => ({ firewall: d.viaName, fromZone: d.from, toZone: d.to, port: `${d.proto}/${d.port}`, attempts: d.denies, hosts: d.sources })),
+    findings: environmentFindings(model).filter((x) => !site || x.site === site).map((x) => x.text),
+    retransmissionsByWorkload: (model.appNet?.workloads ?? []).slice(0, 8).map((w) => ({ workload: w.name, lastHourPct: w.retrNow, usualPct: w.retrUsual })),
   };
 }
 

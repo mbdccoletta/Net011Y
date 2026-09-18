@@ -6,6 +6,7 @@ import { useDql } from "@dynatrace-sdk/react-hooks";
 import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
 import type { NetworkModel } from "../model/types";
 import { QUERIES } from "./queries";
+import { inBuckets, useLogBuckets } from "../hooks/useLogBucket";
 import { buildRealModel, type QueryResults } from "./buildRealModel";
 
 export type Source = "live" | "example";
@@ -23,11 +24,42 @@ export interface NetworkState {
   /** false in a large estate, where interface detail is fetched per device instead */
   detailLoaded: boolean;
   refetch: () => void;
+  /** optional sources found empty, and when: they are not read again until SOURCE_RECHECK_MS has passed */
+  absent: Partial<Record<SourceGroup, number>>;
+  /** forget what was found empty and read every source again */
+  recheck: () => void;
+}
+
+/**
+ * The sources a network may or may not send, each read through logs or events, which Grail bills by what
+ * it scans. A probe decides: its companions run only when it brings rows, and a source found empty is
+ * remembered for this environment and not read again for a while. On an environment without NetFlow,
+ * firewall logs or OneAgent flows that is most of the log scanning gone.
+ */
+export const SOURCE_GROUPS = {
+  netflow: { probes: ["flowNets"], then: ["flowFanIn", "flowTs"] },
+  firewall: { probes: ["fwConns", "fwDeny"], then: [] },
+  deviceLogs: { probes: ["deviceLogs"], then: ["deviceLogsRecent"] },
+  neighbors: { probes: ["neighbors"], then: [] },
+  oneagentFlows: { probes: ["appNet"], then: ["appNetBy", "cloud", "cloudTop"] },
+} as const;
+export type SourceGroup = keyof typeof SOURCE_GROUPS;
+export const SOURCE_RECHECK_MS = 12 * 3600 * 1000;
+const groupOf = (name: string) => (Object.keys(SOURCE_GROUPS) as SourceGroup[]).find((g) => (SOURCE_GROUPS[g].probes as readonly string[]).includes(name) || (SOURCE_GROUPS[g].then as readonly string[]).includes(name));
+const ABSENT_KEY = () => { try { return `net-o11y.absent@${new URL(getEnvironmentUrl()).hostname}`; } catch { return "net-o11y.absent"; } };
+function readAbsent(): Partial<Record<SourceGroup, number>> {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(ABSENT_KEY()) ?? "{}") as Record<string, number>;
+    return Object.fromEntries(Object.entries(v).filter(([, t]) => Date.now() - t < SOURCE_RECHECK_MS)) as Partial<Record<SourceGroup, number>>;
+  } catch { return {}; }
+}
+function writeAbsent(v: Partial<Record<SourceGroup, number>>) {
+  try { window.localStorage.setItem(ABSENT_KEY(), JSON.stringify(v)); } catch { /* per session only */ }
 }
 
 const REQUIRED = ["devices", "interfaces"];
 // Enough to judge every device; logs and flows refine the views when they arrive (progressive loading).
-const CORE = ["devices", "interfaces", "trJuniper", "trCisco", "trGeneric", "errJuniper", "errCisco", "errGeneric", "cpu", "uptime", "icmp", "lldp", "routing"];
+const CORE = ["devices", "interfaces", "trJuniper", "trCisco", "trGeneric", "errJuniper", "errCisco", "errGeneric", "cpu", "uptime", "icmp", "lldp", "neighbors", "routing"];
 const NAMES = Object.keys(QUERIES);
 const STALE_MS = 5 * 60 * 1000;
 /**
@@ -44,6 +76,9 @@ function tenantName(): string {
     return "ambiente";
   }
 }
+
+const probeStore = new Map<string, number>();
+const useProbeRows = () => probeStore;
 
 export function useNetwork(source: Source): NetworkState {
   const live = source === "live";
@@ -69,15 +104,47 @@ export function useNetwork(source: Source): NetworkState {
   const [phase, setPhase] = useState(0);
   useEffect(() => { if (inventory.isSuccess && phase < 1) setPhase(1); }, [inventory.isSuccess, phase]);
   const waveOf = (name: string) => (REQUIRED.includes(name) ? 0 : CORE.includes(name) ? 1 : 2);
-  const results = NAMES.map((name) =>
+  const buckets = useLogBuckets();
+  const [absent, setAbsent] = useState(readAbsent);
+  // probe results decide the companions, so they are looked up by name before the hooks run
+  const probeRows = useProbeRows();
+  const results = NAMES.map((name) => {
+    const g = groupOf(name);
+    const isProbe = !!g && (SOURCE_GROUPS[g].probes as readonly string[]).includes(name);
+    const gated = !!g && (absent[g] != null || (!isProbe && !(SOURCE_GROUPS[g].probes as readonly string[]).some((p) => (probeRows.get(p) ?? 0) > 0)));
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    useDql(
-      { query: QUERIES[name].query, maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500 },
-      { enabled: live && (!QUERIES[name].detail || detailOk) && waveOf(name) <= phase, staleTime: STALE_MS },
-    ),
-  );
+    return useDql(
+      { query: inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500 },
+      { enabled: live && !gated && (!QUERIES[name].detail || detailOk) && waveOf(name) <= phase, staleTime: STALE_MS },
+    );
+  });
+  NAMES.forEach((n, i) => { if (results[i].isSuccess) probeRows.set(n, (results[i].data?.records ?? []).length); });
+  // a source whose probes all came back empty is remembered; one that answered is forgotten
+  const probeStamp = (Object.keys(SOURCE_GROUPS) as SourceGroup[]).map((g) => SOURCE_GROUPS[g].probes.map((p) => { const r = results[NAMES.indexOf(p)]; return r.isSuccess ? ((r.data?.records ?? []).length ? "1" : "0") : "-"; }).join("")).join("|");
+  useEffect(() => {
+    if (!live) return;
+    const next = { ...readAbsent() };
+    let changed = false;
+    (Object.keys(SOURCE_GROUPS) as SourceGroup[]).forEach((g) => {
+      const rs = SOURCE_GROUPS[g].probes.map((p) => results[NAMES.indexOf(p)]);
+      if (!rs.every((r) => r.isSuccess)) return;
+      const empty = rs.every((r) => !(r.data?.records ?? []).length);
+      if (empty && next[g] == null) { next[g] = Date.now(); changed = true; }
+      if (!empty && next[g] != null) { delete next[g]; changed = true; }
+    });
+    if (changed) { writeAbsent(next); setAbsent(next); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, probeStamp]);
+  const skippedSource = (i: number) => { const g = groupOf(NAMES[i]); return !!g && absent[g] != null; };
 
-  const skipped = (i: number) => !!QUERIES[NAMES[i]].detail && !detailOk;
+  // a query that will not run counts as settled: its source was found empty, or its probe brought nothing
+  const probeSaysNo = (i: number) => {
+    const g = groupOf(NAMES[i]);
+    if (!g || (SOURCE_GROUPS[g].probes as readonly string[]).includes(NAMES[i])) return false;
+    const probes = SOURCE_GROUPS[g].probes.map((p) => results[NAMES.indexOf(p)]);
+    return probes.every((r) => r.isSuccess || r.isError) && !probes.some((r) => (r.data?.records ?? []).length);
+  };
+  const skipped = (i: number) => (!!QUERIES[NAMES[i]].detail && !detailOk) || skippedSource(i) || probeSaysNo(i);
   const settled = results.filter((r, i) => r.isSuccess || r.isError || skipped(i)).length;
   const failed = NAMES.filter((_, i) => results[i].isError);
   const requiredOk = REQUIRED.every((n) => { const i = NAMES.indexOf(n); return results[i].isSuccess || skipped(i); });
@@ -117,6 +184,8 @@ export function useNetwork(source: Source): NetworkState {
     done: live ? settled : NAMES.length,
     total: NAMES.length,
     failed,
-    refetch: () => results.forEach((r) => r.refetch()),
+    refetch: () => results.forEach((r, i) => { if (!skipped(i)) r.refetch(); }),
+    absent,
+    recheck: () => { writeAbsent({}); setAbsent({}); },
   };
 }

@@ -7,7 +7,8 @@ import { Tab, Tabs } from "@dynatrace/strato-components/navigation";
 import { XmarkIcon } from "@dynatrace/strato-icons";
 import type { NeedKey, Need } from "../data/requirements";
 import type { NetworkModel } from "../model/types";
-import { AppConfigSection, DataSourceSection, PagesSection, SendDataSection, SuspicionSection } from "./DataSetup";
+import { AppConfigSection, DataSourceSection, PagesSection, QueryCostSection, SendDataSection, SuspicionSection } from "./DataSetup";
+import type { SourceGroup } from "../data/useNetwork";
 import { SiteHierarchySettings } from "./SiteHierarchySettings";
 
 interface Props {
@@ -19,9 +20,11 @@ interface Props {
   onSource: (source: "live" | "example") => void;
   /** Data type the caller wants explained: opens the Data tab with that entry expanded */
   focus?: NeedKey | null;
+  absent: Partial<Record<SourceGroup, number>>;
+  onRecheck: () => void;
 }
 
-export function SettingsSheet({ show, onDismiss, model, needs, source, onSource, focus }: Props) {
+export function SettingsSheet({ show, onDismiss, model, needs, source, onSource, focus, absent, onRecheck }: Props) {
   return (
     <Sheet
       title="Settings"
@@ -46,6 +49,7 @@ export function SettingsSheet({ show, onDismiss, model, needs, source, onSource,
           <div className="ds">
             <PagesSection needs={needs} />
             <SendDataSection needs={needs} source={source} focus={focus} />
+            {source === "live" && <QueryCostSection absent={absent} onRecheck={onRecheck} />}
           </div>
         </Tab>
         <Tab title="App">

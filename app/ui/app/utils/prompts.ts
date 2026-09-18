@@ -69,7 +69,7 @@ export const sitesQuestions = (): AssistQuestion[] => [
 ];
 
 /** One site. */
-export const siteQuestions = (name: string, hasBackup: boolean): AssistQuestion[] => [
+export const siteQuestions = (name: string, hasBackup: boolean, hasTraffic = false): AssistQuestion[] => [
   q("Explain site",
     `What is the current state of site ${name}?`,
     "Cover, in this order: its status and the open problem behind it, or that nothing is alerting;",
@@ -79,10 +79,32 @@ export const siteQuestions = (name: string, hasBackup: boolean): AssistQuestion[
     `Is ${name} running on its backup link right now?`,
     "Compare primary and backup: status, carrier, latency against each SLA, loss.",
     "State plainly whether the site has a second path left, and what it costs in latency while it is on backup.")] : []),
+  ...(hasTraffic ? [q("Explain traffic",
+    `What is ${name} talking to, and is anything unusual in its traffic?`,
+    "Use only traffic in the context: NetFlow of the last hour from this site's exporters.",
+    "Cover where the bytes go (other sites, Internet, private ranges no site claims), the applications that carry them, and each item under insights with its numbers.",
+    "Say what each insight could mean and the one check that would tell the options apart. Never call it an attack or a fault: flows show volume and pattern, not intent.")] : []),
   q("Suggest next steps",
     `Which actions would restore service at ${name}?`,
     "List the actions in the order to take them: each with the exact element and the result that confirms it.",
     "Mark which belong to the network team and which to the carrier, with the circuit id. Base every action on a fact in the context."),
+];
+
+/** Traffic, for the whole network or one site. */
+export const trafficQuestions = (where: string): AssistQuestion[] => [
+  q("Explain traffic",
+    `What is ${where} talking to, and is anything unusual in its traffic?`,
+    "Use only traffic in the context: the last hour, from the sources it names (NetFlow, firewall logs, OneAgent).",
+    "Cover the heaviest paths (from, through, to) with their volume, then each finding with its numbers.",
+    "Say what each finding could mean and the one check that would tell the options apart. Never call it an attack or a fault: flows show volume and pattern, not intent."),
+  q("What to fix first",
+    `Which traffic finding in ${where} should be looked at first?`,
+    "Rank the findings by how many hosts, sites or applications they touch and by how long they have lasted, as the context shows it.",
+    "One bullet each: the finding, why it ranks there, the team it belongs to and the exact element (firewall, zone, port, host group)."),
+  q("What is missing",
+    `What data would make the traffic picture of ${where} complete?`,
+    "Name only gaps the context shows: sources not received, devices not tied to a site, ranges no site claims, a query that reached its limit.",
+    "One bullet each: the gap, what it hides today, and where it is configured."),
 ];
 
 /** One device. */
@@ -111,7 +133,8 @@ export const isolationQuestions = (where: string): AssistQuestion[] => [
     "Use the hour and openedAt labels as given.",
     "Decide by order of events: a fall after a network alert opened supports the network; a fall before it rules the network out; alerts only outside the network point outside it.",
     "Reply with four bullets: Conclusion (network implicated, not the network, contained, or nothing to isolate); Evidence (ids and times); Against (the one fact that would argue for a different conclusion, or none); Next step (action and team).",
-    "If trafficAnomalyAlertFired is false the fall is the app's own measurement: call it weaker evidence. Demand counted for the whole environment is never attributed to one site."),
+    "If trafficAnomalyAlertFired is false the fall is the app's own measurement: call it weaker evidence. Demand counted for the whole environment is never attributed to one site.",
+    "retransmissionsRose true is direct evidence the applications feel the network; after a networkBurst it supports the network, with no network alert it points to an unmonitored segment or the hosts. If false, never describe retransmissions as rising."),
   q("What is missing",
     `What data is missing to decide whether the network explains what is degraded in ${where}?`,
     "Name only items the context marks as missing or partial under sources, and anything else it states is absent.",

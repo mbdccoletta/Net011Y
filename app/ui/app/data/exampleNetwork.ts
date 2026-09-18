@@ -5,6 +5,8 @@
 import type { AppExperience, AppTransaction, Circuit, Device, DeviceProblem, E2EPath, Hop, Iface, NetEvent, NetworkModel, PathLink, Site, Verdict } from "../model/types";
 import { T, ORDER, worst, deviceVerdict } from "../model/verdict";
 import { appHop, circuitHop, deviceHop, makePath } from "../model/e2e";
+import { buildAddressing } from "../model/addressing";
+import { buildFlowMap } from "./buildFlowMap";
 
 type Size = "L" | "M" | "S";
 type CityRow = [name: string, uf: string, lat: number, lon: number];
@@ -430,8 +432,35 @@ export function buildExampleNetwork(now = new Date()): NetworkModel {
     { eventId: "EX-SVC-1", eventKind: "DAVIS_PROBLEM", displayId: "P-24012", name: "Response time degradation", start: new Date(t0 - 25 * 60000).toISOString().slice(0, 16) + "Z", category: "SLOWDOWN", scope: "service", entities: ["checkout-api"] },
   ];
 
+  // ---------- traffic of the last hour: the core and the firewall at São Paulo export what crosses them ----------
+  const traffic = (() => {
+    const core = devices.find((d) => d.site === "SPO1" && d.role === "core"), fw = devices.find((d) => d.site === "SPO1" && d.role === "firewall");
+    if (!core || !fw) return undefined;
+    const net24 = (ip: string) => `${ip.split(".").slice(0, 3).join(".")}.0`;
+    // one branch in ten, so every region shows up
+    const branches = devices.filter((d) => !sites[d.site]?.dc && d.role === "edge").filter((_, i) => i % 10 === 0).slice(0, 30);
+    const rows: Record<string, Record<string, unknown>[]> = {
+      flowNets: branches.flatMap((d, i) => [
+        { exp: core.ip, s24: net24(d.ip), d24: "10.0.50.0", proto: "tcp", dport: "443", bytes: 9e8 + i * 3e7, flows: 4200 + i * 40 },
+        { exp: core.ip, s24: net24(d.ip), d24: "10.0.60.0", proto: "tcp", dport: "1433", bytes: 2e8 + i * 1e7, flows: 900 + i * 10 },
+        { exp: core.ip, s24: net24(d.ip), d24: "10.1.0.0", proto: "tcp", dport: "445", bytes: 6e7 + i * 2e6, flows: 300 + i * 4 },
+      ]),
+      fwConns: branches.slice(0, 20).flatMap((d, i) => [
+        { fw: fw.ip, zs: "BRANCHES", zd: "OUTSIDE", s24: net24(d.ip), d24: "52.96.0.0", proto: "TCP", dport: "443", bytes: 3e8 + i * 1e7, conns: 1500 + i * 20 },
+        { fw: fw.ip, zs: "OUTSIDE", zd: "DMZ", s24: "185.40.0.0", d24: "10.0.9.0", proto: "TCP", dport: "443", bytes: 4e7, conns: 200 },
+      ]),
+      fwDeny: [
+        { fw: fw.ip, zs: "OT", zd: "OUTSIDE", proto: "udp", dport: "53", denies: 48200, srcs: 7, dsts: 13 },
+        { fw: fw.ip, zs: "OUTSIDE", zd: "DMZ", proto: "tcp", dport: "22", denies: 3100, srcs: 640, dsts: 3 },
+      ],
+    };
+    const addressing = buildAddressing([{ site: "SPO1", cidr: "10.0.0.0/16" }, { site: "CPS1", cidr: "10.1.0.0/16" }], devices.map((d) => ({ site: d.site, ips: [d.ip] })));
+    return buildFlowMap((k) => (rows[k] ?? []) as Record<string, any>[], devices, addressing, sites);
+  })();
+
   return {
     demo: true,
+    flowMap: traffic,
     users,
     unmappedAlerts: outsideAlerts,
     meta: { tenant: "example", generatedAt: new Date(t0).toISOString().slice(0, 16) + "Z", thresholds: T },

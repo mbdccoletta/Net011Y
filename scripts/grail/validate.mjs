@@ -1,6 +1,6 @@
 // Feeds the generated Grail results through the app's own model code and reports what every view gets.
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings } from "./out/app-model.mjs";
 
 const R = JSON.parse(readFileSync("out/results.json", "utf8"));
 const report = { schema: {}, needs: {}, views: {}, checks: [] };
@@ -98,7 +98,8 @@ check("A drop the platform never alerted on is declared as the app's own measure
   sus.fromMeasurement === true && sus.facts.some((f) => /app's own measurement/i.test(f)),
   `fromMeasurement=${sus.fromMeasurement}`);
 // with the threshold below what the traffic did, there is nothing left to suspect from the traffic side
-const quiet = suspicionFor(model, { dropPct: 1 });
+// (sessions only: the retransmission rise is checked on its own below)
+const quiet = suspicionFor({ ...model, appNet: undefined }, { dropPct: 1 });
 check("Below the configured threshold the traffic raises no suspicion",
   quiet.kind !== "network-implicated" || outsideCounts(model).application + outsideCounts(model).service > 0,
   `${quiet.kind} · sessions ${model.users?.now}/${model.users?.typicalNow}`);
@@ -220,6 +221,71 @@ check("WAN circuits from circuit tags", (model.circuits?.length ?? 0) === 104, `
 check("Syslog tied to devices by source IP", model.devices.some((d) => d.events.some((e) => e.kind === "syslog")), "");
 check("Traps tied to devices", model.traps.filter((t) => t.device).length === model.traps.length, `${model.traps.filter((t) => t.device).length}/${model.traps.length}`);
 check("Alerts reported as a data source", needs.alerts.status === "ok", `${needs.alerts.status} · ${needs.alerts.detail}`);
+
+// real topology: CDP/LLDP neighbours from SNMP autodiscovery become links between sites
+const siteOfDev = new Map(model.devices.map((d) => [d.name, d.site]));
+const crossSite = model.links.filter((l) => l.kind === "CDP" && siteOfDev.has(l.a) && siteOfDev.has(l.b) && siteOfDev.get(l.a) !== siteOfDev.get(l.b));
+check("Neighbour discovery gives cables between sites, port to port", crossSite.length === R.neighbors.length && crossSite.every((l) => l.ifA && l.ifB),
+  `${crossSite.length}/${R.neighbors.length} · ${needs.lldp.detail}`);
+// a sysLocation left at "n/a" is no place: the autodiscovery group names the site instead, and says data center
+const mini = buildRealModel({ devices: [
+  { id: "EXT_NETWORK_DEVICE-A1", name: "PL1i-SW-1.example.org", location: "n/a", monitoring_mode: "Discovery", "autodiscovery.group_label": "EDE - Gdansk (Data Center)", ip: ["10.9.0.1"] },
+  { id: "EXT_NETWORK_DEVICE-A2", name: "PL1i-SW-2.example.org", location: "Gdansk", monitoring_mode: "Discovery", "autodiscovery.group_label": "EDE - Gdansk", ip: ["10.9.0.2"] },
+  { id: "EXT_NETWORK_DEVICE-A3", name: "AT1i-SW-1.example.org", location: "n/a", monitoring_mode: "Extension", activation_tag: "Linz Campus", ip: ["10.8.0.1"] },
+] }, "mini");
+check("Placeholder sysLocation ignored; autodiscovery labels name the site",
+  !mini.sites["n/a"] && mini.devices.filter((d) => d.site === "Gdansk").length === 2 && mini.sites.Gdansk?.dc && mini.devices.some((d) => d.site === "Linz Campus"),
+  Object.values(mini.sites).map((s) => `${s.code}${s.dc ? " [DC]" : ""}`).join(", "));
+
+// the applications feel the network: a retransmission rise right after the outage links to the burst
+const envS = suspicionFor(model, { dropPct: 50 });
+check("Retransmission rise after the outage read as the applications feeling the network",
+  envS.app?.rising && envS.kind === "network-implicated" && envS.facts.some((f) => /retransmitted since/.test(f)) && envS.app.workloads[0]?.name === "checkout-cluster",
+  `${envS.kind} · ${envS.facts.filter((f) => /retransmi/i.test(f)).join(" | ")}`);
+// the same rise with nothing open on the network is a symptom nobody alerts on, never "not the network"
+const noNet = { ...model, devices: model.devices.map((d) => ({ ...d, problems: [] })), circuits: (model.circuits ?? []).map((c) => ({ ...c, problems: [] })), unmappedAlerts: [], users: undefined };
+const qS = suspicionFor(noNet, { dropPct: 50 });
+check("Retransmissions rising with no network alert read as an unmonitored network symptom", qS.kind === "unexplained", `${qS.kind} · ${qS.headline}`);
+// and a flat level is counter-evidence, not a rise
+const flat = { ...model, appNet: { ...model.appNet, retrPct: model.appNet.retrPct.map(() => 0.02), retransmitted: model.appNet.retransmitted.map(() => 4000) } };
+const fS = suspicionFor(flat, { dropPct: 50 });
+check("Flat retransmissions stated as counter-evidence", !fS.app?.rising && fS.facts.some((f) => /at their usual level/.test(f)), fS.facts.find((f) => /usual level/.test(f)) ?? "none");
+
+// NetFlow: exporters place traffic at sites, site_cidr places the far end, findings are measurements
+const fm = model.flowMap;
+const dc1 = Object.values(model.sites).find((s) => s.dc && fm?.sites[s.code]?.fanIn.length);
+check("NetFlow places traffic between sites through exporters and site_cidr",
+  fm && fm.exporters.every((e) => e.device) && fm.pairs.length > 0 && fm.pairs.every((p) => model.sites[p.a] && model.sites[p.b]),
+  `${fm?.exporters.length} exporters · ${fm?.pairs.length} site pairs · top ${fm?.pairs[0] ? `${fm.pairs[0].a}↔${fm.pairs[0].b} ${(fm.pairs[0].bytes / 1e9).toFixed(1)} GB` : "none"} · ${needs.netflow.detail}`);
+check("Internet scan against a data center found as a fan-in, and only that one",
+  !!dc1 && fm.sites[dc1.code].fanIn[0].sources === 1500 && fm.sites[dc1.code].fanIn[0].port === "23"
+  && Object.values(fm.sites).flatMap((t) => t.fanIn).length === 1,
+  dc1 ? `${dc1.code}: ${JSON.stringify(fm.sites[dc1.code].fanIn[0])}` : "none");
+const anyTraffic = Object.entries(fm?.sites ?? {}).find(([, t]) => t.apps.length);
+check("Applications named by port and merged across protocols",
+  !!anyTraffic && new Set(anyTraffic[1].apps.map((a) => a.name ?? `${a.proto}/${a.port}`)).size === anyTraffic[1].apps.length && anyTraffic[1].apps.some((a) => a.name === "HTTPS"),
+  anyTraffic ? anyTraffic[1].apps.map((a) => a.name ?? `${a.proto}/${a.port}`).join(", ") : "none");
+
+// firewall logs join NetFlow as a source: conversations with zones, placed at the firewall's site
+const fwc = fm.conversations.filter((c) => c.source === "firewall");
+check("Firewall connection logs become placed conversations, and notable denies are named",
+  fwc.length === R.fwConns.length && fwc.every((c) => c.viaSite && c.app === "HTTPS") && fm.sources.firewall?.denies === 4240
+  && Object.values(fm.sites).some((t) => t.denies.some((d) => d.denies === 4200)) && !Object.values(fm.sites).some((t) => t.denies.some((d) => d.denies === 40 && d.port === "3389" && false)),
+  `${fwc.length} firewall groups · ${JSON.stringify(fm.sources.firewall)}`);
+// the journey keeps every byte: what leaves the sources is what reaches the destinations
+const jn = fm.journey, colBytes = (c) => jn.nodes.filter((n) => n.col === c).reduce((a, n) => a + n.bytes, 0);
+check("Traffic journey conserves bytes and folds each column to its top entries",
+  Math.abs(colBytes(0) - colBytes(2)) < 1 && Math.abs(colBytes(0) - fm.conversations.reduce((a, c) => a + c.bytes, 0)) < 1
+  && [0, 1, 2].every((c) => jn.nodes.filter((n) => n.col === c && n.kind !== "denied").length <= 7) && jn.nodes.some((n) => n.id === "denied"),
+  `${jn.nodes.length} nodes · ${jn.links.length} links · ${(colBytes(0) / 1e9).toFixed(1)} GB`);
+// no OneAgent network flows: the per-process network metrics stand in, and say so
+const pmModel = buildRealModel({ ...R, appNet: [], appNetBy: [], appNetProc: [{ timeframe: R.appNet[0].timeframe, interval: R.appNet[0].interval, pk: R.appNet[0].pk, re: R.appNet[0].re, rtt: R.appNet[0].pk.map(() => 16) }],
+  appNetProcBy: [{ "dt.host_group.id": "POC-SOAM", pk: [1e6, 1e6, 1e6, 1e6, 1e6, 1e6, 1e6], re: [75000, 74000, 76000, 75000, 74000, 75000, 76000], rtt: [16, 16, 17, 16, 16, 16, 17] }] }, "process-metrics");
+const pmS = suspicionFor(pmModel, { dropPct: 50 });
+check("Process network metrics stand in for flows, and a steady high level is named as chronic",
+  pmModel.appNet?.source === "process metrics" && pmS.app?.rising && pmS.facts.some((f) => /process network metrics/.test(f))
+  && environmentFindings(pmModel).some((x) => x.kind === "chronic-retransmission" && /POC-SOAM/.test(x.text)),
+  `${pmModel.appNet?.source} · ${environmentFindings(pmModel).filter((x) => x.kind === "chronic-retransmission").map((x) => x.text).join(" | ")}`);
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 

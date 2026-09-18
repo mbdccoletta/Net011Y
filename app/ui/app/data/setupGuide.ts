@@ -206,6 +206,18 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
     verify: "fetch logs, from:now()-1h\n| filter dt.openpipeline.source == \"extension:syslog\"\n| summarize records = count(), by:{dt.ingest.source.ip, loglevel}",
     docs: [DOCS.syslog],
   },
+  firewallLogs: {
+    uses: "The Traffic page and each site's traffic without NetFlow: who talks to whom across the firewall zones, which applications carry the bytes, and what the firewall refuses (for example thousands of DNS queries denied from a handful of hosts).",
+    source: "Firewall logs over syslog on an ActiveGate. Cisco ASA connection teardowns (%ASA-6-302014 TCP, %ASA-6-302016 UDP) name both ends, the zones and the bytes; denies (%ASA-4-106023) name what was refused.",
+    prerequisites: ["Syslog ingestion set up on an ActiveGate (see Syslog).", "Logging level informational (6) on the firewall, so connection teardowns are sent."],
+    steps: [
+      "On the ASA: logging enable, logging trap informational, logging host <zone> <ActiveGate IP>.",
+      "Keep messages 302014, 302016 and 106023 enabled (they are by default at level 6 and 4).",
+      "Monitor the firewall with the SNMP extension too, from the same address it logs from: the app then places its traffic at the firewall's site.",
+    ],
+    verify: "fetch logs, from:now()-1h\n| filter contains(content, \"-302014:\") or contains(content, \"-106023:\")\n| summarize records = count(), by:{log.source}",
+    docs: [DOCS.syslog],
+  },
   traps: {
     uses: "Device events and cause evidence (link down, BGP transitions).",
     source: "SNMP Traps extension (com.dynatrace.extension.snmp-traps-generic). Traps arrive as logs with log.source = snmptraps.",
@@ -218,11 +230,11 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
     docs: [DOCS.traps],
   },
   lldp: {
-    uses: "Topology between devices when sites have no WAN inventory.",
-    source: "neighbor-discovery feature set of the SNMP extension (LLDP and CDP).",
-    prerequisites: ["LLDP or CDP enabled on the devices."],
-    steps: ["Enable the feature set neighbor-discovery."],
-    verify: "fetch metric.series\n| filter endsWith(metric.key, \"lldp_neighbor\")\n| fields sys.name, neighbor.sys.name",
+    uses: "The routes between sites on the map. A route is drawn only where a device reports a cable to a device at another site, and it moves with the traffic measured on that port.",
+    source: "Neighbor discovery in SNMP autodiscovery (CDP and LLDP), recorded port by port.",
+    prerequisites: ["CDP or LLDP enabled on the devices, including the WAN-facing ports of the edge routers.", "SNMP autodiscovery set up for the device ranges."],
+    steps: ["In each SNMP autodiscovery configuration, turn on Neighbor discovery.", "Optionally, enable the neighbor-discovery feature set of the SNMP extension as a second source."],
+    verify: "fetch logs, from:now()-24h\n| filter log.source == \"snmp_autodiscovery\" and content == \"Neighbor discovery\"\n| summarize ports = count(), by:{dt.smartscape.ext_network_device, neighbor.device.name}",
     docs: [DOCS.snmpCisco],
   },
   routing: {
@@ -234,13 +246,14 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
     docs: [DOCS.snmpCisco],
   },
   netflow: {
-    uses: "Optional. The app already reads traffic per exporter, protocol and top talkers, but no page shows it yet.",
+    uses: "Who each site talks to and with which applications (site panel, Traffic), routes between sites on the map with their real volume, and findings such as many sources reaching one range or an exporter falling silent.",
     source: "OpenTelemetry Collector with the netflow receiver (NetFlow v5, v9, IPFIX or sFlow). Flows arrive as logs with otel.scope.name = otelcol/netflowreceiver.",
     prerequisites: ["Dynatrace OpenTelemetry Collector reachable from the exporters on UDP 2055.", "Platform token with log ingest permission."],
     steps: [
       "Deploy the collector with the configuration below.",
       "Point each router's flow export to the collector. Include the input and output interface index in the template, so flows map to interfaces (flow.in_if, flow.out_if).",
       "If exporters sample, flows carry flow.sampling_rate; volumes in the app aren't scaled by it.",
+      "Tag each site with primary_tags.site_cidr (for example 10.20.0.0/16, several separated by commas). Without it only the subnets of the devices' own addresses place a flow's far end at a site.",
     ],
     snippets: [{
       title: "Collector configuration",
@@ -268,7 +281,7 @@ service:
     docs: [DOCS.netflow],
   },
   appFlows: {
-    uses: "Application hop at the end of each site path: conversations and TCP retransmissions of the application hosts.",
+    uses: "Whether the applications feel the network: the fault domain reading compares their TCP retransmissions and round trip with the usual level, and names the workloads where they rose. Also the application hop at the end of each site path.",
     source: "OneAgent network connection monitoring. Flows are stored as events in the bucket default_network_flows.",
     prerequisites: ["OneAgent 1.337 or later on the application hosts (Linux, Windows or AIX)."],
     steps: [
@@ -352,7 +365,7 @@ export const DATA_GROUPS: { title: string; hint: string; keys: NeedKey[] }[] = [
   { title: "Reachability and WAN", hint: "Whether sites answer and how their links behave", keys: ["icmp", "wan"] },
   { title: "Alerts and events", hint: "What Dynatrace is alerting on, and what the devices report themselves", keys: ["alerts", "syslog", "traps"] },
   { title: "Topology and routing", hint: "How devices connect to each other", keys: ["lldp", "routing"] },
-  { title: "Traffic and applications", hint: "Where the traffic goes and how applications feel it", keys: ["appFlows", "netflow"] },
+  { title: "Traffic and applications", hint: "Where the traffic goes and how applications feel it", keys: ["netflow", "firewallLogs", "appFlows"] },
   { title: "User impact", hint: "Whether what the network did reached the people using the applications", keys: ["sessions", "requests"] },
   { title: "Intelligence", hint: "Explanations written by Dynatrace Intelligence", keys: ["assist"] },
 ];

@@ -24,6 +24,12 @@ const J = "com.dynatrace.extension.juniper.generic";
 const ND = "com.dynatrace.extension.network_device";
 const CIRCUIT_TAGS = "primary_tags.site, primary_tags.circuit_id, primary_tags.circuit_role, primary_tags.carrier, primary_tags.circuit_tech, primary_tags.sla_ms, primary_tags.bandwidth_mbps";
 
+/** Hours of syslog and traps read on load; the device timeline can ask for 24 h of one device. */
+export const DEVICE_LOG_HOURS = 6;
+/** The 24 h of one device, run only on request: it scans 24 h of logs like the load used to. */
+export const deviceLogs24h = (ip: string) =>
+  `fetch logs, from:now()-24h | filter dt.openpipeline.source == "extension:syslog" or log.source == "snmptraps" | fieldsAdd kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = coalesce(dt.ingest.source.ip, device.address) | filter ip == "${ip.replace(/[^0-9a-fA-F.:]/g, "")}" | makeTimeseries n = count(), by:{kind, loglevel}, interval:1h`;
+
 export const QUERIES: Record<string, NetQuery> = {
   // Open Davis problems, matched to devices by their Smartscape or classic entity id (drill-down to Problems)
   problems: {
@@ -147,41 +153,76 @@ export const QUERIES: Record<string, NetQuery> = {
     query: `timeseries {rtt=avg(dt.synthetic.multi_protocol.icmp.round_trip_time), sent=sum(dt.synthetic.multi_protocol.icmp.packets_sent), recv=sum(dt.synthetic.multi_protocol.icmp.packets_received)}, by:{request.target_address, monitor.name, dt.entity.multiprotocol_monitor, dt.entity.synthetic_location, ${CIRCUIT_TAGS}}, from:now()-2h, interval:5m`,
     maxResultRecords: 40000,
   },
-  syslogSum: {
-    query: 'fetch logs, from:now()-24h | filter dt.openpipeline.source == "extension:syslog" | summarize n=count(), by:{ip=dt.ingest.source.ip, loglevel}',
-    maxResultRecords: 5000,
+  // What the devices say about themselves: syslog and SNMP traps read once over the last DEVICE_LOG_HOURS,
+  // counted per device, kind and level in 15-minute steps (the device timeline and the counters), and once
+  // over 3 h for the latest records themselves. Grail bills the whole window whatever the filter, so the
+  // 24 h view of one device is read only when someone asks for it (deviceLogs24h).
+  deviceLogs: {
+    query: 'fetch logs, from:now()-6h | filter dt.openpipeline.source == "extension:syslog" or log.source == "snmptraps" | fieldsAdd kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = coalesce(dt.ingest.source.ip, device.address) | makeTimeseries n = count(), by:{ip, kind, loglevel}, interval:15m',
+    maxResultRecords: 10000,
   },
-  syslogTs: {
-    query: 'fetch logs, from:now()-24h | filter dt.openpipeline.source == "extension:syslog" and loglevel == "ERROR" | makeTimeseries n=count(), by:{ip=dt.ingest.source.ip}, interval:1h',
-    maxResultRecords: 5000,
-  },
-  syslogRecent: {
-    query: 'fetch logs, from:now()-3h | filter dt.openpipeline.source == "extension:syslog" and dt.ingest.source.ip != "127.0.0.1" | sort timestamp desc | fields timestamp, ip=dt.ingest.source.ip, loglevel, app=syslog.appname, content | limit 1000',
-    maxResultRecords: 1000,
-  },
-  traps: {
-    query: 'fetch logs, from:now()-24h | filter log.source == "snmptraps" | sort timestamp desc | fields timestamp, device.address, snmp.trap_oid, content | limit 300',
-    maxResultRecords: 300,
+  deviceLogsRecent: {
+    query: 'fetch logs, from:now()-3h | filter (dt.openpipeline.source == "extension:syslog" and dt.ingest.source.ip != "127.0.0.1") or log.source == "snmptraps" | sort timestamp desc | fields timestamp, kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = coalesce(dt.ingest.source.ip, device.address), loglevel, app = syslog.appname, oid = snmp.trap_oid, content | limit 2000',
+    maxResultRecords: 2000,
   },
   lldp: {
     query: 'fetch metric.series | filter endsWith(metric.key, "lldp_neighbor") | fields sys.name, neighbor.sys.name, neighbor.port.id',
     maxResultRecords: 2000,
+  },
+  // who is cabled to whom: the CDP/LLDP neighbours the SNMP autodiscovery records port by port, every hour
+  neighbors: {
+    query: 'fetch logs, from:now()-2h | filter log.source == "snmp_autodiscovery" and content == "Neighbor discovery" | summarize seen = max(timestamp), by:{dt.smartscape.ext_network_device, dt.smartscape.ext_network_interface, base.interface.name, neighbor.ext_network_device, neighbor.device.name, neighbor.interface.name, neighbor.protocol}',
+    maxResultRecords: 20000,
   },
   routing: {
     query: 'fetch metric.series | filter contains(metric.key, "cbgp.peer") or contains(metric.key, "ospf.nbr") | fields metric.key, sys.name, cbgp.remote.identifier, cbgp.remote.as, cbgp.peer.state, ospf.nbr.ip.addr, ospf.nbr.state',
     maxResultRecords: 2000,
   },
   flowTs: {
-    query: 'fetch logs, from:now()-2h | filter otel.scope.name == "otelcol/netflowreceiver" | makeTimeseries flows=count(), by:{exp=flow.sampler_address}, interval:5m',
+    query: 'fetch logs, from:now()-70m | filter otel.scope.name == "otelcol/netflowreceiver" | makeTimeseries flows=count(), by:{exp=flow.sampler_address}, interval:5m',
     maxResultRecords: 500,
   },
-  flowProto: {
-    query: 'fetch logs, from:now()-1h | filter otel.scope.name == "otelcol/netflowreceiver" | summarize gb=sum(toLong(flow.io.bytes))/1e9, flows=count(), by:{exp=flow.sampler_address, proto=network.transport} | sort flows desc | limit 100',
-    maxResultRecords: 100,
+  // who talks to whom: the last hour of NetFlow by exporter and /24 at each end, heaviest first
+  flowNets: {
+    query: 'fetch logs, from:now()-1h | filter otel.scope.name == "otelcol/netflowreceiver" | fieldsAdd s24 = ipMask(source.address, 24), d24 = ipMask(destination.address, 24) | summarize bytes = sum(toLong(flow.io.bytes)), flows = count(), by:{exp = flow.sampler_address, s24, d24, proto = network.transport, dport = destination.port} | sort bytes desc | limit 5000',
+    maxResultRecords: 5000,
   },
-  flowTop: {
-    query: 'fetch logs, from:now()-1h | filter otel.scope.name == "otelcol/netflowreceiver" | summarize gb=sum(toLong(flow.io.bytes))/1e9, flows=count(), by:{exp=flow.sampler_address, src=source.address, dst=destination.address, proto=network.transport, dport=destination.port} | sort gb desc | limit 60',
-    maxResultRecords: 60,
+  // many talking to one: a range reached from an unusual number of distinct Internet sources (a busy
+  // internal service reached by every branch is normal, so private sources are left out)
+  flowFanIn: {
+    query: 'fetch logs, from:now()-1h | filter otel.scope.name == "otelcol/netflowreceiver" | filter not(ipIn(source.address, array("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10"))) | summarize srcs = countDistinct(source.address), dsts = countDistinct(destination.address), bytes = sum(toLong(flow.io.bytes)), flows = count(), by:{exp = flow.sampler_address, dst = ipMask(destination.address, 24), dport = destination.port} | filter srcs >= 100 | sort srcs desc | limit 20',
+    maxResultRecords: 20,
+  },
+  // Firewall connection logs (Cisco ASA over syslog): a closed connection carries both ends, the zones
+  // and the bytes, so a firewall is a flow exporter the customer already has. The ASA orders the ends by
+  // interface security, not by who called: the lower port is read as the service, and its end as the server
+  fwConns: {
+    query: 'fetch logs, from:now()-1h | filter startsWith(log.source, "/syslog/") and (contains(content, "-302014:") or contains(content, "-302016:")) | parse content, "LD \'Teardown \' WORD:proto LD \' for \' LD:za \':\' IPADDR:a \'/\' INT:pa \' to \' LD:zb \':\' IPADDR:b \'/\' INT:pb LD \' bytes \' LONG:bytes" | filter isNotNull(bytes) | fieldsAdd fw = splitString(log.source, "/")[2], srvA = pa < pb | fieldsAdd zs = if(srvA, zb, else:za), zd = if(srvA, za, else:zb), src = if(srvA, b, else:a), dst = if(srvA, a, else:b), dport = if(srvA, pa, else:pb) | summarize bytes = sum(bytes), conns = count(), by:{fw, zs, zd, s24 = ipMask(src, 24), d24 = ipMask(dst, 24), proto, dport} | sort bytes desc | limit 5000',
+    maxResultRecords: 5000,
+  },
+  // what the firewalls refuse, by zone pair and port, with how many hosts are trying
+  fwDeny: {
+    query: 'fetch logs, from:now()-1h | filter startsWith(log.source, "/syslog/") and contains(content, "-106023:") | parse content, "LD \'Deny \' WORD:proto \' src \' LD:zs \':\' IPADDR:src \'/\' INT \' dst \' LD:zd \':\' IPADDR:dst \'/\' INT:dport" | fieldsAdd fw = splitString(log.source, "/")[2] | summarize denies = count(), srcs = countDistinct(src), dsts = countDistinct(dst), by:{fw, zs, zd, proto, dport} | sort denies desc | limit 200',
+    maxResultRecords: 200,
+  },
+  // how the network feels from the applications: TCP retransmissions and round trip, every 10 minutes
+  appNet: {
+    query: 'fetch events, from:now()-8h, bucket:{"default_network_flows"} | fieldsAdd pk = toLong(network_flow.packets.tx) + toLong(network_flow.packets.rx), re = toLong(network_flow.packets.retransmitted.tx) + toLong(network_flow.packets.retransmitted.rx), rtt = if(toLong(network_flow.tcp.rtt) > 0, toLong(network_flow.tcp.rtt)) | makeTimeseries {pk = sum(pk), re = sum(re), rtt = percentile(rtt, 90), conv = count()}, interval:10m',
+    maxResultRecords: 10,
+  },
+  // where OneAgent network flows are not enabled, the classic per-process network metrics say the same
+  appNetProc: {
+    query: 'timeseries {pk = sum(dt.process.network.packets.tx), re = sum(dt.process.network.packets.re_tx), rtt = avg(dt.process.network.round_trip)}, from:now()-8h, interval:10m',
+    maxResultRecords: 10,
+  },
+  appNetProcBy: {
+    query: 'timeseries {pk = sum(dt.process.network.packets.tx), re = sum(dt.process.network.packets.re_tx), rtt = avg(dt.process.network.round_trip)}, by:{dt.host_group.id}, from:now()-7h, interval:1h | sort arraySum(pk) desc | limit 200',
+    maxResultRecords: 200,
+  },
+  // the same, per workload (cluster, host group or host): the last hour against the six before it
+  appNetBy: {
+    query: 'fetch events, from:now()-7h, bucket:{"default_network_flows"} | fieldsAdd pk = toLong(network_flow.packets.tx) + toLong(network_flow.packets.rx), re = toLong(network_flow.packets.retransmitted.tx) + toLong(network_flow.packets.retransmitted.rx), rtt = if(toLong(network_flow.tcp.rtt) > 0, toLong(network_flow.tcp.rtt)), recent = timestamp >= now() - 1h, grp = coalesce(k8s.cluster.name, dt.host_group.id, host.name) | summarize pk = sum(pk), re = sum(re), rtt = percentile(rtt, 90), conv = count(), by:{grp, recent} | sort conv desc | limit 200',
+    maxResultRecords: 200,
   },
   cloud: {
     query: 'fetch events, from:now()-24h, bucket:{"default_network_flows"} | summarize conv=count(), hosts=countDistinct(dt.smartscape.host), procs=countDistinct(dt.smartscape.process), bytes=sum(toLong(network_flow.bytes.tx)+toLong(network_flow.bytes.rx)), retr=sum(toLong(network_flow.packets.retransmitted.tx)+toLong(network_flow.packets.retransmitted.rx)), pkts=sum(toLong(network_flow.packets.tx)+toLong(network_flow.packets.rx)), by:{cluster=k8s.cluster.name, cloud=cloud.provider}',

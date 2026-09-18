@@ -3,13 +3,59 @@
 import React from "react";
 import { Accordion, CodeSnippet, HealthIndicator } from "@dynatrace/strato-components/content";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { Select } from "@dynatrace/strato-components/forms";
+import { Select, TextInput } from "@dynatrace/strato-components/forms";
 import { ExternalLink, Heading, List, Paragraph, Strong, Text } from "@dynatrace/strato-components/typography";
 import type { Need, NeedKey, NeedStatus } from "../data/requirements";
 import { APP_PERMISSIONS, DATA_GROUPS, PAGE_NEEDS, SETUP } from "../data/setupGuide";
 import { openNotebook } from "../utils/drilldown";
 import { useDropThreshold, setDropThreshold } from "../hooks/useDropThreshold";
 import { DEFAULT_DROP_PCT } from "../model/suspicion";
+import { parseBuckets, setLogBuckets, useLogBuckets } from "../hooks/useLogBucket";
+import { SOURCE_RECHECK_MS, type SourceGroup } from "../data/useNetwork";
+
+const SOURCE_LABEL: Record<SourceGroup, string> = {
+  netflow: "NetFlow / IPFIX", firewall: "Firewall connection logs", deviceLogs: "Syslog and SNMP traps",
+  neighbors: "CDP / LLDP neighbours", oneagentFlows: "OneAgent network flows",
+};
+
+/**
+ * What the app reads and what it costs. Log and event queries are billed by what Grail scans, so the app
+ * skips sources it found empty and can be pointed at the buckets that hold the network's logs.
+ */
+export function QueryCostSection({ absent, onRecheck }: { absent: Partial<Record<SourceGroup, number>>; onRecheck: () => void }) {
+  const buckets = useLogBuckets();
+  const [draft, setDraft] = React.useState(buckets.join(", "));
+  React.useEffect(() => { setDraft(buckets.join(", ")); }, [buckets]);
+  const empty = (Object.keys(absent) as SourceGroup[]).filter((g) => absent[g] != null);
+  const clock = (t: number) => new Date(t).toISOString().slice(11, 16);
+  const parsed = parseBuckets(draft);
+  return (
+    <section className="ds-block" aria-labelledby="ds-cost">
+      <Heading level={5} id="ds-cost">What the app reads</Heading>
+      <Text textStyle="small">
+        Queries on logs and events are billed by the data Grail scans, not by what they return, and a filter still reads its
+        field across every log of the window. The app reads each optional source once; a source that comes back empty is not
+        read again for {SOURCE_RECHECK_MS / 3600000} hours.
+      </Text>
+      {empty.length > 0 ? (
+        <List>
+          {empty.map((g) => <Text key={g}>{SOURCE_LABEL[g]} — nothing found at {clock(absent[g]!)} UTC, read again after {clock(absent[g]! + SOURCE_RECHECK_MS)} UTC</Text>)}
+        </List>
+      ) : <Text textStyle="small">Every optional source is read on each load.</Text>}
+      {empty.length > 0 && <div><Button onClick={onRecheck}>Check again now</Button></div>}
+      <Heading level={6} id="ds-buckets">Buckets that hold the network logs</Heading>
+      <Text textStyle="small">
+        When OpenPipeline routes syslog, traps, NetFlow, firewall and SNMP autodiscovery records to buckets of their own, name them
+        here: every log query then reads only those buckets instead of all logs. Leave empty to read all log buckets.
+      </Text>
+      <div className="ds-row">
+        <TextInput value={draft} onChange={(v: string) => setDraft(v)} placeholder="for example network_logs, firewall_logs" aria-labelledby="ds-buckets" />
+        <Button variant="emphasized" disabled={parsed.join(",") === buckets.join(",")} onClick={() => setLogBuckets(parsed)}>Save</Button>
+      </div>
+      {draft.trim() && parsed.length === 0 && <Text textStyle="small">Bucket names use lower-case letters, digits, dashes and underscores.</Text>}
+    </section>
+  );
+}
 
 const STATUS: Record<NeedStatus, { status: "ideal" | "good" | "neutral" | "warning" | "critical"; label: string }> = {
   ok: { status: "ideal", label: "Received" },
@@ -20,7 +66,7 @@ const STATUS: Record<NeedStatus, { status: "ideal" | "good" | "neutral" | "warni
   manual: { status: "neutral", label: "Checked when used" },
 };
 
-const ORDER: NeedKey[] = ["alerts", "devices", "sites", "interfaces", "traffic", "cpu", "availability", "icmp", "wan", "syslog", "traps", "lldp", "routing", "appFlows", "netflow", "sessions", "requests", "assist"];
+const ORDER: NeedKey[] = ["alerts", "devices", "sites", "interfaces", "traffic", "cpu", "availability", "icmp", "wan", "syslog", "traps", "lldp", "routing", "netflow", "firewallLogs", "appFlows", "sessions", "requests", "assist"];
 
 function NeedStatusIndicator({ need }: { need: Need }) {
   const s = STATUS[need.status];

@@ -9,7 +9,7 @@
 // what the platform itself is alerting on (application, service, host) plus the traffic the users are
 // actually generating. The app shows no detail of anything outside the network: it counts it, says
 // whether the two coincide, and hands the analysis to Dynatrace Assist.
-import type { DeviceProblem, NetworkModel, NonNetworkScope, Users } from "./types";
+import type { AppNetwork, DeviceProblem, NetworkModel, NonNetworkScope, Users } from "./types";
 import type { SiteInfo } from "./site";
 import { openProblems } from "./verdict";
 
@@ -33,9 +33,57 @@ export const LINK_WINDOW_MIN = 30;
  */
 export const BURST_FACTOR = 3;
 
+/**
+ * The applications feel the network before anyone looks at a switch: TCP retransmissions measured by
+ * OneAgent. A rise is read against the environment's own usual level (fxz0998d: about 0.016% of packets;
+ * a single AKS cluster: 0.1%), never against a fixed number, and only once enough packets are
+ * retransmitted to be more than noise.
+ */
+export const RETR_FACTOR = 2;
+export const RETR_MIN_PACKETS = 50;
+export const RTT_FACTOR = 1.5;
+
+export interface AppRise {
+  rising: boolean;
+  /** start of the first 10-minute bucket of the rise, when rising */
+  startAt: number | null;
+  now: number | null;
+  usual: number | null;
+  rttNow: number | null;
+  rttUsual: number | null;
+  rttRising: boolean;
+  /** workloads whose retransmissions in the last hour are at least RETR_FACTOR times their usual */
+  workloads: { name: string; now: number; usual: number }[];
+}
+
+const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : null; };
+
+/** Is the share of retransmitted packets the applications see rising right now, against its usual level? */
+export function appRise(a: AppNetwork | undefined): AppRise | null {
+  if (!a || a.retrPct.length < 8) return null;
+  const last = a.retrPct.length - 2; // the last bucket is still filling
+  const baseIdx = (end: number) => Array.from({ length: 36 }, (_, k) => end - 3 - k).filter((k) => k >= 0);
+  const usualOf = (xs: (number | null)[], end: number) => median(baseIdx(end).map((k) => xs[k]).filter((v): v is number => v != null));
+  const usual = usualOf(a.retrPct, last);
+  const high = (k: number) => usual != null && a.retrPct[k] != null && (a.retrPct[k] as number) >= Math.max(RETR_FACTOR * usual, usual + 0.001) && (a.retransmitted[k] ?? 0) >= RETR_MIN_PACKETS;
+  let k = last;
+  const rising = high(last);
+  if (rising) while (k > 0 && high(k - 1)) k--;
+  const rttUsual = usualOf(a.rttMs, last), rttNow = a.rttMs[last] ?? null;
+  return {
+    rising, startAt: rising ? a.start + k * a.interval : null, now: a.retrPct[last] ?? null, usual,
+    rttNow, rttUsual, rttRising: rttNow != null && rttUsual != null && rttNow >= RTT_FACTOR * rttUsual,
+    workloads: a.workloads
+      .filter((w) => w.retrNow != null && w.retrUsual != null && w.retrNow >= RETR_FACTOR * w.retrUsual && w.retrNow > 0)
+      .map((w) => ({ name: w.name, now: w.retrNow as number, usual: w.retrUsual as number }))
+      .sort((x, y) => y.now / Math.max(y.usual, 1e-6) - x.now / Math.max(x.usual, 1e-6)).slice(0, 3),
+  };
+}
+
 export type SuspicionKind =
   | "network-implicated"  // users or other domains degraded, and the network is alerting here too
   | "not-network"         // degraded, and nothing is alerting on the network
+  | "unexplained"         // the applications feel the network (retransmissions), and no network alert explains it
   | "contained"           // the network is alerting, and nothing outside it shows anything
   | "watching"            // nothing to suspect
   | "blind";              // no way to tell: no session data and no non-network alert
@@ -65,6 +113,8 @@ export interface Suspicion {
   siteSessions?: number;
   /** the burst of network alerts that came just before an impact, when the reading found one */
   burst?: { from: number; to: number; opened: number; usual: number; followedBy: string; at: number };
+  /** the network as the applications feel it (OneAgent flows), environment-wide */
+  app?: AppRise;
 }
 
 const EMPTY_OUTSIDE: Record<NonNetworkScope, number> = { application: 0, service: 0, host: 0, other: 0 };
@@ -155,10 +205,23 @@ export function suspicionFor(
     facts.push(`No client subnet matches a site (${users.total} sessions), so this is the whole environment, not one site`);
   }
 
+  // how the applications feel the network: OneAgent sees every TCP retransmission, whatever caused it
+  const app = appRise(model.appNet) ?? undefined;
+  const hhmmZ = (t: number) => `${new Date(t).toISOString().slice(11, 16)}Z`;
+  const pctTxt = (v: number | null) => (v == null ? "?" : `${v < 0.1 ? v.toFixed(3) : v.toFixed(2)}%`);
+  if (app?.rising) {
+    facts.push(`Applications see ${pctTxt(app.now)} of their TCP packets retransmitted since ${hhmmZ(app.startAt!)}, against a usual ${pctTxt(app.usual)} (OneAgent ${model.appNet!.source === "flows" ? "network flows" : "process network metrics"}, whole environment)`);
+    if (app.workloads.length) facts.push(`Retransmissions rose most on ${app.workloads.map((w) => `${w.name} (${pctTxt(w.now)}, usually ${pctTxt(w.usual)})`).join(", ")}`);
+  } else if (app && network) {
+    facts.push(`Applications see TCP retransmissions at their usual level (${pctTxt(app.now)}, usually ${pctTxt(app.usual)}): the network alerts are not reaching them`);
+  }
+  if (app?.rttRising) facts.push(`Round trip seen by the applications at ${app.rttNow} ms (${model.appNet!.rttKind === "p90" ? "90th percentile" : "average"}), against a usual ${app.rttUsual} ms`);
+  const appImpact = !site && !!app?.rising;
+
   // Alerts outside the network are not tied to a site (the app has no way to place them), so they only
   // make the ENVIRONMENT degraded. A site reading counts them as context, never as this site's impact —
   // otherwise every site in the list would read "not the network" off one database alarm somewhere else.
-  const impact = site ? drop.dropped : drop.dropped || outsideOpen > 0;
+  const impact = site ? drop.dropped : drop.dropped || outsideOpen > 0 || appImpact;
 
   // When did the impact begin, and did a network alert open just before it?
   let burst: Suspicion["burst"];
@@ -170,6 +233,7 @@ export function suspicionFor(
   const impacts = [
     ...(site ? [] : outsideList.map((a) => ({ t: ts(a.start), after: 5 * 60000, what: `${a.name} (${a.scope})` }))),
     ...(Number.isFinite(dropStart) ? [{ t: dropStart, after: 3600000, what: `the fall in ${drop.source === "requests" ? "requests" : "sessions"}` }] : []),
+    ...(appImpact ? [{ t: app!.startAt!, after: model.appNet!.interval, what: "the rise in TCP retransmissions" }] : []),
   ];
   const netStarts = netProblems.map((p) => ts(p.start)).filter((t) => Number.isFinite(t));
   const W = LINK_WINDOW_MIN * 60000;
@@ -196,7 +260,11 @@ export function suspicionFor(
     burst = { from: b.t - W, to: b.t + b.after, opened: b.inWindow, usual: b.usual, followedBy: b.what, at: b.t };
   }
   if (site && outsideOpen) facts.push(`The ${outsideOpen} alert(s) outside the network are counted for the whole environment; none can be tied to this site`);
+  // retransmissions are a network symptom: when they are the only thing degraded and no network alert
+  // explains them, the network is not ruled out — it is unmonitored where it hurts
+  const onlyApp = appImpact && !drop.dropped && outsideOpen === 0;
   const kind: SuspicionKind = impact && network && linked ? "network-implicated"
+    : onlyApp || (appImpact && !linked && !network) ? "unexplained"
     : impact ? "not-network"
     : network ? "contained"
     : !users && !outsideOpen ? "blind"
@@ -204,17 +272,21 @@ export function suspicionFor(
 
   const where = site ? site.site.name : "this environment";
   const qualifier = site ? " (traffic is counted for the whole environment)" : "";
+  // the burst came first, but the applications never felt it: said in the same line, not buried in the facts
+  const unfelt = kind === "network-implicated" && !!app && !app.rising && !drop.dropped;
   const headline = kind === "network-implicated"
-    ? `Suspicion: a burst of network alerts came just before what is degraded in ${where}${qualifier}`
+    ? `Suspicion: a burst of network alerts came just before what is degraded in ${where}${qualifier}${unfelt ? " — yet the applications' TCP retransmissions stayed at their usual level, so it may be coincidence" : ""}`
     : kind === "not-network"
     ? network
       ? `Suspicion: what is degraded in ${where} did not start with any network alert — look outside the network`
       : `Suspicion: ${where} is degraded with nothing open on the network — look outside it`
+    : kind === "unexplained"
+    ? `Suspicion: the applications in ${where} feel the network (more TCP retransmissions) and no network alert explains it — a segment nobody monitors, or the hosts themselves`
     : kind === "contained"
     ? `The network problem in ${where} is not showing up in traffic or in any other domain`
     : kind === "blind"
     ? `Nothing to compare in ${where}: no user sessions and nothing alerting outside the network`
     : `Nothing suspicious in ${where}`;
 
-  return { kind, headline, facts, scope, site: site?.code, outside, network, trafficScope, siteSessions, burst, fromMeasurement: drop.dropped && !(users?.anomalyWatched ?? false) };
+  return { kind, headline, facts, scope, site: site?.code, outside, network, trafficScope, siteSessions, burst, app, fromMeasurement: drop.dropped && !(users?.anomalyWatched ?? false) };
 }

@@ -63,6 +63,7 @@ const siteTags = (s) => ({
   "primary_tags.site": s.code, "primary_tags.site_name": s.name, "primary_tags.site_type": s.dc ? "datacenter" : "branch",
   "primary_tags.region": s.region, "primary_tags.state": s.uf, "primary_tags.city": s.city,
   "primary_tags.geo_lat": String(s.lat), "primary_tags.geo_lon": String(s.lon), "primary_tags.hub": s.hub ?? s.code,
+  "primary_tags.site_cidr": `${s.net}.0.0/16`,
 });
 const circuitTags = (c) => ({
   "primary_tags.site": c.site, "primary_tags.circuit_id": c.circuit_id, "primary_tags.circuit_role": c.kind, "primary_tags.carrier": c.carrier,
@@ -275,23 +276,65 @@ const makeTs = (recs, key, bucket, n) => [...groupBy(recs, key)].map(([k, rs]) =
 
 results.devices = deviceNodes;
 results.interfaces = ifaceNodes;
-results.syslogSum = [...groupBy(within(syslog, 24), (r) => `${r["dt.ingest.source.ip"]}|${r.loglevel}`)].map(([k, rs]) => ({ ip: k.split("|")[0], loglevel: k.split("|")[1], n: S(rs.length) }));
-results.syslogTs = makeTs(within(syslog, 24).filter((r) => r.loglevel === "ERROR"), (r) => r["dt.ingest.source.ip"], B1H, N1H).map(([ip, n]) => ({ interval: S(B1H * 1e6), ip, n: n.map(S), timeframe: tf(B1H, N1H).timeframe }));
-results.syslogRecent = within(syslog, 3).sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 1000).map((r) => ({ app: r["syslog.appname"], content: r.content, ip: r["dt.ingest.source.ip"], loglevel: r.loglevel, timestamp: r.timestamp }));
-results.traps = within(traps, 24).sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 300).map((r) => ({ content: r.content, "device.address": r["device.address"], "snmp.trap_oid": r["snmp.trap_oid"], timestamp: r.timestamp }));
+// syslog and traps, read the way the app reads them: counted per device, kind and level every 15 minutes
+// over 6 h, and the latest records of the last 3 h
+const B15 = 15 * 60e3, N15 = 24;
+const logs6 = [...within(syslog, 6).map((r) => ({ ...r, kind: "syslog", ip: r["dt.ingest.source.ip"] })), ...within(traps, 6).map((r) => ({ ...r, kind: "trap", ip: r["device.address"], loglevel: r.loglevel ?? "INFO" }))];
+results.deviceLogs = [...groupBy(logs6, (r) => `${r.ip}|${r.kind}|${r.loglevel}`)].map(([k, rs]) => {
+  const [ip, kind, loglevel] = k.split("|");
+  const series = makeTs(rs, () => "x", B15, N15)[0]?.[1] ?? [];
+  return { ip, kind, loglevel, n: series.map(S), ...tf(B15, N15) };
+});
+results.deviceLogsRecent = [...within(syslog, 3).map((r) => ({ timestamp: r.timestamp, kind: "syslog", ip: r["dt.ingest.source.ip"], loglevel: r.loglevel, app: r["syslog.appname"], oid: null, content: r.content })),
+  ...within(traps, 3).map((r) => ({ timestamp: r.timestamp, kind: "trap", ip: r["device.address"], loglevel: "INFO", app: null, oid: r["snmp.trap_oid"], content: r.content }))]
+  .sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 2000);
 const cisco = (k) => `com.dynatrace.extension.snmp-generic-cisco-device.${k}`;
 results.lldp = devices.flatMap((d) => {
   const up = d.role === "APW" || d.role === "FWL" ? devices.find((x) => x.site === d.site && x.role === "SWT") : d.role === "SWT" ? devices.find((x) => x.site === d.site && (x.role === "RTR" || x.role === "CON")) : null;
   return up ? [{ "neighbor.port.id": `Gi1/0/${int(1, 24)}`, "neighbor.sys.name": up.name, "sys.name": d.name }] : [];
 });
+// each branch router reports its WAN-facing neighbour at the hub over CDP, as SNMP autodiscovery records it
+results.neighbors = devices.filter((d) => d.role === "RTR" && d.site.hub && hubCore(d.site.hub)).map((d, i) => ({
+  "base.interface.name": "GigabitEthernet0/0/0", "dt.smartscape.ext_network_device": d.id, "dt.smartscape.ext_network_interface": null,
+  "neighbor.device.name": hubCore(d.site.hub).name, "neighbor.ext_network_device": hubCore(d.site.hub).id, "neighbor.interface.name": `TenGigabitEthernet1/1/${(i % 8) + 1}`,
+  "neighbor.protocol": "cdp", seen: iso(NOW - 20 * 60e3),
+}));
 results.routing = [
   ...devices.filter((d) => d.role === "RTR").map((d) => ({ "cbgp.peer.state": outage.includes(d.site.code) ? "idle(1)" : "established(6)", "cbgp.remote.as": "65000", "cbgp.remote.identifier": hubCore(d.site.hub).ip, "metric.key": cisco("cbgp.peer.state"), "ospf.nbr.ip.addr": null, "ospf.nbr.state": null, "sys.name": d.name })),
   ...DCS.map((dc) => ({ "cbgp.peer.state": null, "cbgp.remote.as": null, "cbgp.remote.identifier": null, "metric.key": cisco("ospf.nbr.state"), "ospf.nbr.ip.addr": `${dc.net}.1.2`, "ospf.nbr.state": "full(8)", "sys.name": `BR-SP-${dc.code}-CON1` })),
 ];
+// a scan from the Internet against the main data center: 1500 distinct public sources, one range, one port
+const DC1 = devices.find((d) => d.role === "CON" && d.site.dc);
+for (let i = 0; i < 1500; i++) netflow.push({ "otel.scope.name": "otelcol/netflowreceiver", "flow.type": "netflow_v9", "flow.sampler_address": DC1.ip, "flow.in_if": "1", "flow.out_if": "2", "flow.io.bytes": "120", "network.transport": "tcp", "source.address": `185.${40 + (i % 50)}.${Math.floor(i / 50)}.${1 + (i % 200)}`, "destination.address": `${DC1.site.net}.9.${1 + (i % 40)}`, "destination.port": "23", timestamp: iso(NOW - uni(5, 50) * 60e3) });
 const nf2 = within(netflow, 2), nf1 = within(netflow, 1);
+const mask24 = (ip) => `${ip.split(".").slice(0, 3).join(".")}.0`;
+const isPriv = (ip) => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/.test(ip);
+results.flowNets = [...groupBy(nf1, (r) => [r["flow.sampler_address"], mask24(r["source.address"]), mask24(r["destination.address"]), r["network.transport"], r["destination.port"]].join("|"))]
+  .map(([k, rs]) => { const [exp, s24, d24, proto, dport] = k.split("|"); return { exp, s24, d24, proto, dport, bytes: rs.reduce((a, r) => a + +r["flow.io.bytes"], 0), flows: S(rs.length) }; }).sort((a, b) => b.bytes - a.bytes).slice(0, 5000);
+// the data center firewall logs its connections and denies over syslog (Cisco ASA), already aggregated
+const FW1 = devices.find((d) => d.role === "FWL" && d.site.dc);
+results.fwConns = sites.filter((s) => !s.dc).slice(0, 12).flatMap((s, i) => [
+  { fw: FW1.ip, zs: "BRANCHES", zd: "DC-APPS", s24: `${s.net}.30.0`, d24: `${FW1.site.net}.50.0`, proto: "TCP", dport: "443", bytes: 4e8 + i * 1e7, conns: S(900 + i) },
+  { fw: FW1.ip, zs: "BRANCHES", zd: "OUTSIDE", s24: `${s.net}.30.0`, d24: "52.96.0.0", proto: "TCP", dport: "443", bytes: 1e8 + i * 5e6, conns: S(300 + i) },
+]);
+results.fwDeny = [
+  { fw: FW1.ip, zs: "OT", zd: "OUTSIDE", proto: "udp", dport: "53", denies: S(4200), srcs: S(9), dsts: S(4) },
+  { fw: FW1.ip, zs: "BRANCHES", zd: "DC-APPS", proto: "tcp", dport: "3389", denies: S(40), srcs: S(2), dsts: S(1) },
+];
+results.flowFanIn = [...groupBy(nf1.filter((r) => !isPriv(r["source.address"])), (r) => [r["flow.sampler_address"], mask24(r["destination.address"]), r["destination.port"]].join("|"))]
+  .map(([k, rs]) => { const [exp, dst, dport] = k.split("|"); return { exp, dst, dport, srcs: S(new Set(rs.map((r) => r["source.address"])).size), dsts: S(new Set(rs.map((r) => r["destination.address"])).size), bytes: rs.reduce((a, r) => a + +r["flow.io.bytes"], 0), flows: S(rs.length) }; })
+  .filter((r) => r.srcs >= 100).sort((a, b) => b.srcs - a.srcs).slice(0, 20);
 results.flowTs = makeTs(nf2, (r) => r["flow.sampler_address"], B5, N5).map(([exp, flows]) => ({ exp, flows: flows.map((v) => v ?? 0), ...tf(B5, N5) })).slice(0, 500);
-results.flowProto = [...groupBy(nf1, (r) => `${r["flow.sampler_address"]}|${r["network.transport"]}`)].map(([k, rs]) => ({ exp: k.split("|")[0], flows: S(rs.length), gb: String(rs.reduce((a, r) => a + +r["flow.io.bytes"], 0) / 1e9), proto: k.split("|")[1] })).sort((a, b) => b.flows - a.flows).slice(0, 100);
-results.flowTop = [...groupBy(nf1, (r) => [r["flow.sampler_address"], r["source.address"], r["destination.address"], r["network.transport"], r["destination.port"]].join("|"))].map(([k, rs]) => { const [exp, src, dst, proto, dport] = k.split("|"); return { dport, dst, exp, flows: S(rs.length), gb: String(rs.reduce((a, r) => a + +r["flow.io.bytes"], 0) / 1e9), proto, src }; }).sort((a, b) => b.gb - a.gb).slice(0, 60);
+// what the applications feel: TCP retransmissions every 10 minutes for 8 hours, about 0.02% of packets,
+// rising five-fold from the first bucket after the carrier outage began
+const B10 = 600e3, N10 = 48, T10 = Math.floor(Date.now() / B10) * B10 - (N10 - 1) * B10;
+const pk10 = Array.from({ length: N10 }, (_, i) => 2e7 + ((i * 7919) % 11) * 1e5);
+const re10 = pk10.map((p, i) => Math.round(p * (T10 + i * B10 >= OUTAGE_SINCE ? 0.001 : 0.0002)));
+results.appNet = [{ timeframe: { start: iso(T10), end: iso(T10 + N10 * B10) }, interval: S(B10 * 1e6), pk: pk10, re: re10, rtt: pk10.map((_, i) => (T10 + i * B10 >= OUTAGE_SINCE ? 9e6 : 3e6)), conv: pk10.map(() => 30000) }];
+results.appNetBy = [
+  { grp: "checkout-cluster", recent: true, pk: 2e7, re: 30000, rtt: 9e6, conv: "12000" }, { grp: "checkout-cluster", recent: false, pk: 1.2e8, re: 24000, rtt: 3e6, conv: "70000" },
+  { grp: "payments-hosts", recent: true, pk: 5e6, re: 500, rtt: 3e6, conv: "4000" }, { grp: "payments-hosts", recent: false, pk: 3e7, re: 3000, rtt: 3e6, conv: "24000" },
+];
 results.cloud = [...groupBy(flowsOA, (r) => `${r["k8s.cluster.name"]}|${r["cloud.provider"]}`)].map(([k, rs]) => ({ bytes: S(rs.reduce((a, r) => a + +r["network_flow.bytes.tx"] + +r["network_flow.bytes.rx"], 0)), cloud: null, cluster: k.split("|")[0], conv: S(rs.length), hosts: S(new Set(rs.map((r) => r["dt.smartscape.host"])).size), pkts: S(rs.reduce((a, r) => a + +r["network_flow.packets.tx"] + +r["network_flow.packets.rx"], 0)), procs: S(new Set(rs.map((r) => r["dt.smartscape.process"])).size), retr: S(rs.reduce((a, r) => a + +r["network_flow.packets.retransmitted.tx"] + +r["network_flow.packets.retransmitted.rx"], 0)) }));
 results.cloudTop = [...groupBy(flowsOA, (r) => [r["host.name"], r["k8s.cluster.name"], r["network_flow.destination.address"], r["network_flow.destination.port"]].join("|"))].map(([k, rs]) => { const [host, cluster, dst, dport] = k.split("|"); const tx = rs.reduce((a, r) => a + +r["network_flow.bytes.tx"], 0), rx = rs.reduce((a, r) => a + +r["network_flow.bytes.rx"], 0); return { bytes: S(tx + rx), cluster, dport, dst, host, resets: S(rs.reduce((a, r) => a + +r["network_flow.tcp.sessions.reset"], 0)), retr: S(rs.reduce((a, r) => a + +r["network_flow.packets.retransmitted.tx"], 0)), rx: S(rx), tx: S(tx) }; }).sort((a, b) => b.bytes - a.bytes).slice(0, 40);
 

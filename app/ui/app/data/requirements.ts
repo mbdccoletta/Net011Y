@@ -5,7 +5,7 @@ import { QUERIES } from "./queries";
 
 export type NeedKey =
   | "devices" | "interfaces" | "traffic" | "cpu" | "availability" | "icmp" | "syslog" | "traps"
-  | "lldp" | "routing" | "netflow" | "appFlows" | "wan" | "sites" | "alerts" | "assist" | "sessions" | "requests";
+  | "lldp" | "routing" | "netflow" | "firewallLogs" | "appFlows" | "wan" | "sites" | "alerts" | "assist" | "sessions" | "requests";
 
 export type NeedStatus = "ok" | "partial" | "missing" | "loading" | "simulated" | "manual";
 
@@ -24,14 +24,15 @@ const CATALOG: Record<NeedKey, { label: string; how: string; queries?: string[] 
   cpu: { label: "Device CPU", how: "CPU metric group of the SNMP extension (network_device.cpu_usage)", queries: ["cpu"] },
   availability: { label: "Device availability", how: "sysUpTime polled by the SNMP extension every minute", queries: ["uptime"] },
   icmp: { label: "Reachability and latency", how: "Synthetic network availability monitors (ICMP) targeting device and WAN circuit IPs", queries: ["icmp", "icmpNow"] },
-  syslog: { label: "Syslog", how: "Syslog extension or ActiveGate syslog ingest from each device (dt.openpipeline.source = extension:syslog)", queries: ["syslogSum", "syslogTs", "syslogRecent"] },
-  traps: { label: "SNMP traps", how: "SNMP traps extension receiving traps from the devices (log.source = snmptraps)", queries: ["traps"] },
-  lldp: { label: "Topology neighbours", how: "LLDP or CDP metric group of the SNMP extension", queries: ["lldp"] },
+  syslog: { label: "Syslog", how: "Syslog extension or ActiveGate syslog ingest from each device (dt.openpipeline.source = extension:syslog)", queries: ["deviceLogs", "deviceLogsRecent"] },
+  traps: { label: "SNMP traps", how: "SNMP traps extension receiving traps from the devices (log.source = snmptraps)", queries: ["deviceLogs", "deviceLogsRecent"] },
+  lldp: { label: "Topology neighbours", how: "Neighbor discovery (CDP and LLDP) in SNMP autodiscovery, or the LLDP metric group of the SNMP extension. The map draws a route between two sites only where a cable between them is reported", queries: ["neighbors", "lldp"] },
   routing: { label: "Routing peers", how: "BGP and OSPF metric groups of the SNMP extension", queries: ["routing"] },
-  netflow: { label: "NetFlow / IPFIX", how: "OpenTelemetry Collector netflowreceiver sending flows with the exporter and interface index", queries: ["flowTs", "flowProto", "flowTop"] },
-  appFlows: { label: "Application traffic", how: "OneAgent on application hosts with network flows enabled (bucket default_network_flows)", queries: ["cloud", "cloudTop"] },
+  netflow: { label: "NetFlow / IPFIX", how: "OpenTelemetry Collector netflowreceiver sending flows from the routers and firewalls. The exporter places each flow at a site; the site_cidr tag on each site places the far end, so the map can draw the traffic between sites", queries: ["flowNets", "flowFanIn", "flowTs"] },
+  firewallLogs: { label: "Firewall connection logs", how: "Firewall logs over syslog: Cisco ASA connection teardowns (302014, 302016) name both ends, the zones and the bytes, and denies (106023) name what was refused. A firewall becomes a flow source the network already has", queries: ["fwConns", "fwDeny"] },
+  appFlows: { label: "Application traffic", how: "OneAgent on application hosts with network flows enabled (bucket default_network_flows). Their TCP retransmissions tell the fault domain reading whether the applications feel the network", queries: ["appNet", "appNetBy", "cloud", "cloudTop"] },
   wan: { label: "WAN circuits and SLA", how: "One ICMP network availability monitor per circuit with primary tags site, circuit_id, circuit_role, carrier, circuit_tech and sla_ms", queries: [] },
-  sites: { label: "Sites, regions and locations", how: "Primary tags on each SNMP monitoring configuration: site, site_name, site_type, region, geo_lat, geo_lon and hub", queries: [] },
+  sites: { label: "Sites, regions and locations", how: "Primary tags on each SNMP monitoring configuration: site, site_name, site_type, region, geo_lat, geo_lon, hub and site_cidr", queries: [] },
   alerts: { label: "Alerts and problems", how: "Alert templates for network devices in Infrastructure & Operations, plus any custom alert on the extension metrics. Every status in this app comes from the problems they raise", queries: [] },
   sessions: { label: "User sessions", how: "Real User Monitoring on the applications people use at the sites. The app reads only how many sessions there are per hour, to tell whether a network fault reached the users", queries: ["sessions", "sessionsTypical"] },
   requests: { label: "Service requests", how: "OneAgent on the services the sites use. Read as a count per hour only, and used in place of user sessions when an environment has no Real User Monitoring", queries: ["requests", "requestsTypical"] },
@@ -43,12 +44,16 @@ export const VIEW_NEEDS: Record<string, NeedKey[]> = {
   sites: ["alerts", "devices", "sites", "wan", "icmp", "sessions", "requests", "appFlows", "assist"],
   devices: ["alerts", "devices", "interfaces", "traffic", "cpu", "availability", "syslog", "traps", "assist"],
   links: ["alerts", "wan", "icmp", "syslog", "assist"],
-  site: ["alerts", "devices", "availability", "icmp", "wan", "sessions", "requests", "appFlows", "syslog", "assist"],
+  traffic: ["netflow", "firewallLogs", "appFlows", "sites", "assist"],
+  site: ["alerts", "devices", "availability", "icmp", "wan", "sessions", "requests", "netflow", "firewallLogs", "appFlows", "syslog", "assist"],
   device: ["alerts", "interfaces", "traffic", "cpu", "availability", "syslog", "traps", "lldp", "routing", "assist"],
-  empty: ["devices", "alerts", "interfaces", "traffic", "cpu", "availability", "icmp", "syslog", "traps", "lldp", "routing", "netflow", "appFlows", "wan", "sites", "sessions", "requests", "assist"],
+  empty: ["devices", "alerts", "interfaces", "traffic", "cpu", "availability", "icmp", "syslog", "traps", "lldp", "routing", "netflow", "firewallLogs", "appFlows", "wan", "sites", "sessions", "requests", "assist"],
 };
 
-export function evaluateNeeds(counts: Record<string, number | null>, model: NetworkModel | null, source: "live" | "example"): Record<NeedKey, Need> {
+// sources the app stops reading once found empty (see SOURCE_GROUPS): which data type each one feeds
+const ABSENT_FEEDS: Partial<Record<NeedKey, string>> = { netflow: "netflow", firewallLogs: "firewall", syslog: "deviceLogs", traps: "deviceLogs", lldp: "neighbors", appFlows: "oneagentFlows" };
+
+export function evaluateNeeds(counts: Record<string, number | null>, model: NetworkModel | null, source: "live" | "example", absent: Record<string, number | undefined> = {}): Record<NeedKey, Need> {
   const out = {} as Record<NeedKey, Need>;
   (Object.keys(CATALOG) as NeedKey[]).forEach((key) => {
     const { label, how, queries = [] } = CATALOG[key];
@@ -100,8 +105,45 @@ export function evaluateNeeds(counts: Record<string, number | null>, model: Netw
           : `${rows.toLocaleString("en-US")} series/records`;
         if (key === "traffic" && status === "partial") status = "ok";
         if (key === "syslog" && status === "partial") status = "ok";
-        if (key === "netflow" && status === "partial") status = "ok";
+        if (key === "lldp" && status === "partial") status = "ok";
+        // syslog and traps share one read: each is judged by what reached the devices
+        if ((key === "syslog" || key === "traps") && model) {
+          const n = key === "syslog" ? model.devices.reduce((a, d) => a + d.syslog.ERROR + d.syslog.WARN + d.syslog.INFO, 0) : model.devices.reduce((a, d) => a + d.traps, 0);
+          const withIt = model.devices.filter((d) => (key === "syslog" ? d.syslog.ERROR + d.syslog.WARN + d.syslog.INFO : d.traps) > 0).length;
+          status = n ? "ok" : "missing";
+          detail = n ? `${n.toLocaleString("en-US")} in the last 6 h from ${withIt} device${withIt === 1 ? "" : "s"}` : "nothing received from a monitored device";
+        }
+        if (key === "netflow" && model?.flowMap) {
+          const f = model.flowMap, tied = f.exporters.filter((e) => e.device).length;
+          status = tied < f.exporters.length || !f.subnetsTagged ? "partial" : "ok";
+          detail = `${tied}/${f.exporters.length} exporters tied to a device · ${f.pairs.length ? `${f.pairs.length} routes between sites` : "no traffic between two sites placed yet"} · ${f.subnetsTagged ? `${f.subnetsTagged} site_cidr ranges` : "no site_cidr tag, so only device subnets place addresses"}`;
+        }
+        if (key === "firewallLogs" && model?.flowMap?.sources.firewall) {
+          const fw = model.flowMap.sources.firewall;
+          const unplaced = new Set(model.flowMap.conversations.filter((c) => c.source === "firewall" && !c.viaSite).map((c) => c.via)).size;
+          status = unplaced ? "partial" : "ok";
+          detail = `${fw.firewalls} firewalls · ${fw.connections.toLocaleString("en-US")} connections and ${fw.denies.toLocaleString("en-US")} denies in the last hour${unplaced ? ` · ${unplaced} not monitored over SNMP, so not tied to a site` : ""}`;
+        }
+        if (key === "appFlows" && model?.appNet) {
+          status = "ok";
+          const a = model.appNet, last = a.retrPct.length - 2;
+          detail = a.source === "flows"
+            ? `${a.conversations.reduce((x, y) => x + y, 0).toLocaleString("en-US")} conversations in 8 h · ${a.workloads.length} workloads · ${a.retrPct[last] ?? "?"}% of TCP packets retransmitted in the last 10 minutes`
+            : `from the process network metrics (network flows are not enabled) · ${a.workloads.length} host groups · ${a.retrPct[last] ?? "?"}% of TCP packets retransmitted in the last 10 minutes`;
+        }
+        if (key === "lldp" && model && rows > 0) {
+          const siteOf = new Map(model.devices.map((d) => [d.name, d.site]));
+          const between = new Set(model.links.filter((l) => siteOf.has(l.a) && siteOf.has(l.b) && siteOf.get(l.a) !== siteOf.get(l.b)).map((l) => [siteOf.get(l.a), siteOf.get(l.b)].sort().join("|")));
+          detail = `${model.links.length} port adjacencies · ${between.size ? `${between.size} between sites` : "none between two sites, so the map draws no route"}`;
+        }
       }
+    }
+    // a source found empty is not read again for a while: say when it was checked, not "loading"
+    const since = ABSENT_FEEDS[key] ? absent[ABSENT_FEEDS[key]!] : undefined;
+    if (since != null && status !== "ok" && status !== "partial") {
+      const clock = (t: number) => new Date(t).toISOString().slice(11, 16);
+      status = "missing";
+      detail = `nothing found at ${clock(since)} UTC · read again after ${clock(since + 12 * 3600000)} UTC, or with Check again`;
     }
     out[key] = { key, label, how, status, detail };
   });

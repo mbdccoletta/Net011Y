@@ -12,6 +12,7 @@ import { openNative } from "../utils/drilldown";
 const TONE: Record<Suspicion["kind"], string> = {
   "network-implicated": "is-net",
   "not-network": "is-out",
+  unexplained: "is-net",
   contained: "is-calm",
   watching: "is-calm",
   blind: "is-blind",
@@ -20,6 +21,7 @@ const TONE: Record<Suspicion["kind"], string> = {
 const MARK: Record<Suspicion["kind"], string> = {
   "network-implicated": "Network implicated",
   "not-network": "Not the network",
+  unexplained: "Network symptom, no alert",
   contained: "Contained",
   watching: "Nothing to isolate",
   blind: "Cannot tell",
@@ -44,6 +46,11 @@ export function SuspicionStrip({ s, users, assist }: { s: Suspicion; users: Netw
           <b>{pct == null ? "—" : `${pct}%`}</b>of the usual {drop.source === "requests" ? "requests" : "sessions"}{s.scope === "site" && s.trafficScope === "environment" ? " (environment)" : ""}
         </span>
         {s.siteSessions != null && <span><b>{s.siteSessions}</b>sessions from this site, 24 h</span>}
+        {s.app && s.app.now != null && (
+          <span className={s.app.rising ? "is-up" : undefined} title={`Share of TCP packets retransmitted, as the applications see it (OneAgent network flows). Usually ${s.app.usual ?? "?"}%`}>
+            <b>{s.app.now < 0.1 ? s.app.now.toFixed(3) : s.app.now.toFixed(2)}%</b>TCP retransmitted{s.app.rising ? ` · ${s.app.usual ? `${Math.round(s.app.now / s.app.usual)}×` : "above"} usual` : ""}
+          </span>
+        )}
       </div>
       <div className="sus__acts">
         {outside > 0 && (

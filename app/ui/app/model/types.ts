@@ -14,6 +14,80 @@ export interface Reason {
   circuit?: string;
 }
 
+/** One side of a site's conversations: another site, the Internet, or a private range no site claims. */
+export interface FlowPeer { kind: "site" | "private" | "internet"; name: string; site?: string; bytes: number; flows: number }
+export interface FlowApp { proto: string; port: string; name: string | null; bytes: number; flows: number }
+/** What a firewall refused in the last hour, by zone pair and port. */
+export interface FlowDeny { via: string; viaName: string; site: string | null; from: string; to: string; proto: string; port: string; denies: number; sources: number; destinations: number }
+/** One conversation group, whichever source saw it, with both ends already placed. */
+export interface Conversation {
+  source: "netflow" | "firewall";
+  /** the exporter or firewall that saw it: address, name, site and role */
+  via: string; viaName: string; viaSite: string | null; viaKind: "exporter" | "firewall";
+  fromKind: "site" | "zone" | "internet" | "private"; fromSite?: string; fromLabel: string;
+  toKind: "site" | "zone" | "internet" | "private"; toSite?: string; toLabel: string;
+  zoneFrom?: string; zoneTo?: string;
+  app: string; proto: string; port: string;
+  s24: string; d24: string;
+  bytes: number; count: number;
+}
+/** One column entry of the traffic journey (from, through, to). */
+export interface JourneyNode { id: string; col: 0 | 1 | 2; label: string; sub?: string; kind: "site" | "zone" | "internet" | "private" | "device" | "app" | "denied"; site?: string; bytes: number }
+export interface JourneyLink { from: string; to: string; bytes: number; count: number; source: "netflow" | "firewall" }
+/** A destination reached from an unusual number of distinct sources in the last hour. */
+export interface FlowFanIn { dst: string; hosts: number; port: string; sources: number; bytes: number; flows: number; exporter: string }
+export interface SiteTraffic {
+  bytes: number;
+  flows: number;
+  /** bytes by where the other end is */
+  toSites: number;
+  internet: number;
+  private: number;
+  local: number;
+  peers: FlowPeer[];
+  apps: FlowApp[];
+  fanIn: FlowFanIn[];
+  exporters: string[];
+  denies: FlowDeny[];
+}
+/** NetFlow / IPFIX over the last hour, attributed to sites through their exporters and address space. */
+export interface FlowMap {
+  windowMs: number;
+  exporters: { ip: string; device: string | null; site: string | null; flows5m: number | null; usual5m: number | null; falling: boolean }[];
+  /** traffic between two sites, both ends attributed */
+  pairs: { a: string; b: string; bytes: number; flows: number }[];
+  sites: Record<string, SiteTraffic>;
+  /** bytes seen by exporters that belong to no known device */
+  unattributed: number;
+  subnetsKnown: number;
+  subnetsTagged: number;
+  /** which sources fed it, with what they carried */
+  sources: { netflow?: { exporters: number; bytes: number }; firewall?: { firewalls: number; bytes: number; connections: number; denies: number; capped: boolean } };
+  denies: FlowDeny[];
+  /** every conversation group the sources returned, placed: the journey and the filters are built from it */
+  conversations: Conversation[];
+  /** from → through → to, the heaviest paths, in bytes; denied attempts join as their own destination */
+  journey: { nodes: JourneyNode[]; links: JourneyLink[] };
+}
+
+export interface AppNetwork {
+  /** which OneAgent data it comes from: network flows (events) or the classic per-process network metrics */
+  source: "flows" | "process metrics";
+  /** what rttMs holds: the 90th percentile of the flows, or the average of the process metrics */
+  rttKind: "p90" | "avg";
+  /** start of the first 10-minute bucket (ms) and bucket length */
+  start: number;
+  interval: number;
+  /** retransmitted packets as a percentage of all packets, per bucket; null when nothing was sent */
+  retrPct: (number | null)[];
+  retransmitted: number[];
+  /** 90th percentile TCP round trip in milliseconds, per bucket */
+  rttMs: (number | null)[];
+  conversations: number[];
+  /** per workload: the last hour against the six hours before it */
+  workloads: { name: string; retrNow: number | null; retrUsual: number | null; rttNow: number | null; rttUsual: number | null; conversations: number }[];
+}
+
 export interface Iface {
   /** Smartscape node id (EXT_NETWORK_INTERFACE-…), when known */
   id?: string;
@@ -86,6 +160,8 @@ export interface Device {
   problems?: DeviceProblem[];
   name: string;
   site: string;
+  /** every address the device carries (all interfaces), when autodiscovery lists them */
+  ips?: string[];
   role: string;
   vendor: string;
   ip: string;
@@ -99,6 +175,8 @@ export interface Device {
   availTs?: number[] | null;
   syslog: { ERROR: number; WARN: number; INFO: number };
   syslogErrTs: number[];
+  /** traps received per hour over the last 24 h */
+  trapTs?: number[];
   traps: number;
   events: NetEvent[];
   interfaces: Iface[];
@@ -322,13 +400,20 @@ export interface NetworkModel {
   map?: { viewBox: number[]; path: string };
   devices: Device[];
   circuits?: Circuit[];
-  links: { a: string; b: string; kind: string; label: string }[];
+  /** Physical adjacencies the devices report (CDP/LLDP), by device name; ifA is the local port on a. */
+  links: { a: string; b: string; kind: string; label: string; ifA?: string; ifAId?: string; ifB?: string }[];
   peers: Peer[];
   traps: { t: string; ip: string; device: string | null; oid: string }[];
   flows?: {
     exporters: FlowExporter[];
     top: { exp: string; device: string | null; src: string; dst: string; proto: string; dport: string; gb: number; flows: number }[];
   };
+  /**
+   * The network as the applications feel it, from OneAgent network flows: share of TCP packets
+   * retransmitted and the 90th percentile round trip, every 10 minutes over 8 hours, and per workload.
+   */
+  appNet?: AppNetwork;
+  flowMap?: FlowMap;
   oneagent?: { host: string; cluster: string | null; dst: string; dport: string; bytes: number; retr: number; resets: number; rttMs: number | null }[];
   e2e: { probe: string; paths: E2EPath[] };
 }

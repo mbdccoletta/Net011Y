@@ -13,6 +13,9 @@ import { CircuitsTable, DevicesTable, TransactionsTable } from "./Tables";
 import { useDeviceInterfaces } from "../hooks/useDeviceInterfaces";
 import { EventsList } from "./EventsList";
 import { useElementWidth } from "../hooks/useElementWidth";
+import { useDql } from "@dynatrace-sdk/react-hooks";
+import { inBuckets, useLogBuckets } from "../hooks/useLogBucket";
+import { DEVICE_LOG_HOURS, deviceLogs24h } from "../data/queries";
 
 export type Selection = { type: "device"; name: string } | { type: "hop"; path: string; index: number };
 
@@ -27,29 +30,52 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Timeline({ model, device }: { model: NetworkModel; device: Device }) {
   const [box, boxW] = useElementWidth<HTMLDivElement>(560);
-  const w = Math.max(420, boxW), h = 140, pad = 44, hours = 24;
-  const x = (i: number) => pad + (i * (w - pad - 10)) / hours;
-  const max = Math.max(...device.syslogErrTs, 1), bw = (w - pad - 10) / hours - 2;
-  const end = Date.parse(model.meta.generatedAt.length === 17 ? model.meta.generatedAt.replace("Z", ":00Z") : model.meta.generatedAt);
-  const traps = model.traps.filter((t) => t.device === device.name);
+  // the load reads the last DEVICE_LOG_HOURS in 15-minute steps; 24 h of this device is read on request only
+  const [wide, setWide] = React.useState(false);
+  const buckets = useLogBuckets();
+  const ipOk = /^[0-9a-fA-F.:]+$/.test(device.ip);
+  const day = useDql({ query: inBuckets(deviceLogs24h(device.ip), buckets), maxResultRecords: 50 }, { enabled: wide && ipOk && !model.demo, staleTime: 5 * 60 * 1000 });
+  React.useEffect(() => { setWide(false); }, [device.name]);
+  const dayRows = (day.data?.records ?? []) as { kind?: string; loglevel?: string; n?: (number | null)[] }[];
+  const sumBy = (pick: (r: (typeof dayRows)[number]) => boolean) => {
+    const out = new Array(24).fill(0);
+    dayRows.filter(pick).forEach((r) => (r.n ?? []).slice(-24).forEach((v, i) => { out[i] += Number(v ?? 0); }));
+    return out;
+  };
+  const showDay = wide && day.isSuccess;
+  const errTs = showDay ? sumBy((r) => r.kind === "syslog" && r.loglevel === "ERROR") : device.syslogErrTs;
+  // traps come counted per step: a mark in every step that had one, labelled with how many
+  const trapTs = showDay ? sumBy((r) => r.kind === "trap") : device.trapTs ?? [];
+  const span = showDay ? 24 : DEVICE_LOG_HOURS;
+  // SNMP availability is hourly over 24 h: the short view shows its last hours, each over its four steps
+  const avail = (device.availTs ?? []).slice(showDay ? -24 : -span).flatMap((v) => (showDay ? [v] : [v, v, v, v]));
+  const w = Math.max(420, boxW), h = 140, pad = 44, steps = 24;
+  const x = (i: number) => pad + (i * (w - pad - 10)) / steps;
+  const max = Math.max(...errTs, 1), bw = (w - pad - 10) / steps - 2;
   return (
     <div className="vz-fluid" ref={box}>
-    <svg className="np-svg" viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label="Syslog errors, SNMP availability and traps over 24 hours">
+    <svg className="np-svg" viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label={`Syslog errors, SNMP availability and traps over ${span} hours`}>
       <line x1={pad} x2={w - 10} y1={90} y2={90} stroke="var(--np-line)" />
-      <text x={0} y={30} fontSize={12}>syslog</text><text x={0} y={42} fontSize={12}>errors/h</text>
-      {device.syslogErrTs.map((v, i) => (
+      <text x={0} y={30} fontSize={12}>syslog</text><text x={0} y={42} fontSize={12}>{showDay ? "errors/h" : "err/15m"}</text>
+      {errTs.map((v, i) => (
         <rect key={i} x={x(i) + 1} y={90 - (v / max) * 64} width={bw} height={(v / max) * 64} fill="var(--np-crit-accent)" opacity={0.55}><title>{`${v} syslog errors`}</title></rect>
       ))}
       <text x={0} y={113} fontSize={12}>SNMP</text>
-      {(device.availTs ?? []).map((v, i) => <rect key={`a${i}`} x={x(i) + 1} y={104} width={bw} height={10} fill={v ? "var(--np-good)" : "var(--np-crit-accent)"} />)}
+      {avail.map((v, i) => <rect key={`a${i}`} x={x(i) + 1} y={104} width={bw} height={10} fill={v ? "var(--np-good)" : "var(--np-crit-accent)"} />)}
       <text x={0} y={129} fontSize={12}>traps</text>
-      {traps.map((t, k) => {
-        const hoursAgo = (end - Date.parse(t.t)) / 3.6e6;
-        if (!(hoursAgo >= 0 && hoursAgo <= 24)) return null;
-        return <line key={k} x1={x(hours - hoursAgo)} x2={x(hours - hoursAgo)} y1={120} y2={132} stroke="var(--np-primary)" strokeWidth={2}><title>{t.oid}</title></line>;
-      })}
-      {[0, 6, 12, 18, 24].map((i) => <text key={i} x={x(i)} y={h - 1} fontSize={12} textAnchor="middle">{i === 24 ? "now" : `-${24 - i}h`}</text>)}
+      {trapTs.map((n, i) => n > 0 && (
+        <line key={`t${i}`} x1={x(i) + bw / 2 + 1} x2={x(i) + bw / 2 + 1} y1={120} y2={132} stroke="var(--np-primary)" strokeWidth={2}><title>{`${n} trap${n === 1 ? "" : "s"}`}</title></line>
+      ))}
+      {[0, 6, 12, 18, 24].map((i) => <text key={i} x={x(i)} y={h - 1} fontSize={12} textAnchor="middle">{i === 24 ? "now" : `-${((24 - i) * span) / 24}h`}</text>)}
     </svg>
+    {!model.demo && ipOk && (
+      <div className="np-row" style={{ marginTop: 6 }}>
+        {showDay
+          ? <Button size="condensed" onClick={() => setWide(false)}>Back to {DEVICE_LOG_HOURS} h</Button>
+          : <Button size="condensed" loading={wide && day.isLoading} onClick={() => setWide(true)}>Load 24 h</Button>}
+        <Text textStyle="small" className="np-muted">{showDay ? "24 h of this device, read on request" : `Last ${DEVICE_LOG_HOURS} h. Loading 24 h reads a full day of logs, which Grail bills by volume scanned.`}</Text>
+      </div>
+    )}
     </div>
   );
 }
@@ -97,7 +123,7 @@ export function DeviceDetails({ model, device, onDevice }: { model: NetworkModel
         </dl>
       )}
 
-      <Section title="Last 24 hours"><Timeline model={model} device={device} /></Section>
+      <Section title="Syslog, SNMP and traps"><Timeline model={model} device={device} /></Section>
 
       {!notMonitored && (
         <Section title="Interfaces">

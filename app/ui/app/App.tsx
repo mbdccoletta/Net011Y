@@ -18,13 +18,14 @@ import { EntityDetails } from "./components/EntityDetails";
 import type { Filters } from "./pages/EntityPages";
 import { DevicesVisual, LinksVisual, SitesVisual } from "./pages/VisualPages";
 import { LiveMapPage } from "./pages/LiveMapPage";
+import { TrafficPage } from "./pages/TrafficPage";
 import { evaluateNeeds, VIEW_NEEDS, type NeedKey } from "./data/requirements";
 import { DataNeeds } from "./components/DataNeeds";
 import { SettingsSheet } from "./components/SettingsSheet";
 import { SettingIcon } from "@dynatrace/strato-icons";
 
 const APP_NAME = "NetO11y";
-const LABEL: Record<Page, string> = { causes: "Live map", sites: "Sites", devices: "Devices", links: "WAN links" };
+const LABEL: Record<Page, string> = { causes: "Live map", sites: "Sites", devices: "Devices", links: "WAN links", traffic: "Traffic" };
 const NO_FILTERS: Filters = { status: null, region: null, role: null, carrier: null, q: "" };
 const DOCS = {
   networks: "https://docs.dynatrace.com/docs/observe/infrastructure-observability/networks",
@@ -59,7 +60,7 @@ export function App() {
   const openSettings = (focus: NeedKey | null = null) => { setSettingsFocus(focus); setSettingsOpen(true); };
 
   const infos = useMemo(() => (model ? allSites(model) : []), [model]);
-  const needs = useMemo(() => evaluateNeeds(net.counts, model, url.source), [JSON.stringify(net.counts), model, url.source]); // eslint-disable-line react-hooks/exhaustive-deps
+  const needs = useMemo(() => evaluateNeeds(net.counts, model, url.source, net.absent), [JSON.stringify(net.counts), model, url.source, JSON.stringify(net.absent)]); // eslint-disable-line react-hooks/exhaustive-deps
   const page: Page = url.page;
   const filters: Filters = { status: url.status, region: url.region, role: url.role, carrier: url.carrier, q: url.q };
 
@@ -87,6 +88,7 @@ export function App() {
         <AppHeader.NavigationItem isSelected={page === "sites"} href={hrefOf("sites", url.source)} onClick={nav("sites")}>Sites</AppHeader.NavigationItem>
         <AppHeader.NavigationItem isSelected={page === "devices"} href={hrefOf("devices", url.source)} onClick={nav("devices")}>Devices</AppHeader.NavigationItem>
         <AppHeader.NavigationItem isSelected={page === "links"} href={hrefOf("links", url.source)} onClick={nav("links")}>WAN links</AppHeader.NavigationItem>
+        <AppHeader.NavigationItem isSelected={page === "traffic"} href={hrefOf("traffic", url.source)} onClick={nav("traffic")}>Traffic</AppHeader.NavigationItem>
       </AppHeader.Navigation>
       <AppHeader.ActionItems>
         {url.source === "live" && (
@@ -113,6 +115,7 @@ export function App() {
 
   const settings = (
     <SettingsSheet show={settingsOpen} onDismiss={() => setSettingsOpen(false)} model={model} needs={needs} source={url.source} focus={settingsFocus}
+      absent={net.absent} onRecheck={() => { net.recheck(); showToast({ title: "Reading every source again", type: "info" }); }}
       onSource={(source) => setUrl({ source, page: "causes", cause: null, sel: null, ...NO_FILTERS })} />
   );
 
@@ -159,6 +162,8 @@ export function App() {
             <LiveMapPage model={model} infos={infos} causeId={url.cause} failed={net.failed} needs={needs} onExample={onExample} onSettings={openSettings} onCause={(cause) => setUrl({ cause }, false)}
               onSite={(code) => select(`site:${code}`)} onDevice={(name) => select(`device:${name}`)}
               onSites={(patch) => setUrl({ page: "sites", sel: null, ...NO_FILTERS, ...patch })} />
+          ) : page === "traffic" ? (
+            <TrafficPage model={model} needs={needs} onSettings={openSettings} onSite={(code) => select(`site:${code}`)} onExample={onExample} />
           ) : page === "devices" ? <DevicesVisual {...visualProps} /> : page === "links" ? <LinksVisual {...visualProps} /> : <SitesVisual {...visualProps} />}
         </PageLayout.Content>
 

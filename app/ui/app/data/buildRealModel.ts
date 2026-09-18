@@ -3,9 +3,11 @@
 // site_type) set on the SNMP monitoring configurations, circuit tags (circuit_id, circuit_role, carrier,
 // circuit_tech, sla_ms) set on the ICMP monitor of each WAN circuit. Without tags, sites and roles fall back
 // to the device naming convention (BR-UF-SITE-ROLE, or the first name token and keywords in the name).
-import type { Circuit, CloudCluster, Device, DeviceProblem, E2EPath, Hop, Iface, NetEvent, NetworkModel, NonNetworkScope, PathLink, Peer, Site, Users, Verdict } from "../model/types";
+import type { AppNetwork, Circuit, CloudCluster, Device, DeviceProblem, E2EPath, Hop, Iface, NetEvent, NetworkModel, NonNetworkScope, PathLink, Peer, Site, Users, Verdict } from "../model/types";
 import { T, ORDER, worst, deviceVerdict } from "../model/verdict";
 import { deviceHop, internetHop, circuitHop, cloudHop, makePath } from "../model/e2e";
+import { buildAddressing, isIpv4, type Addressing } from "../model/addressing";
+import { buildFlowMap } from "./buildFlowMap";
 
 type Rec = Record<string, any>;
 export type QueryResults = Partial<Record<string, Rec[]>>;
@@ -50,6 +52,12 @@ const BR_UF: Record<string, [string, number, number]> = {
 const slug = (v: string | null | undefined) => (v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 /** "City - CODE - Area" in the SNMP sysLocation: the city of a site, when the code in it matches. */
+/** sysLocation left at its default ("n/a", "unknown", "-") says nothing about where the device is. */
+const DC_NAME = /^DC|data ?cent(er|re)/i;
+const PLACEHOLDER = /^(n\/?a|none|null|unknown|not ?set|default|sys ?location|-+)?$/i;
+const realLocation = (v: unknown) => { const t = String(v ?? "").trim(); return PLACEHOLDER.test(t) ? null : t; };
+/** The SNMP autodiscovery group ("EDE - Gdansk (Data Center)") names the place after the last dash. */
+const groupSite = (v: unknown) => realLocation(String(v ?? "").split(/\s+-\s+/).pop()?.replace(/\s*\(.*\)\s*$/, ""));
 function parseLocation(location: unknown, code: string | null): { city: string; code: string } | null {
   const parts = String(location ?? "").split(/\s+-\s+/).map((x) => x.trim()).filter(Boolean);
   if (parts.length < 2) return null;
@@ -128,7 +136,7 @@ function hourly(day: (number | null)[], week: (number | null)[], settle = 1) {
   return { series: day, typical, nowIndex: last, now: last >= 0 ? day[last] ?? null : null, typicalNow: last >= 0 ? typical[last] ?? null : null };
 }
 
-function buildUsers(L: (k: string) => Rec[], devices: Map<string, Device>, siteTags: Map<string, Rec>, unmapped: DeviceProblem[]): Users | undefined {
+function buildUsers(L: (k: string) => Rec[], addressing: Addressing, unmapped: DeviceProblem[]): Users | undefined {
   // sessions, summed across application types
   const rows = L("sessions");
   const hours = Math.max(0, ...rows.map((r) => (r.sessions as unknown[] | undefined)?.length ?? 0));
@@ -149,19 +157,9 @@ function buildUsers(L: (k: string) => Rec[], devices: Map<string, Device>, siteT
   if (!sessions && !requests) return undefined;
 
   // which client subnets are a site, and which are just traffic
-  const cidrBySite = new Map<string, string>();
-  siteTags.forEach((rec, code) => {
-    (tag(rec, "site_cidr") ?? "").split(/[,;\s]+/).filter(Boolean).forEach((c) => cidrBySite.set(net24(c.split("/")[0]), code));
-  });
-  const siteByNet = new Map(cidrBySite);
-  devices.forEach((d) => {
-    if (!d.ip || !/^\d+\.\d+\.\d+\.\d+$/.test(d.ip)) return;
-    const n = net24(d.ip);
-    if (!siteByNet.has(n)) siteByNet.set(n, d.site);
-  });
   const nets = L("sessionNets").map((r) => {
     const ip = String(r.ip ?? "");
-    const site = /^\d+\.\d+\.\d+\.\d+$/.test(ip) ? siteByNet.get(net24(ip)) : undefined;
+    const site = addressing.ownerOf(ip).site;
     return { net: ip, sessions: num(r.sessions) ?? 0, ...(site ? { site } : {}) };
   });
   const total = nets.reduce((a, n) => a + n.sessions, 0);
@@ -174,6 +172,65 @@ function buildUsers(L: (k: string) => Rec[], devices: Map<string, Device>, siteT
     // Davis is watching the traffic itself when it has raised one of its traffic anomalies here
     anomalyWatched: unmapped.some((a) => /traffic|low load/i.test(a.name)),
     ...(requests ? { requests } : {}),
+  };
+}
+
+/**
+ * How the applications feel the network, reduced to what the fault domain reading needs: OneAgent network
+ * flows when the environment has them, the classic per-process network metrics otherwise. Undefined when
+ * neither arrives.
+ */
+function buildAppNet(L: (k: string) => Rec[]): AppNetwork | undefined {
+  const pct = (r: number, p: number) => (p > 0 ? round((100 * r) / p, 4) : null);
+  const arr = (v: unknown) => (Array.isArray(v) ? v.map((x) => num(x) ?? 0) : []);
+  const series = (row: Rec) => ({
+    start: Date.parse((row.timeframe as { start?: string } | undefined)?.start ?? "") || Date.now() - arr(row.pk).length * 600000,
+    interval: (num(row.interval) ?? 6e11) / 1e6,
+  });
+
+  const row = L("appNet")[0];
+  const conversations = arr(row?.conv);
+  if (row && Array.isArray(row.pk) && conversations.some((c) => c > 0)) {
+    const pk = arr(row.pk), re = arr(row.re);
+    const ms = (v: unknown) => (num(v) == null ? null : round((num(v) as number) / 1e6, 1));
+    const groups = new Map<string, { now?: Rec; before?: Rec }>();
+    for (const x of L("appNetBy")) {
+      const g = groups.get(x.grp ?? "unnamed") ?? {};
+      if (x.recent === true || x.recent === "true") g.now = x; else g.before = x;
+      groups.set(x.grp ?? "unnamed", g);
+    }
+    return {
+      source: "flows", rttKind: "p90", ...series(row),
+      retrPct: pk.map((p, i) => pct(re[i], p)), retransmitted: re,
+      rttMs: ((row.rtt as unknown[]) ?? []).map(ms), conversations,
+      workloads: [...groups].map(([name, g]) => ({
+        name, conversations: num(g.now?.conv) ?? 0,
+        retrNow: g.now ? pct(num(g.now.re) ?? 0, num(g.now.pk) ?? 0) : null, retrUsual: g.before ? pct(num(g.before.re) ?? 0, num(g.before.pk) ?? 0) : null,
+        rttNow: ms(g.now?.rtt), rttUsual: ms(g.before?.rtt),
+      })),
+    };
+  }
+
+  // no flows: the per-process metrics, packets sent and retransmitted every 10 minutes, per host group per hour
+  const proc = L("appNetProc")[0];
+  const ppk = arr(proc?.pk);
+  if (!proc || !ppk.some((p) => p > 0)) return undefined;
+  const pre = arr(proc.re);
+  return {
+    source: "process metrics", rttKind: "avg", ...series(proc),
+    retrPct: ppk.map((p, i) => pct(pre[i], p)), retransmitted: pre,
+    rttMs: ((proc.rtt as unknown[]) ?? []).map((v) => (num(v) == null ? null : round(num(v) as number, 1))),
+    conversations: ppk.map(() => 0),
+    workloads: L("appNetProcBy").map((x) => {
+      const pk = arr(x.pk), re = arr(x.re), rtt = (x.rtt as unknown[] ?? []).map((v) => num(v));
+      const n = pk.length - 1, sum = (a: number[]) => a.reduce((p, q) => p + q, 0);
+      const before = rtt.slice(0, n).filter((v): v is number => v != null);
+      return {
+        name: String(x["dt.host_group.id"] ?? "no host group"), conversations: 0,
+        retrNow: pct(re[n] ?? 0, pk[n] ?? 0), retrUsual: pct(sum(re.slice(0, n)), sum(pk.slice(0, n))),
+        rttNow: rtt[n] == null ? null : round(rtt[n] as number, 1), rttUsual: before.length ? round(sum(before) / before.length, 1) : null,
+      };
+    }),
   };
 }
 
@@ -192,28 +249,30 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   const devices = new Map<string, Device>();
   const siteTags = new Map<string, Rec>();
   // what each site is known by, beyond its code: the city in sysLocation and the UF in the device name
-  const siteHints = new Map<string, { cities: string[]; uf?: string; country?: string }>();
+  const siteHints = new Map<string, { cities: string[]; uf?: string; country?: string; dc?: boolean }>();
   for (const [name, d] of byName) {
     const derived = deriveTags(name, d.device_type);
-    const loc = parseLocation(d.location, derived.matched ? derived.site : null);
+    const location = realLocation(d.location);
+    const loc = parseLocation(location, derived.matched ? derived.site : null);
     const code = derived.matched ? derived.site : loc?.code ?? null;
     const tagSite = tag(d, "site");
     // A site tag is the customer's own word and wins; when it names the same place as the code the
     // device already carries (the tag "currais-de-laranjeiras" on devices whose sysLocation is
     // "Currais de Laranjeiras - LRJ1 - …"), the short code is kept so the site is not split in two.
     const site = tagSite && !(code && loc && slug(tagSite) === slug(loc.city)) ? tagSite
-      : code ?? (d.location ? String(d.location).trim() : derived.site);
+      : code ?? location ?? realLocation(d.activation_tag) ?? groupSite(d["autodiscovery.group_label"]) ?? derived.site;
     const role = tag(d, "device_role") ?? derived.role;
     if (!siteTags.has(site) && tagSite) siteTags.set(site, d);
     const hint = siteHints.get(site) ?? { cities: [] };
     if (loc) hint.cities.push(loc.city);
     hint.uf ??= derived.uf ?? tag(d, "federativeunit") ?? tag(d, "state") ?? tag(d, "uf") ?? undefined;
+    if (DC_NAME.test(`${d.activation_tag ?? ""} ${d["autodiscovery.group_label"] ?? ""}`)) hint.dc = true;
     hint.country ??= derived.country ?? tag(d, "country") ?? undefined;
     siteHints.set(site, hint);
     devices.set(name, {
       id: d.id, idClassic: d.id_classic ?? undefined, chassisMac: d.chassis_mac ?? undefined, name, site, role, vendor: d.device_type || "generic",
-      ip: (Array.isArray(d.ip) ? d.ip[0] : d.ip) ?? d["snmp.ip"] ?? "", mode: d.monitoring_mode, desc: String(d.description ?? "").slice(0, 160),
-      location: d.location ?? null, ifCount: num(d.interface_count) ?? 0,
+      ip: (Array.isArray(d.ip) ? d.ip[0] : d.ip) ?? d["snmp.ip"] ?? "", ips: Array.isArray(d.ip) ? d.ip.filter((x: unknown) => isIpv4(String(x))) : undefined, mode: d.monitoring_mode, desc: String(d.description ?? "").slice(0, 160),
+      location, ifCount: num(d.interface_count) ?? 0,
       cpu: [], cpuNow: null, availPct: null, availTs: null,
       syslog: { ERROR: 0, WARN: 0, INFO: 0 }, syslogErrTs: new Array(24).fill(0), traps: 0, events: [], interfaces: [],
       reasons: [], verdict: "Healthy", impact: 0, icmp: null,
@@ -285,27 +344,34 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   }
 
   // ---------- syslog and traps ----------
-  for (const row of L("syslogSum")) {
+  // 24 h counted per device, kind and level per hour; the records themselves only for the last 3 h
+  for (const row of L("deviceLogs")) {
     const d = devices.get(ipToName.get(row.ip) ?? "");
-    if (d && row.loglevel in d.syslog) d.syslog[row.loglevel as "ERROR"] += num(row.n) ?? 0;
+    if (!d) continue;
+    const hours = (Array.isArray(row.n) ? row.n : []).slice(-24).map((v: unknown) => num(v) ?? 0);
+    const total = hours.reduce((a: number, b: number) => a + b, 0);
+    if (row.kind === "trap") {
+      d.traps += total;
+      d.trapTs = (d.trapTs ?? new Array(24).fill(0)).map((v, i) => v + (hours[i] ?? 0));
+    } else {
+      if (row.loglevel in d.syslog) d.syslog[row.loglevel as "ERROR"] += total;
+      if (row.loglevel === "ERROR") d.syslogErrTs = hours;
+    }
   }
-  for (const row of L("syslogTs")) {
-    const d = devices.get(ipToName.get(row.ip) ?? "");
-    if (d) d.syslogErrTs = (row.n ?? []).slice(0, 24).map((v: unknown) => num(v) ?? 0);
-  }
-  for (const row of L("syslogRecent")) {
+  const logRecent = L("deviceLogsRecent");
+  for (const row of logRecent.filter((r) => r.kind !== "trap")) {
     const d = devices.get(ipToName.get(row.ip) ?? "");
     if (!d || d.events.length >= 30) continue;
     const app = String(row.app ?? "");
     const m = app.match(/%([A-Z0-9_]+)-(\d)-([A-Z0-9_]+)/);
     d.events.push({ t: String(row.timestamp).slice(0, 19) + "Z", kind: "syslog", level: row.loglevel, mnemonic: app || null, sev: m ? Number(m[2]) : null, text: String(row.content ?? "").slice(0, 180) });
   }
-  const traps = L("traps").map((row) => ({ t: String(row.timestamp).slice(0, 19) + "Z", ip: row["device.address"], device: ipToName.get(row["device.address"]) ?? null, oid: row["snmp.trap_oid"] }));
-  for (const [k, row] of L("traps").entries()) {
+  const trapRows = logRecent.filter((r) => r.kind === "trap");
+  const traps = trapRows.map((row) => ({ t: String(row.timestamp).slice(0, 19) + "Z", ip: row.ip, device: ipToName.get(row.ip) ?? null, oid: row.oid }));
+  for (const [k, row] of trapRows.entries()) {
     const t = traps[k];
     const d = t.device ? devices.get(t.device) : undefined;
     if (!d) continue;
-    d.traps++;
     if (d.events.filter((e) => e.kind === "trap").length < 5) {
       d.events.push({ t: t.t, kind: "trap", level: "INFO", mnemonic: t.oid, sev: null, text: String(row.content ?? "").replace(/\n/g, " ").slice(0, 160) } as NetEvent);
     }
@@ -313,7 +379,22 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   devices.forEach((d) => d.events.sort((a, b) => b.t.localeCompare(a.t)));
 
   // ---------- topology facts ----------
-  const links = L("lldp").filter((x) => x["neighbor.sys.name"]).map((x) => ({ a: x["sys.name"], b: x["neighbor.sys.name"], kind: "LLDP", label: `remote port ${x["neighbor.port.id"] ?? "?"}` }));
+  const links: NetworkModel["links"] = L("lldp").filter((x) => x["neighbor.sys.name"]).map((x) => ({ a: x["sys.name"], b: x["neighbor.sys.name"], kind: "LLDP", label: `remote port ${x["neighbor.port.id"] ?? "?"}` }));
+  // the neighbours SNMP autodiscovery records, port to port, resolved to the monitored devices by Smartscape id
+  const nameById = new Map<string, string>();
+  L("devices").forEach((d) => { const n = idAlias.get(d.id); if (n && byName.has(n)) nameById.set(d.id, n); });
+  const seenPort = new Set(links.map((l) => `${l.a}|${l.b}`));
+  for (const x of L("neighbors")) {
+    const a = nameById.get(x["dt.smartscape.ext_network_device"]), b = nameById.get(x["neighbor.ext_network_device"]) ?? x["neighbor.device.name"];
+    if (!a || !b || a === b) continue;
+    const key = `${a}|${b}|${x["base.interface.name"]}`;
+    if (seenPort.has(key) || seenPort.has(`${a}|${b}`)) continue;
+    seenPort.add(key);
+    links.push({
+      a, b, kind: String(x["neighbor.protocol"] ?? "lldp").toUpperCase(), label: `${x["base.interface.name"] ?? "?"} → ${x["neighbor.interface.name"] ?? "?"}`,
+      ifA: x["base.interface.name"] ?? undefined, ifAId: x["dt.smartscape.ext_network_interface"] ?? undefined, ifB: x["neighbor.interface.name"] ?? undefined,
+    });
+  }
   const peerMap = new Map<string, Peer>();
   for (const x of L("routing")) {
     if (x["cbgp.remote.identifier"]) peerMap.set(`bgp|${x["sys.name"]}|${x["cbgp.remote.identifier"]}`, { device: x["sys.name"], proto: "BGP", peer: x["cbgp.remote.identifier"], remoteAs: x["cbgp.remote.as"] ?? null, state: x["cbgp.peer.state"] ?? null });
@@ -554,7 +635,7 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
       const lat = num(tag(t, "geo_lat")), lon = num(tag(t, "geo_lon"));
       Object.assign(sites[code], {
         name: tag(t, "site_name") ?? city ?? code, city: tag(t, "city") ?? city, uf: tag(t, "state") ?? uf,
-        region: tag(t, "region") ?? state?.[0], hub: tag(t, "hub") ?? undefined, dc: tag(t, "site_type") === "datacenter" || /^DC/.test(code),
+        region: tag(t, "region") ?? state?.[0], hub: tag(t, "hub") ?? undefined, dc: tag(t, "site_type") === "datacenter" || DC_NAME.test(code),
         ...(lat != null && lon != null ? { lat, lon } : {}),
       });
       if (sites[code].hub === code) delete sites[code].hub;
@@ -565,7 +646,7 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
       if (city) sites[code].city = city;
       if (uf) sites[code].uf = uf;
       if (state) sites[code].region = state[0];
-      if (/^DC/.test(code)) sites[code].dc = true;
+      if (DC_NAME.test(code) || DC_NAME.test(sites[code].name) || hint?.dc) sites[code].dc = true;
       const place = placeOf(code, sites[code].name);
       if (place) Object.assign(sites[code], place);
     }
@@ -651,15 +732,17 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   for (const p of paths) if (p.site) siteVerdicts[p.site] = worst([p.summary.verdict, ...devList.filter((d) => d.site === p.site).map((d) => d.verdict)]);
 
   // ---------- NetFlow exporters ----------
-  const proto = new Map<string, { proto: string; gb: number; flows: number }[]>();
-  for (const x of L("flowProto")) {
-    const list = proto.get(x.exp) ?? [];
-    list.push({ proto: x.proto, gb: Math.round(num(x.gb) ?? 0), flows: num(x.flows) ?? 0 });
-    proto.set(x.exp, list);
+  // protocols per exporter come from the conversation groups, not from a query of their own
+  const proto = new Map<string, Map<string, { proto: string; gb: number; flows: number }>>();
+  for (const x of L("flowNets")) {
+    const m = proto.get(x.exp) ?? new Map();
+    const p = m.get(x.proto) ?? { proto: x.proto, gb: 0, flows: 0 };
+    p.gb += (num(x.bytes) ?? 0) / 1e9; p.flows += num(x.flows) ?? 0;
+    m.set(x.proto, p); proto.set(x.exp, m);
   }
   const exporters = L("flowTs").map((x) => ({
     ip: x.exp, device: ipToName.get(x.exp) ?? null, flows5m: clean(x.flows),
-    protocols: (proto.get(x.exp) ?? []).sort((a, b) => b.flows - a.flows).slice(0, 8),
+    protocols: [...(proto.get(x.exp)?.values() ?? [])].map((p) => ({ ...p, gb: Math.round(p.gb) })).sort((a, b) => b.flows - a.flows).slice(0, 8),
   }));
 
   // ---------- real user sessions ----------
@@ -667,7 +750,11 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   // misbehaved. A session is attributed to a site only when its client subnet matches exactly — the
   // site_cidr tag, or the /24 of a device at that site. A looser match (the /16 of a corporate range)
   // would spread one site's users over a whole region, so it is not attempted.
-  const users = buildUsers(L, devices, siteTags, unmappedAlerts);
+  const addressing = buildAddressing(
+    [...siteTags].map(([site, rec]) => ({ site, cidr: tag(rec, "site_cidr") ?? "" })),
+    devList.map((d) => ({ site: d.site, ips: [d.ip, ...(d.ips ?? [])].filter(Boolean) })),
+  );
+  const users = buildUsers(L, addressing, unmappedAlerts);
 
   return {
     meta: { tenant, generatedAt: new Date().toISOString().slice(0, 16) + "Z", thresholds: T },
@@ -677,8 +764,10 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     circuits, links, peers, traps, unmappedAlerts,
     flows: {
       exporters,
-      top: L("flowTop").map((x) => ({ exp: x.exp, device: ipToName.get(x.exp) ?? null, src: x.src, dst: x.dst, proto: x.proto, dport: String(x.dport ?? ""), gb: round(num(x.gb) ?? 0), flows: num(x.flows) ?? 0 })),
+      top: [],
     },
+    appNet: buildAppNet(L),
+    flowMap: buildFlowMap(L, devList, addressing, sites),
     oneagent: L("cloudTop").map((x) => ({ host: x.host, cluster: x.cluster ?? null, dst: x.dst, dport: String(x.dport ?? ""), bytes: num(x.bytes) ?? 0, retr: num(x.retr) ?? 0, resets: num(x.resets) ?? 0, rttMs: null })),
     e2e: { probe: "synthetic ICMP monitors", paths },
   };
