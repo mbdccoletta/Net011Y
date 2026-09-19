@@ -732,3 +732,39 @@
 .nav-dot--low { background: var(--dt-colors-charts-status-warning-default, #d7b43b); }
 .nav-dot--none { background: transparent; box-shadow: inset 0 0 0 1px var(--dt-colors-text-neutral-subdued, #8a8ba8); }
 .tr-row--reach { grid-template-columns: minmax(140px, 1.6fr) repeat(4, minmax(80px, 0.8fr)); }
+
+/* Settings › What the app reads: this load's reads, as Dynatrace bills them */
+.cs { display: grid; gap: 16px; }
+.cs-meter { display: grid; gap: 10px; padding: 16px; border-radius: 12px; border: 1px solid var(--dt-colors-border-neutral-subdued, #d2d3dd);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--ds-primary) 12%, transparent), transparent 70%); }
+.cs-figure { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.cs-big { font-size: 34px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--dt-colors-text-neutral-default, #2c2d4d); letter-spacing: -0.01em; }
+.cs-big small { font-size: 15px; font-weight: 500; color: var(--dt-colors-text-neutral-subdued, #5d5f78); }
+.cs-cap { font-size: 13px; color: var(--dt-colors-text-neutral-subdued, #5d5f78); }
+.cs-stack { display: flex; gap: 2px; height: 10px; border-radius: 999px; overflow: hidden; background: var(--dt-colors-border-neutral-subdued, #d2d3dd); }
+.cs-seg { min-width: 3px; }
+.cs-k--logs { background: var(--dt-colors-charts-categorical-color-01-default, #4a4fd4); }
+.cs-k--events { background: var(--dt-colors-charts-categorical-color-02-default, #1d8a9e); }
+.cs-k--sessions { background: var(--dt-colors-charts-categorical-color-03-default, #c26a00); }
+.cs-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--dt-colors-text-neutral-subdued, #5d5f78); }
+.cs-legend b { font-weight: 600; color: var(--dt-colors-text-neutral-default, #2c2d4d); font-variant-numeric: tabular-nums; }
+.cs-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+.cs-list { display: grid; gap: 4px; }
+.cs-row { position: relative; display: flex; justify-content: space-between; gap: 12px; padding: 5px 8px; font-size: 13px; }
+.cs-bar { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: color-mix(in srgb, var(--ds-primary) 16%, transparent); }
+.cs-what, .cs-val { position: relative; }
+.cs-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dt-colors-text-neutral-default, #2c2d4d); }
+.cs-val { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--dt-colors-text-neutral-subdued, #5d5f78); }
+.cs-save { display: grid; gap: 10px; padding: 16px; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--dt-colors-charts-status-ideal-default, #2a8c5d) 55%, transparent);
+  background: color-mix(in srgb, var(--dt-colors-charts-status-ideal-default, #2a8c5d) 9%, transparent); }
+.cs-save__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 14px; font-weight: 500; color: var(--dt-colors-text-neutral-default, #2c2d4d); }
+.cs-save__pct { font-size: 30px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--dt-colors-charts-status-ideal-default, #2a8c5d); }
+.cs-compare { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px 12px; font-size: 12px; }
+.cs-compare__label { color: var(--dt-colors-text-neutral-subdued, #5d5f78); }
+.cs-compare__bar { height: 8px; border-radius: 999px; background: var(--dt-colors-border-neutral-subdued, #d2d3dd); overflow: hidden; }
+.cs-compare__bar i { display: block; height: 100%; border-radius: 999px; background: var(--dt-colors-charts-categorical-color-01-default, #4a4fd4); }
+.cs-compare__bar--after i { background: var(--dt-colors-charts-status-ideal-default, #2a8c5d); }
+@media (prefers-reduced-motion: no-preference) { .cs-seg, .cs-bar, .cs-compare__bar i { transition: flex-grow .4s ease, width .4s ease; } }
+.ds-bucket { padding: 12px 14px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--dt-colors-charts-status-ideal-default, #2a8c5d) 45%, transparent);
+  background: color-mix(in srgb, var(--dt-colors-charts-status-ideal-default, #2a8c5d) 7%, transparent); }

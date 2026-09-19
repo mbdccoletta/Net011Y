@@ -116,7 +116,7 @@ export const QUERIES: Record<string, NetQuery> = {
   deviceLogs: {
     query: 'fetch logs, from:now()-6h | filter dt.openpipeline.source == "extension:syslog" or log.source == "snmptraps" | fieldsAdd kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = coalesce(dt.ingest.source.ip, device.address) | makeTimeseries n = count(), by:{ip, kind, loglevel}, interval:15m',
     maxResultRecords: 10000,
-    incremental: { kind: "series", windowMs: DEVICE_LOG_HOURS * 3600e3, stepMs: 15 * 60e3, field: "n", keys: ["ip", "kind", "loglevel"] },
+    incremental: { kind: "series", windowMs: DEVICE_LOG_HOURS * 3600e3, stepMs: 15 * 60e3, fields: ["n"], keys: ["ip", "kind", "loglevel"] },
   },
   deviceLogsRecent: {
     query: 'fetch logs, from:now()-3h | filter (dt.openpipeline.source == "extension:syslog" and dt.ingest.source.ip != "127.0.0.1") or log.source == "snmptraps" | sort timestamp desc | fields timestamp, kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = coalesce(dt.ingest.source.ip, device.address), loglevel, app = syslog.appname, oid = snmp.trap_oid, content | limit 2000',
@@ -148,7 +148,7 @@ export const QUERIES: Record<string, NetQuery> = {
   flowTs: {
     query: 'fetch logs, from:now()-70m | filter otel.scope.name == "otelcol/netflowreceiver" | makeTimeseries flows=count(), by:{exp=flow.sampler_address}, interval:5m',
     maxResultRecords: 500,
-    incremental: { kind: "series", windowMs: 70 * 60e3, stepMs: 5 * 60e3, field: "flows", keys: ["exp"] },
+    incremental: { kind: "series", windowMs: 70 * 60e3, stepMs: 5 * 60e3, fields: ["flows"], keys: ["exp"] },
   },
   // who talks to whom: the last hour of NetFlow by exporter and /24 at each end, heaviest first
   flowNets: {
@@ -177,6 +177,7 @@ export const QUERIES: Record<string, NetQuery> = {
   appNet: {
     query: 'fetch events, from:now()-8h, bucket:{"default_network_flows"} | fieldsAdd pk = toLong(network_flow.packets.tx) + toLong(network_flow.packets.rx), re = toLong(network_flow.packets.retransmitted.tx) + toLong(network_flow.packets.retransmitted.rx), rtt = if(toLong(network_flow.tcp.rtt) > 0, toLong(network_flow.tcp.rtt)) | makeTimeseries {pk = sum(pk), re = sum(re), rtt = percentile(rtt, 90), conv = count()}, interval:10m',
     maxResultRecords: 10,
+    incremental: { kind: "series", windowMs: 8 * 3600e3, stepMs: 10 * 60e3, fields: ["pk", "re", "rtt", "conv"], keys: [] },
   },
   // where OneAgent network flows are not enabled, the classic per-process network metrics say the same
   appNetProc: {

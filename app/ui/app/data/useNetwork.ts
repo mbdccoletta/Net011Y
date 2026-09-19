@@ -30,7 +30,30 @@ export interface NetworkState {
   absent: Partial<Record<SourceGroup, number>>;
   /** forget what was found empty and read every source again */
   recheck: () => void;
+  /** what this load read from Grail, as Dynatrace bills it */
+  cost: LoadCost | null;
 }
+
+/**
+ * The data Grail read for this load. Logs, events and sessions are billed by the data scanned; metrics,
+ * Smartscape and Davis problems and events are included, so they are left out.
+ */
+export interface LoadCost {
+  billableGb: number;
+  logGb: number;
+  eventGb: number;
+  sessionGb: number;
+  byQuery: { name: string; gb: number }[];
+  /**
+   * Network records (syslog, traps, NetFlow) as a share of the log records the queries read: a log query
+   * reads every record of its buckets in its window, so this is what a bucket of their own would leave.
+   * null when the environment sends no network logs.
+   */
+  networkShare: number | null;
+}
+
+const billedAs = (query: string): "logGb" | "eventGb" | "sessionGb" | null =>
+  /^fetch logs\b/.test(query) ? "logGb" : /^fetch events\b/.test(query) ? "eventGb" : /^fetch user\.sessions\b/.test(query) ? "sessionGb" : null;
 
 /**
  * The sources a network may or may not send, each read through logs or events, which Grail bills by what
@@ -214,6 +237,37 @@ export function useNetwork(source: Source): NetworkState {
   }, [live, demo, coreSettled, overdue, requiredOk, stamp]);
 
   const counts = Object.fromEntries(NAMES.map((n, i) => [n, results[i].isSuccess ? (results[i].data?.records ?? []).length : null]));
+
+  // what Grail read, from the metadata of each answer (the part read, for an incremental query)
+  const cost = useMemo<LoadCost | null>(() => {
+    if (!live) return null;
+    const c: LoadCost = { billableGb: 0, logGb: 0, eventGb: 0, sessionGb: 0, byQuery: [], networkShare: null };
+    const perHour = (i: number) => {
+      const g = raw[i].data?.metadata?.grail, tf = g?.analysisTimeframe;
+      const h = tf?.start && tf?.end ? (Date.parse(String(tf.end).slice(0, 23) + "Z") - Date.parse(String(tf.start).slice(0, 23) + "Z")) / 3600e3 : 0;
+      return { scanned: (g?.scannedRecords ?? 0) / (h || 1), h: h || 1 };
+    };
+    NAMES.forEach((n, i) => {
+      const kind = billedAs(QUERIES[n].query);
+      const gb = (raw[i].isSuccess ? raw[i].data?.metadata?.grail?.scannedBytes ?? 0 : 0) / 1e9;
+      if (!kind || !gb) return;
+      c[kind] += gb; c.billableGb += gb; c.byQuery.push({ name: n, gb });
+    });
+    c.byQuery.sort((a, b) => b.gb - a.gb);
+    // matched records per hour against records read per hour, from the two queries that count what they match
+    const matched = (name: string, field: string) => {
+      const i = NAMES.indexOf(name);
+      if (i < 0 || !raw[i].isSuccess) return null;
+      const n = (raw[i].data?.records ?? []).reduce((a, r) => a + (Array.isArray(r?.[field]) ? (r![field] as unknown[]).reduce<number>((b, v) => b + (Number(v) || 0), 0) : 0), 0);
+      const { scanned, h } = perHour(i);
+      return scanned ? { net: n / h, all: scanned } : null;
+    };
+    const logs = matched("deviceLogs", "n"), flows = matched("flowTs", "flows");
+    const all = logs?.all ?? flows?.all;
+    if (all && (logs?.net || flows?.net)) c.networkShare = Math.min(1, ((logs?.net ?? 0) + (flows?.net ?? 0)) / all);
+    return c;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, stamp]);
   return {
     model,
     counts,
@@ -236,5 +290,6 @@ export function useNetwork(source: Source): NetworkState {
     },
     absent,
     recheck: () => { writeAbsent({}); setAbsent({}); },
+    cost,
   };
 }

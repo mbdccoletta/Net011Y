@@ -49,10 +49,13 @@ filter. The app keeps that low without changing what it shows:
 
 - one read of the metric series says which extension families the environment sends, and only their queries run;
 - optional sources (device logs, neighbours, NetFlow, OneAgent flows) are probed and remembered empty for 12 h;
-- device logs, traps, neighbours and the NetFlow timeline are kept in the viewer's browser: the next open reads
-  only what arrived since the last one (from ten minutes before it, for late logs) and puts the two together,
-  which gives the answer the full query gives. Only the NetFlow conversations are read over their whole hour again;
-- Settings can limit every log query to the buckets that hold the network logs.
+- device logs, traps, neighbours, the NetFlow timeline and the applications' network series are kept in the viewer's
+  browser: the next open reads only what arrived since the last one (from ten minutes before it, for late records) and
+  puts the two together. Values are kept exactly as Grail returned them, empty buckets included, so the answer is the
+  one the full query gives;
+- Settings › Data › What the app reads shows what each load read and what it costs at list price, and — since a log
+  query reads every record of its buckets in its window — how much a bucket of their own for the network's logs would
+  save. The syslog, traps, NetFlow and neighbour guides explain the OpenPipeline route, and Settings takes the bucket names.
 
 ## Running it
 

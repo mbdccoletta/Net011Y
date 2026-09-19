@@ -132,7 +132,7 @@ export function App() {
 
   const settings = (
     <SettingsSheet show={settingsOpen} onDismiss={() => setSettingsOpen(false)} model={model} needs={needs} source={url.source} focus={settingsFocus} steps={steps} inUse={inUse}
-      absent={net.absent} onRecheck={() => { net.recheck(); showToast({ title: "Reading every source again", type: "info" }); }}
+      absent={net.absent} cost={net.cost} onFocus={(k) => openSettings(k)} onRecheck={() => { net.recheck(); showToast({ title: "Reading every source again", type: "info" }); }}
       onSource={(source) => setUrl({ source, page: "causes", cause: null, sel: null, ...NO_FILTERS })} />
   );
 

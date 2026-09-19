@@ -8,7 +8,7 @@ import { XmarkIcon } from "@dynatrace/strato-icons";
 import type { NeedKey, Need } from "../data/requirements";
 import type { NetworkModel } from "../model/types";
 import { AppConfigSection, DataSourceSection, ExtensionsSection, PagesSection, QueryCostSection, SendDataSection, SuspicionSection } from "./DataSetup";
-import type { SourceGroup } from "../data/useNetwork";
+import type { LoadCost, SourceGroup } from "../data/useNetwork";
 import type { Step } from "../model/nextSteps";
 import { StepsSection } from "./DataSetup";
 import { SiteHierarchySettings } from "./SiteHierarchySettings";
@@ -26,9 +26,13 @@ interface Props {
   steps: Step[];
   inUse: number;
   onRecheck: () => void;
+  /** this load's reads from Grail */
+  cost?: LoadCost | null;
+  /** opens the Data tab on one entry */
+  onFocus?: (key: NeedKey) => void;
 }
 
-export function SettingsSheet({ show, onDismiss, model, needs, source, onSource, focus, absent, onRecheck, steps, inUse }: Props) {
+export function SettingsSheet({ show, onDismiss, model, needs, source, onSource, focus, absent, onRecheck, steps, inUse, cost, onFocus }: Props) {
   return (
     <Sheet
       title="Settings"
@@ -55,7 +59,7 @@ export function SettingsSheet({ show, onDismiss, model, needs, source, onSource,
             <PagesSection needs={needs} />
             <SendDataSection needs={needs} source={source} focus={focus} />
             {source === "live" && <ExtensionsSection model={model} />}
-            {source === "live" && <QueryCostSection absent={absent} onRecheck={onRecheck} />}
+            {source === "live" && <QueryCostSection absent={absent} onRecheck={onRecheck} cost={cost} onHow={() => onFocus?.("syslog")} />}
           </div>
         </Tab>
         <Tab title="App">

@@ -13,8 +13,8 @@ import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
 type Row = Record<string, unknown>;
 
 export type Incremental =
-  /** makeTimeseries by keys: `field` holds the counts, one per `stepMs` bucket */
-  | { kind: "series"; windowMs: number; stepMs: number; field: string; keys: string[] }
+  /** makeTimeseries by keys: each of `fields` holds one value per `stepMs` bucket (windowMs a multiple of it) */
+  | { kind: "series"; windowMs: number; stepMs: number; fields: string[]; keys: string[] }
   /** summarize max(time) by keys: the last time each key was seen */
   | { kind: "latest"; windowMs: number; time: string; keys: string[] }
   /** the newest `limit` records, newest first */
@@ -23,7 +23,8 @@ export type Incremental =
 /** Logs can arrive a few minutes after their timestamp: the part read again covers them. */
 const LATE_MS = 10 * 60 * 1000;
 const MAX_CHARS = 1_500_000;
-const VERSION = 1;
+// 2: values kept as Grail returned them (0.1.8 turned an empty bucket into 0)
+const VERSION = 2;
 
 interface Entry { v: number; q: string; at: number; rows: Row[] }
 export interface Plan {
@@ -76,6 +77,8 @@ export function planFor(name: string, full: string, inc: Incremental, now = Date
 
 /** The rows the full query would have returned, from what was kept and what was just read. */
 export function mergeRows(inc: Incremental, plan: Plan, fresh: Row[], now = Date.now()): Row[] {
+  // the full query answered: its rows are the answer, as they came
+  if (!plan.base || plan.from == null) return fresh;
   const start = now - inc.windowMs;
   if (inc.kind === "series") return mergeSeries(inc, plan, fresh, now);
   if (inc.kind === "latest") {
@@ -89,7 +92,7 @@ export function mergeRows(inc: Incremental, plan: Plan, fresh: Row[], now = Date
   }
   // the new part holds everything from `from` on; the kept part is used only before it, so nothing is
   // counted twice and nothing that repeats is merged away
-  const kept = (plan.base ?? []).filter((r) => plan.from != null && toMs(r[inc.time]) < plan.from);
+  const kept = plan.base.filter((r) => toMs(r[inc.time]) < plan.from!);
   return [...fresh, ...kept]
     .filter((r) => toMs(r[inc.time]) >= start)
     .sort((a, b) => toMs(b[inc.time]) - toMs(a[inc.time]))
@@ -97,29 +100,41 @@ export function mergeRows(inc: Incremental, plan: Plan, fresh: Row[], now = Date
 }
 
 function mergeSeries(inc: Extract<Incremental, { kind: "series" }>, plan: Plan, fresh: Row[], now: number): Row[] {
-  const step = inc.stepMs;
-  const series = new Map<string, { keys: Row; b: Map<number, number> }>();
-  const add = (rows: Row[], from: number) => rows.forEach((r) => {
+  const step = inc.stepMs, from = plan.from!;
+  // an empty bucket is null in Grail's answer, for a count too, and the model tells null from 0: values are
+  // kept exactly as they came, and a bucket nobody reported stays null
+  const series = new Map<string, { keys: Row; b: Map<number, unknown[]> }>();
+  let last = -Infinity;
+  const add = (rows: Row[], fromT: number, toT: number) => rows.forEach((r) => {
     const tf = r.timeframe as { start?: string } | undefined;
-    const t0 = toMs(tf?.start), vs = Array.isArray(r[inc.field]) ? (r[inc.field] as unknown[]) : [];
+    const t0 = toMs(tf?.start);
     if (Number.isNaN(t0)) return;
     const k = inc.keys.map((f) => String(r[f] ?? "")).join("\u0001");
-    const s = series.get(k) ?? { keys: Object.fromEntries(inc.keys.map((f) => [f, r[f]])), b: new Map<number, number>() };
-    vs.forEach((v, i) => { const t = t0 + i * step; if (t >= from) s.b.set(t, Number(v ?? 0) || 0); });
+    const s = series.get(k) ?? { keys: Object.fromEntries(inc.keys.map((f) => [f, r[f]])), b: new Map<number, unknown[]>() };
+    const len = Math.max(0, ...inc.fields.map((f) => (Array.isArray(r[f]) ? (r[f] as unknown[]).length : 0)));
+    for (let i = 0; i < len; i++) {
+      const t = t0 + i * step;
+      if (t >= fromT && t < toT) s.b.set(t, inc.fields.map((f) => (Array.isArray(r[f]) ? (r[f] as unknown[])[i] ?? null : null)));
+    }
     series.set(k, s);
   });
-  if (plan.base && plan.from != null) {
-    add(plan.base, -Infinity);
-    // what was read again replaces what was kept, bucket by bucket: a key the new part does not name had nothing there
-    series.forEach((s) => [...s.b.keys()].forEach((t) => { if (t >= plan.from!) s.b.delete(t); }));
-  }
-  add(fresh, plan.from ?? -Infinity);
-  const first = floor(now - inc.windowMs, step), last = floor(now, step);
-  const n = Math.round((last - first) / step) + 1;
+  // the kept part up to where the new part starts, then the new part: a key the new part does not name had nothing there
+  add(plan.base!, -Infinity, from);
+  add(fresh, from, Infinity);
+  fresh.forEach((r) => {
+    const t0 = toMs((r.timeframe as { start?: string } | undefined)?.start);
+    const len = Math.max(0, ...inc.fields.map((f) => (Array.isArray(r[f]) ? (r[f] as unknown[]).length : 0)));
+    if (!Number.isNaN(t0) && len) last = Math.max(last, t0 + (len - 1) * step);
+  });
+  // the buckets a full query run with the new part would have returned
+  if (!Number.isFinite(last)) last = floor(now, step);
+  const n = Math.round(inc.windowMs / step) + 1, first = last - (n - 1) * step;
   const out: Row[] = [];
   series.forEach((s) => {
-    const vs = Array.from({ length: n }, (_, i) => s.b.get(first + i * step) ?? 0);
-    if (vs.some((v) => v > 0)) out.push({ ...s.keys, [inc.field]: vs, timeframe: { start: iso(first), end: iso(last + step) }, interval: String(step * 1e6) });
+    const cols = inc.fields.map((_, j) => Array.from({ length: n }, (_, i) => (s.b.get(first + i * step)?.[j] ?? null)));
+    if (cols.some((c) => c.some((v) => v != null))) {
+      out.push({ ...s.keys, ...Object.fromEntries(inc.fields.map((f, j) => [f, cols[j]])), timeframe: { start: iso(first), end: iso(last + step) }, interval: String(step * 1e6) });
+    }
   });
   return out;
 }

@@ -17,6 +17,8 @@ export interface SetupGuide {
   prerequisites: string[];
   steps: string[];
   snippets?: SetupSnippet[];
+  /** the data is a log the network's own bucket can hold: the guide shows how, and what it saves */
+  networkBucket?: boolean;
   /** DQL to confirm the data arrives */
   verify: string;
   docs: { label: string; href: string }[];
@@ -36,8 +38,28 @@ const DOCS = {
   intelligence: { label: "Dynatrace Intelligence", href: "https://docs.dynatrace.com/docs/dynatrace-intelligence" },
   infraops: { label: "Infrastructure & Operations", href: "https://docs.dynatrace.com/docs/observe/infrastructure-observability/infrastructure-and-operations" },
   rum: { label: "Real User Monitoring", href: "https://docs.dynatrace.com/docs/observe/digital-experience/web-applications" },
+  logBuckets: { label: "Configure data storage and retention for logs", href: "https://docs.dynatrace.com/docs/analyze-explore-automate/logs/lma-bucket-assignment" },
   rumAnomaly: { label: "Traffic anomaly detection for applications", href: "https://docs.dynatrace.com/docs/observe/digital-experience/web-applications/additional-configuration/adapt-anomaly-detection" },
 };
+
+/**
+ * Keeping the network's logs in a bucket of their own: a log query reads every record of its buckets in its
+ * window, so in a busy environment the network's few records cost as much as all the others. Nothing the
+ * app shows changes, as long as every network source goes there and the switch leaves no gap.
+ */
+export const NETWORK_BUCKET_MATCHER = [
+  'dt.openpipeline.source == "extension:syslog"',
+  'or log.source == "snmptraps"',
+  'or log.source == "snmp_autodiscovery"',
+  'or otel.scope.name == "otelcol/netflowreceiver"',
+].join("\n");
+/** Where the network's logs go, step by step (rendered under "Lower what the app costs" in the syslog, traps, NetFlow and neighbour guides) */
+export const NETWORK_BUCKET_STEPS = [
+  "Create a logs bucket for the network, for example network_logs: Settings › Storage management › Bucket storage management › Bucket, table type logs, with the retention you keep logs for.",
+  "Open Settings › Process and contextualize › OpenPipeline › Logs › Pipelines and the pipeline these records go through today (Default, unless a dynamic route sends them elsewhere). In its Storage stage, add a Bucket assignment processor with the condition below and the new bucket, first in the list. The records keep their processing: only where they are stored changes.",
+  "The condition covers syslog, SNMP traps, SNMP autodiscovery and NetFlow. A source left out stays where it was, and the app no longer reads it once only the new bucket is named.",
+  "In Settings › Data › What the app reads, name both buckets (network_logs, default_logs) so nothing is missed while the new one fills. After 6 hours, keep only network_logs.",
+];
 
 const SNMP_PREREQ = [
   "Environment ActiveGate on Linux with the Extension Execution Controller, reachable from the devices over SNMP (UDP 161).",
@@ -206,7 +228,8 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
       "Point each device's syslog to the ActiveGate IP. The device must send from the same IP address that the SNMP extension polls: the app links logs to devices by source IP (dt.ingest.source.ip).",
     ],
     verify: "fetch logs, from:now()-1h\n| filter dt.openpipeline.source == \"extension:syslog\"\n| summarize records = count(), by:{dt.ingest.source.ip, loglevel}",
-    docs: [DOCS.syslog],
+    networkBucket: true,
+    docs: [DOCS.syslog, DOCS.logBuckets],
   },
   traps: {
     uses: "Device events and cause evidence (link down, BGP transitions).",
@@ -217,7 +240,8 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
       "Point each device's trap destination to the ActiveGate IP, sending from the polled device IP.",
     ],
     verify: "fetch logs, from:now()-24h\n| filter log.source == \"snmptraps\"\n| summarize traps = count(), by:{device.address, snmp.trap_oid}",
-    docs: [DOCS.traps],
+    networkBucket: true,
+    docs: [DOCS.traps, DOCS.logBuckets],
   },
   lldp: {
     uses: "The routes between sites on the map. A route is drawn only where a device reports a cable to a device at another site, and it moves with the traffic measured on that port.",
@@ -225,7 +249,8 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
     prerequisites: ["CDP or LLDP enabled on the devices, including the WAN-facing ports of the edge routers.", "SNMP autodiscovery set up for the device ranges."],
     steps: ["In each SNMP autodiscovery configuration, turn on Neighbor discovery.", "Optionally, enable the neighbor-discovery feature set of the SNMP extension as a second source."],
     verify: "fetch logs, from:now()-24h\n| filter log.source == \"snmp_autodiscovery\" and content == \"Neighbor discovery\"\n| summarize ports = count(), by:{dt.smartscape.ext_network_device, neighbor.device.name}",
-    docs: [DOCS.snmpCisco],
+    networkBucket: true,
+    docs: [DOCS.snmpCisco, DOCS.logBuckets],
   },
   routing: {
     uses: "Tunnel state on each site path (BGP established or down) and the Internet hop.",
@@ -268,7 +293,8 @@ service:
       exporters: [otlp_http]`,
     }],
     verify: "fetch logs, from:now()-1h\n| filter otel.scope.name == \"otelcol/netflowreceiver\"\n| summarize flows = count(), by:{flow.sampler_address}",
-    docs: [DOCS.netflow],
+    networkBucket: true,
+    docs: [DOCS.netflow, DOCS.logBuckets],
   },
   appFlows: {
     uses: "Whether the applications feel the network: the fault domain reading compares their TCP retransmissions and round trip with the usual level, and names the workloads where they rose. Also the application hop at the end of each site path.",

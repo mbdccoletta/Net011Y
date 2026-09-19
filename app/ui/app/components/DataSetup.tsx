@@ -6,12 +6,12 @@ import { Button } from "@dynatrace/strato-components/buttons";
 import { Select, TextInput } from "@dynatrace/strato-components/forms";
 import { ExternalLink, Heading, List, Paragraph, Strong, Text } from "@dynatrace/strato-components/typography";
 import type { Need, NeedKey, NeedStatus } from "../data/requirements";
-import { APP_PERMISSIONS, DATA_GROUPS, PAGE_NEEDS, SETUP } from "../data/setupGuide";
+import { APP_PERMISSIONS, DATA_GROUPS, NETWORK_BUCKET_MATCHER, NETWORK_BUCKET_STEPS, PAGE_NEEDS, SETUP } from "../data/setupGuide";
 import { openNotebook } from "../utils/drilldown";
 import { useDropThreshold, setDropThreshold } from "../hooks/useDropThreshold";
 import { DEFAULT_DROP_PCT } from "../model/suspicion";
 import { parseBuckets, setLogBuckets, useLogBuckets } from "../hooks/useLogBucket";
-import { SOURCE_RECHECK_MS, type SourceGroup } from "../data/useNetwork";
+import { SOURCE_RECHECK_MS, type LoadCost, type SourceGroup } from "../data/useNetwork";
 import { FAMILIES } from "../data/formats";
 import type { Step } from "../model/nextSteps";
 import type { NetworkModel } from "../model/types";
@@ -25,7 +25,84 @@ const SOURCE_LABEL: Record<SourceGroup, string> = {
  * What the app reads and what it costs. Log and event queries are billed by what Grail scans, so the app
  * skips sources it found empty and can be pointed at the buckets that hold the network's logs.
  */
-export function QueryCostSection({ absent, onRecheck }: { absent: Partial<Record<SourceGroup, number>>; onRecheck: () => void }) {
+/** Dynatrace list price for logs, events and sessions queries; a contract price may differ */
+const PRICE_PER_GIB = 0.0035;
+const QUERY_LABEL: Record<string, string> = {
+  deviceLogs: "Device logs and traps · 6 h", deviceLogsRecent: "Recent device events", flowTs: "NetFlow per exporter · 70 min",
+  flowNets: "NetFlow conversations · 1 h", flowFanIn: "NetFlow fan-in · 1 h", neighbors: "CDP / LLDP neighbours · 30 min",
+  appNet: "Applications' network · 8 h", appNetBy: "Applications' network by group · 7 h", appPaths: "Application paths · 1 h",
+  cloud: "Application clusters · 24 h", cloudTop: "Top application conversations · 24 h",
+  sessions: "User sessions · 24 h", sessionNets: "User sessions by network · 24 h", sessionsTypical: "User sessions, usual week · 7 d",
+};
+const gbText = (gb: number) => (gb >= 100 ? gb.toFixed(0) : gb >= 1 ? gb.toFixed(1) : gb >= 0.01 ? gb.toFixed(2) : "< 0.01");
+const usdText = (gb: number) => { const v = (gb / 1.073741824) * PRICE_PER_GIB; return v >= 0.01 ? `$${v.toFixed(2)}` : "< $0.01"; };
+const pctText = (x: number) => (x >= 0.1 ? `${Math.round(x * 100)}%` : x >= 0.001 ? `${(x * 100).toFixed(1)}%` : "< 0.1%");
+/** a saving is rounded down, so it never reads as all of it */
+const savedText = (x: number) => `${Math.min(99, Math.floor(x * 100))}%`;
+
+/** This load's reads, what they cost, and what a bucket of their own would leave of the log part. */
+function LoadMeter({ cost, buckets, onHow }: { cost: LoadCost; buckets: string[]; onHow: () => void }) {
+  const kinds = [
+    { key: "logGb", label: "Logs", gb: cost.logGb, cls: "cs-k--logs" },
+    { key: "eventGb", label: "OneAgent flows", gb: cost.eventGb, cls: "cs-k--events" },
+    { key: "sessionGb", label: "User sessions", gb: cost.sessionGb, cls: "cs-k--sessions" },
+  ].filter((k) => k.gb > 0);
+  const top = cost.byQuery.slice(0, 6), max = top[0]?.gb || 1;
+  const share = cost.networkShare;
+  const bucketGb = share != null ? cost.logGb * share : null;
+  const worth = !buckets.length && bucketGb != null && cost.logGb >= 1 && share! < 0.5;
+  return (
+    <div className="cs">
+      <div className="cs-meter">
+        <div className="cs-figure">
+          <span className="cs-big">{gbText(cost.billableGb)}<small> GB</small></span>
+          <span className="cs-cap">read by this load · about {usdText(cost.billableGb)} at list price</span>
+        </div>
+        {cost.billableGb > 0 && (
+          <>
+            <div className="cs-stack" role="img" aria-label={kinds.map((k) => `${k.label} ${gbText(k.gb)} GB`).join(", ")}>
+              {kinds.map((k) => <span key={k.key} className={`cs-seg ${k.cls}`} style={{ flexGrow: k.gb }} />)}
+            </div>
+            <div className="cs-legend">
+              {kinds.map((k) => <span key={k.key}><i className={`cs-dot ${k.cls}`} />{k.label} <b>{gbText(k.gb)} GB</b></span>)}
+            </div>
+          </>
+        )}
+      </div>
+      {top.length > 0 && (
+        <div className="cs-list" aria-label="Queries by data read">
+          {top.map((q) => (
+            <div key={q.name} className="cs-row">
+              <span className="cs-bar" style={{ width: `${Math.max(2, (100 * q.gb) / max)}%` }} />
+              <span className="cs-what">{QUERY_LABEL[q.name] ?? q.name}</span>
+              <span className="cs-val">{gbText(q.gb)} GB</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {worth && (
+        <div className="cs-save">
+          <div className="cs-save__head">
+            <span className="cs-save__pct">−{savedText(1 - share!)}</span>
+            <span>of the log reads, with the network&apos;s logs in a bucket of their own</span>
+          </div>
+          <Text textStyle="small">
+            Network records are {pctText(share!)} of the log records these queries read: a log query reads every record of its bucket in its
+            window, whatever it filters. Routed to a bucket of their own and named below, the same load reads about {gbText(bucketGb!)} GB of
+            logs instead of {gbText(cost.logGb)} GB. Nothing the app shows changes.
+          </Text>
+          <div className="cs-compare">
+            <span className="cs-compare__label">Today</span><span className="cs-compare__bar"><i style={{ width: "100%" }} /></span><span className="cs-val">{gbText(cost.logGb)} GB</span>
+            <span className="cs-compare__label">Own bucket</span><span className="cs-compare__bar cs-compare__bar--after"><i style={{ width: `${Math.max(1, share! * 100)}%` }} /></span><span className="cs-val">{gbText(bucketGb!)} GB</span>
+          </div>
+          <div><Button onClick={onHow}>How to route them</Button></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function QueryCostSection({ absent, onRecheck, cost, onHow }: { absent: Partial<Record<SourceGroup, number>>; onRecheck: () => void; cost?: LoadCost | null; onHow?: () => void }) {
   const buckets = useLogBuckets();
   const [draft, setDraft] = React.useState(buckets.join(", "));
   React.useEffect(() => { setDraft(buckets.join(", ")); }, [buckets]);
@@ -35,11 +112,12 @@ export function QueryCostSection({ absent, onRecheck }: { absent: Partial<Record
   return (
     <section className="ds-block" aria-labelledby="ds-cost">
       <Heading level={5} id="ds-cost">What the app reads</Heading>
+      {cost && <LoadMeter cost={cost} buckets={buckets} onHow={onHow ?? (() => undefined)} />}
       <Text textStyle="small">
-        Queries on logs and events are billed by the data Grail scans, not by what they return, and a filter still reads its
-        field across every log of the window. The app reads each optional source once; a source that comes back empty is not
-        read again for {SOURCE_RECHECK_MS / 3600000} hours. Device logs, traps, neighbours and the NetFlow timeline are kept in this
-        browser: the next open reads only what arrived since, and only the NetFlow conversations are read over their whole hour again.
+        Queries on logs, events and sessions are billed by the data Grail scans, not by what they return, and a filter still reads
+        every record of the window; metrics, Smartscape and Davis problems are included. The app reads each optional source once; a source that comes back empty is not
+        read again for {SOURCE_RECHECK_MS / 3600000} hours. Device logs, traps, neighbours, the NetFlow timeline and the applications&apos;
+        network are kept in this browser: the next open reads only what arrived since, with the same result as reading it all.
       </Text>
       {empty.length > 0 ? (
         <List>
@@ -248,6 +326,18 @@ export function SendDataSection({ needs, source, focus }: Pick<Props, "needs" | 
                             <CodeSnippet language={sn.language} showCopyAction maxHeight={260}>{sn.code}</CodeSnippet>
                           </div>
                         ))}
+                        {guide.networkBucket && (
+                          <div className="ds-bucket">
+                            <Text textStyle="base-emphasized">Lower what the app costs</Text>
+                            <Text textStyle="small">
+                              A log query reads every record of its buckets in its window, whatever it filters. In their own bucket, the
+                              network&apos;s few records are all the app&apos;s queries read; nothing the app shows changes. Settings › Data ›
+                              What the app reads shows what this environment would save.
+                            </Text>
+                            <List ordered>{NETWORK_BUCKET_STEPS.map((x) => <span key={x}>{x}</span>)}</List>
+                            <CodeSnippet language="dql" showCopyAction>{NETWORK_BUCKET_MATCHER}</CodeSnippet>
+                          </div>
+                        )}
                         {guide.verify && (
                           <div>
                             <Text textStyle="base-emphasized">Check that it arrives</Text>
