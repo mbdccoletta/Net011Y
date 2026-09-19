@@ -17,7 +17,7 @@ async function run(name, q) {
       const out = execFileSync("dtctl", ["query", q.query, "--context", via.slice(6), "-o", "json", "--max-result-records", String(q.maxResultRecords ?? 1000), "--metadata"],
         { encoding: "utf8", maxBuffer: 2e9, stdio: ["ignore", "pipe", "pipe"] });
       const j = JSON.parse(out.slice(out.indexOf("{")));
-      return { rows: j.records ?? [], gb: (j.metadata?.grail?.scannedBytes ?? 0) / 1e9, s: (Date.now() - t0) / 1000 };
+      return { rows: j.records ?? [], gb: (j.metadata?.grail?.scannedBytes ?? j.metadata?.scannedBytes ?? 0) / 1e9, s: (Date.now() - t0) / 1000 };
     }
     let j = await (await fetch(`${BASE}/query:execute`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: q.query, maxResultRecords: q.maxResultRecords ?? 1000, requestTimeoutMilliseconds: 60000 }) })).json();
     for (let i = 0; i < 200 && !j.result && j.requestToken; i++) { await new Promise((r) => setTimeout(r, 800)); j = await (await fetch(`${BASE}/query:poll?request-token=${encodeURIComponent(j.requestToken)}`)).json(); }

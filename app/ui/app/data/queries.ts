@@ -1,7 +1,8 @@
 // DQL used by NetworkO11y. Every query was validated on guu84124 (2026-09-14).
 // Metric keys that contain hyphens must be backticked inside `timeseries`,
 // otherwise Grail answers MANDATORY_PARAMETER_HAS_TO_BE.
-import { familyQueries, vlanQuery } from "./formats";
+import { familiesQuery, familyQueries, vlanQuery } from "./formats";
+import type { Incremental } from "./logCache";
 
 export interface NetQuery {
   query: string;
@@ -18,6 +19,8 @@ export interface NetQuery {
    * somebody opens it.
    */
   detail?: boolean;
+  /** a log query the browser reads incrementally: the next open asks only for what came after (logCache.ts) */
+  incremental?: Incremental;
 }
 
 const CIRCUIT_TAGS = "primary_tags.site, primary_tags.circuit_id, primary_tags.circuit_role, primary_tags.carrier, primary_tags.circuit_tech, primary_tags.sla_ms, primary_tags.bandwidth_mbps";
@@ -70,6 +73,8 @@ export const QUERIES: Record<string, NetQuery> = {
     maxResultRecords: 10,
   },
   devices: { complete: true, query: "smartscapeNodes EXT_NETWORK_DEVICE", maxResultRecords: 50000 },
+  // the extension families this environment sends: only their queries run (formats.ts)
+  families: { query: familiesQuery(), maxResultRecords: 100 },
   interfaces: { complete: true, query: "smartscapeNodes EXT_NETWORK_INTERFACE", maxResultRecords: 150000, detail: true },
   // Every metric family of the Dynatrace network extensions, from one catalog (formats.ts): one query per
   // family and measure, named "<measure>:<family>", so they run side by side. A family the environment does
@@ -111,10 +116,12 @@ export const QUERIES: Record<string, NetQuery> = {
   deviceLogs: {
     query: 'fetch logs, from:now()-6h | filter dt.openpipeline.source == "extension:syslog" or log.source == "snmptraps" | fieldsAdd kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = coalesce(dt.ingest.source.ip, device.address) | makeTimeseries n = count(), by:{ip, kind, loglevel}, interval:15m',
     maxResultRecords: 10000,
+    incremental: { kind: "series", windowMs: DEVICE_LOG_HOURS * 3600e3, stepMs: 15 * 60e3, field: "n", keys: ["ip", "kind", "loglevel"] },
   },
   deviceLogsRecent: {
     query: 'fetch logs, from:now()-3h | filter (dt.openpipeline.source == "extension:syslog" and dt.ingest.source.ip != "127.0.0.1") or log.source == "snmptraps" | sort timestamp desc | fields timestamp, kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = coalesce(dt.ingest.source.ip, device.address), loglevel, app = syslog.appname, oid = snmp.trap_oid, content | limit 2000',
     maxResultRecords: 2000,
+    incremental: { kind: "newest", windowMs: 3 * 3600e3, time: "timestamp", limit: 2000 },
   },
   // the documented topology of network extensions: Smartscape "calls" between network devices and
   // between network interfaces (filled by extensions that define it); the neighbour logs below add what
@@ -132,6 +139,7 @@ export const QUERIES: Record<string, NetQuery> = {
   neighbors: {
     query: 'fetch logs, from:now()-30m | filter log.source == "snmp_autodiscovery" and content == "Neighbor discovery" | summarize seen = max(timestamp), by:{dt.smartscape.ext_network_device, dt.smartscape.ext_network_interface, base.interface.name, neighbor.ext_network_device, neighbor.device.name, neighbor.interface.name, neighbor.protocol}',
     maxResultRecords: 20000,
+    incremental: { kind: "latest", windowMs: 30 * 60e3, time: "seen", keys: ["dt.smartscape.ext_network_device", "dt.smartscape.ext_network_interface", "base.interface.name", "neighbor.ext_network_device", "neighbor.device.name", "neighbor.interface.name", "neighbor.protocol"] },
   },
   routing: {
     query: 'fetch metric.series | filter contains(metric.key, "cbgp.peer") or contains(metric.key, "ospf.nbr") | fields metric.key, sys.name, cbgp.remote.identifier, cbgp.remote.as, cbgp.peer.state, ospf.nbr.ip.addr, ospf.nbr.state',
@@ -140,6 +148,7 @@ export const QUERIES: Record<string, NetQuery> = {
   flowTs: {
     query: 'fetch logs, from:now()-70m | filter otel.scope.name == "otelcol/netflowreceiver" | makeTimeseries flows=count(), by:{exp=flow.sampler_address}, interval:5m',
     maxResultRecords: 500,
+    incremental: { kind: "series", windowMs: 70 * 60e3, stepMs: 5 * 60e3, field: "flows", keys: ["exp"] },
   },
   // who talks to whom: the last hour of NetFlow by exporter and /24 at each end, heaviest first
   flowNets: {

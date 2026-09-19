@@ -123,6 +123,17 @@ export const familyQueries = (m: Measure): [string, string][] =>
   FAMILIES.flatMap((f) => { const q = BUILD[m](f); return q ? [[`${m}:${f.id}`, q] as [string, string]] : []; });
 
 /**
+ * Which families this environment sends, in one cheap read of the metric series over the longest window
+ * any family query uses (24 h, availability): the app then runs only those families' queries. An
+ * environment with one vendor runs a sixth of them, and one with no network extension runs none.
+ */
+export const familiesQuery = () =>
+  `fetch metric.series, from:now()-24h | filter ${FAMILIES.map((f) => `startsWith(metric.key, "${f.prefix}.")`).join(" or ")}`
+  + ' | fieldsAdd family = splitString(metric.key, ".")[3] | summarize series = count(), by:{family}';
+/** The family a row of familiesQuery names (the fourth segment of its metric keys). */
+export const familyOfToken = (token: string) => FAMILIES.find((f) => f.prefix.split(".")[3] === token)?.id;
+
+/**
  * VLANs as the extensions describe them: the Juniper VLAN table (name and tag). VLAN interfaces — an F5
  * VLAN, a switch SVI — come with the ports, recognised by type or name.
  */

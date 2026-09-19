@@ -23,7 +23,7 @@ ok("every cause has a title and a level", causes.every((c) => c.title && c.verdi
 ok("alerts reported as a data source", needs.alerts.status === (alerted.length || (m.unmappedAlerts ?? []).length ? "ok" : "missing"), `${needs.alerts.status} · ${needs.alerts.detail}`);
 // truncation is silent in Grail: a query that fills its own cap may be hiding alerts or devices
 // only for the queries that must be complete: the top-N lists are capped on purpose
-const MUST_BE_COMPLETE = ["problems", "alerts", "devices", "interfaces", "icmp", "icmpNow", "cpu", "uptime"];
+const MUST_BE_COMPLETE = ["problems", "alerts", "devices", "interfaces", "icmp", "icmpNow", ...Object.keys(QUERIES).filter((n) => /^(cpu|uptime):/.test(n))];
 const capOf = (n) => Number((QUERIES[n].query.match(/limit (\d+)\s*$/) ?? [])[1] ?? QUERIES[n].maxResultRecords ?? Infinity);
 const capped = MUST_BE_COMPLETE.filter((n) => (R[n]?.length ?? 0) >= capOf(n));
 ok("no query hit its own row cap", capped.length === 0, capped.map((n) => `${n}=${R[n].length}`).join(", ") || "none at the cap");

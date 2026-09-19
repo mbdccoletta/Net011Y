@@ -1,11 +1,13 @@
 // One hook feeds every screen. "live" runs the validated DQL set in parallel through
 // useDql (cached and cancellable by the SDK); "example" returns the bundled, clearly
 // labelled simulated network so the experience can be shown at branch scale.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDql } from "@dynatrace-sdk/react-hooks";
 import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
 import type { NetworkModel } from "../model/types";
 import { QUERIES } from "./queries";
+import { familyOfToken } from "./formats";
+import { keep, mergeRows, planFor, type Plan } from "./logCache";
 import { inBuckets, useLogBuckets } from "../hooks/useLogBucket";
 import { buildRealModel, type QueryResults } from "./buildRealModel";
 
@@ -60,7 +62,8 @@ const REQUIRED = ["devices", "interfaces"];
 // Enough to judge every device; logs and flows refine the views when they arrive (progressive loading).
 // Of the extension families, the common set carries the first screen; vendor families complete it later.
 const FAMILY_CORE = Object.keys(QUERIES).filter((k) => /^(ifSummary|errSummary|cpu|memory|uptime):/.test(k) || k === "ifTraffic:network_device" || k === "ifErrors:network_device");
-const CORE = ["devices", "interfaces", ...FAMILY_CORE, "icmp", "lldp", "neighbors", "routing"];
+// the alerts are the status of every device: they come with the first screen, so nothing turns red after it
+const CORE = ["devices", "interfaces", "families", ...FAMILY_CORE, "problems", "alerts", "icmp", "lldp", "neighbors", "routing"];
 const NAMES = Object.keys(QUERIES);
 const STALE_MS = 5 * 60 * 1000;
 /**
@@ -106,20 +109,53 @@ export function useNetwork(source: Source): NetworkState {
    */
   const [phase, setPhase] = useState(0);
   useEffect(() => { if (inventory.isSuccess && phase < 1) setPhase(1); }, [inventory.isSuccess, phase]);
-  const waveOf = (name: string) => (REQUIRED.includes(name) ? 0 : CORE.includes(name) ? 1 : 2);
+  const waveOf = (name: string) => (REQUIRED.includes(name) || name === "families" ? 0 : CORE.includes(name) ? 1 : 2);
   const buckets = useLogBuckets();
   const [absent, setAbsent] = useState(readAbsent);
   // probe results decide the companions, so they are looked up by name before the hooks run
   const probeRows = useProbeRows();
-  const results = NAMES.map((name) => {
+  // the families the environment sends: a family query waits for this answer and runs only for a family
+  // that is there; if the answer fails, every family runs, as before
+  const familiesAt = NAMES.indexOf("families");
+  const familiesQ = useDql(
+    { query: QUERIES.families.query, maxResultRecords: QUERIES.families.maxResultRecords ?? 100 },
+    { enabled: live, staleTime: STALE_MS, runInBackground: true },
+  );
+  const present = familiesQ.isSuccess ? new Set((familiesQ.data?.records ?? []).map((r) => familyOfToken(String(r?.family ?? ""))).filter(Boolean)) : null;
+  const familyOf = (name: string) => (name.includes(":") ? name.split(":")[1] : null);
+  const familyWaits = (name: string) => !!familyOf(name) && familiesQ.isLoading;
+  const familyAbsent = (name: string) => { const f = familyOf(name); return !!f && !!present && !present.has(f); };
+  // the log queries read incrementally: from where this browser's last read ends (logCache.ts); a new
+  // plan is made when the app opens and on Refresh, never while a load is running
+  const [gen, setGen] = useState(0);
+  const bucketKey = buckets.join(",");
+  const plans = useMemo(() => Object.fromEntries(NAMES.filter((n) => QUERIES[n].incremental)
+    .map((n) => [n, planFor(n, inBuckets(QUERIES[n].query, buckets), QUERIES[n].incremental!)] as const)) as Record<string, Plan>,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [gen, bucketKey]);
+  const raw = NAMES.map((name, i) => {
+    if (i === familiesAt) return familiesQ;
     const g = groupOf(name);
     const isProbe = !!g && (SOURCE_GROUPS[g].probes as readonly string[]).includes(name);
     const gated = !!g && (absent[g] != null || (!isProbe && !(SOURCE_GROUPS[g].probes as readonly string[]).some((p) => (probeRows.get(p) ?? 0) > 0)));
     // eslint-disable-next-line react-hooks/rules-of-hooks
     return useDql(
-      { query: inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500 },
-      { enabled: live && !gated && (!QUERIES[name].detail || detailOk) && waveOf(name) <= phase, staleTime: STALE_MS, runInBackground: true },
+      { query: plans[name]?.query ?? inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500 },
+      { enabled: live && !gated && !familyWaits(name) && !familyAbsent(name) && (!QUERIES[name].detail || detailOk) && waveOf(name) <= phase, staleTime: STALE_MS, runInBackground: true },
     );
+  });
+  // what the rest of the app sees of an incremental query is the whole window: the kept part and the new one
+  const merged = useRef(new Map<string, { data: unknown; rows: Record<string, unknown>[] }>());
+  const results = raw.map((r, i) => {
+    const n = NAMES[i], plan = plans[n], inc = QUERIES[n].incremental;
+    if (!plan || !inc || !r.isSuccess || !r.data) return r;
+    let m = merged.current.get(n);
+    if (!m || m.data !== r.data) {
+      m = { data: r.data, rows: mergeRows(inc, plan, (r.data.records ?? []).filter(Boolean) as Record<string, unknown>[]) };
+      merged.current.set(n, m);
+      keep(n, plan, m.rows);
+    }
+    return { ...r, data: { ...r.data, records: m.rows } } as typeof r;
   });
   NAMES.forEach((n, i) => { if (results[i].isSuccess) probeRows.set(n, (results[i].data?.records ?? []).length); });
   // a source whose probes all came back empty is remembered; one that answered is forgotten
@@ -147,7 +183,7 @@ export function useNetwork(source: Source): NetworkState {
     const probes = SOURCE_GROUPS[g].probes.map((p) => results[NAMES.indexOf(p)]);
     return probes.every((r) => r.isSuccess || r.isError) && !probes.some((r) => (r.data?.records ?? []).length);
   };
-  const skipped = (i: number) => (!!QUERIES[NAMES[i]].detail && !detailOk) || skippedSource(i) || probeSaysNo(i);
+  const skipped = (i: number) => (!!QUERIES[NAMES[i]].detail && !detailOk) || skippedSource(i) || probeSaysNo(i) || familyAbsent(NAMES[i]);
   const settled = results.filter((r, i) => r.isSuccess || r.isError || skipped(i)).length;
   const failed = NAMES.filter((_, i) => results[i].isError);
   const requiredOk = REQUIRED.every((n) => { const i = NAMES.indexOf(n); return results[i].isSuccess || skipped(i); });
@@ -188,7 +224,16 @@ export function useNetwork(source: Source): NetworkState {
     total: NAMES.length,
     failed,
     // Refresh means now: refetch would hand back the cached answer for as long as it is fresh (staleTime)
-    refetch: () => { inventory.forceRefetch(); results.forEach((r, i) => { if (!skipped(i)) r.forceRefetch(); }); },
+    // an incremental query gets a new plan (from where its last read ends) instead of running the old one again
+    refetch: () => {
+      inventory.forceRefetch();
+      results.forEach((r, i) => {
+        const n = NAMES[i], inc = QUERIES[n].incremental;
+        if (skipped(i) || (inc && planFor(n, inBuckets(QUERIES[n].query, buckets), inc).query !== plans[n]?.query)) return;
+        r.forceRefetch();
+      });
+      setGen((g) => g + 1);
+    },
     absent,
     recheck: () => { writeAbsent({}); setAbsent({}); },
   };

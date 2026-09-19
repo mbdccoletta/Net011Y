@@ -38,7 +38,8 @@ export function QueryCostSection({ absent, onRecheck }: { absent: Partial<Record
       <Text textStyle="small">
         Queries on logs and events are billed by the data Grail scans, not by what they return, and a filter still reads its
         field across every log of the window. The app reads each optional source once; a source that comes back empty is not
-        read again for {SOURCE_RECHECK_MS / 3600000} hours.
+        read again for {SOURCE_RECHECK_MS / 3600000} hours. Device logs, traps, neighbours and the NetFlow timeline are kept in this
+        browser: the next open reads only what arrived since, and only the NetFlow conversations are read over their whole hour again.
       </Text>
       {empty.length > 0 ? (
         <List>
@@ -48,11 +49,11 @@ export function QueryCostSection({ absent, onRecheck }: { absent: Partial<Record
       {empty.length > 0 && <div><Button onClick={onRecheck}>Check again now</Button></div>}
       <Heading level={6} id="ds-buckets">Buckets that hold the network logs</Heading>
       <Text textStyle="small">
-        When OpenPipeline routes syslog, traps, NetFlow, firewall and SNMP autodiscovery records to buckets of their own, name them
+        When OpenPipeline routes syslog, traps, NetFlow and SNMP autodiscovery records to buckets of their own, name them
         here: every log query then reads only those buckets instead of all logs. Leave empty to read all log buckets.
       </Text>
       <div className="ds-row">
-        <TextInput value={draft} onChange={(v: string) => setDraft(v)} placeholder="for example network_logs, firewall_logs" aria-labelledby="ds-buckets" />
+        <TextInput value={draft} onChange={(v: string) => setDraft(v)} placeholder="for example network_logs" aria-labelledby="ds-buckets" />
         <Button variant="emphasized" disabled={parsed.join(",") === buckets.join(",")} onClick={() => setLogBuckets(parsed)}>Save</Button>
       </div>
       {draft.trim() && parsed.length === 0 && <Text textStyle="small">Bucket names use lower-case letters, digits, dashes and underscores.</Text>}

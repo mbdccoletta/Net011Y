@@ -44,9 +44,15 @@ extensions it sends, and the permissions the app needs.
 
 ## What it costs to run
 
-Log and event queries are billed by the data Grail scans. The app keeps that low: device logs are read over
-6 h (24 h of one device on request), optional sources are probed and remembered empty for 12 h, redundant
-reads are merged, and Settings can limit every log query to the buckets that hold the network logs.
+Log and event queries are billed by the data Grail scans, and a window of logs costs the same whatever the
+filter. The app keeps that low without changing what it shows:
+
+- one read of the metric series says which extension families the environment sends, and only their queries run;
+- optional sources (device logs, neighbours, NetFlow, OneAgent flows) are probed and remembered empty for 12 h;
+- device logs, traps, neighbours and the NetFlow timeline are kept in the viewer's browser: the next open reads
+  only what arrived since the last one (from ten minutes before it, for late logs) and puts the two together,
+  which gives the answer the full query gives. Only the NetFlow conversations are read over their whole hour again;
+- Settings can limit every log query to the buckets that hold the network logs.
 
 ## Running it
 

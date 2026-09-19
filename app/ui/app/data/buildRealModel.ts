@@ -488,6 +488,21 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
       ifA: x["base.interface.name"] ?? undefined, ifAId: x["dt.smartscape.ext_network_interface"] ?? undefined, ifB: x["neighbor.interface.name"] ?? undefined,
     });
   }
+  // one link per cable: Smartscape reports an edge per direction and per interface, and LLDP, CDP and the
+  // discovery logs report the same neighbours again. Links on distinct ports stay (a bundle is several
+  // cables); a link with no port is kept only when nothing on the pair says which port it is.
+  const withPort = new Set<string>(), seenLink = new Set<string>();
+  const pairOf = (l: (typeof links)[number]) => [l.a, l.b].sort().join("|");
+  links.forEach((l) => { if (l.ifA || l.ifB) withPort.add(pairOf(l)); });
+  const uniqueLinks = links.filter((l) => {
+    const pair = pairOf(l);
+    const key = l.ifA || l.ifB ? [`${l.a}:${l.ifA ?? ""}`, `${l.b}:${l.ifB ?? ""}`].sort().join("|") : pair;
+    if ((!l.ifA && !l.ifB && withPort.has(pair)) || seenLink.has(key)) return false;
+    seenLink.add(key);
+    return true;
+  });
+  links.length = 0;
+  links.push(...uniqueLinks);
   const peerMap = new Map<string, Peer>();
   for (const x of L("routing")) {
     if (x["cbgp.remote.identifier"]) peerMap.set(`bgp|${x["sys.name"]}|${x["cbgp.remote.identifier"]}`, { device: x["sys.name"], proto: "BGP", peer: x["cbgp.remote.identifier"], remoteAs: x["cbgp.remote.as"] ?? null, state: x["cbgp.peer.state"] ?? null });
