@@ -3,11 +3,12 @@
 // site_type) set on the SNMP monitoring configurations, circuit tags (circuit_id, circuit_role, carrier,
 // circuit_tech, sla_ms) set on the ICMP monitor of each WAN circuit. Without tags, sites and roles fall back
 // to the device naming convention (BR-UF-SITE-ROLE, or the first name token and keywords in the name).
-import type { AppNetwork, Circuit, CloudCluster, Device, DeviceProblem, E2EPath, Hop, Iface, NetEvent, NetworkModel, NonNetworkScope, PathLink, Peer, Site, Users, Verdict } from "../model/types";
+import type { AppNetwork, AppPath, Circuit, CloudCluster, Device, DeviceProblem, E2EPath, Hop, Iface, NetEvent, NetworkModel, NonNetworkScope, PathLink, Peer, Site, Users, Verdict } from "../model/types";
 import { T, ORDER, worst, deviceVerdict } from "../model/verdict";
 import { deviceHop, internetHop, circuitHop, cloudHop, makePath } from "../model/e2e";
 import { buildAddressing, isIpv4, type Addressing } from "../model/addressing";
-import { buildFlowMap } from "./buildFlowMap";
+import { appName, buildFlowMap } from "./buildFlowMap";
+import { FAMILIES } from "./formats";
 
 type Rec = Record<string, any>;
 export type QueryResults = Partial<Record<string, Rec[]>>;
@@ -56,6 +57,12 @@ const slug = (v: string | null | undefined) => (v ?? "").normalize("NFD").replac
 const DC_NAME = /^DC|data ?cent(er|re)/i;
 const PLACEHOLDER = /^(n\/?a|none|null|unknown|not ?set|default|sys ?location|-+)?$/i;
 const realLocation = (v: unknown) => { const t = String(v ?? "").trim(); return PLACEHOLDER.test(t) ? null : t; };
+/** With nothing that names a place, the devices of one management /16 are grouped: a network, not a guess at a site. */
+const subnetSite = (d: Record<string, any>) => {
+  const ip = String((Array.isArray(d.ip) ? d.ip[0] : d.ip) ?? d["snmp.ip"] ?? "");
+  const m = /^(\d+)\.(\d+)\./.exec(ip);
+  return m ? `Network ${m[1]}.${m[2]}.0.0/16` : "Unassigned";
+};
 /** The SNMP autodiscovery group ("EDE - Gdansk (Data Center)") names the place after the last dash. */
 const groupSite = (v: unknown) => realLocation(String(v ?? "").split(/\s+-\s+/).pop()?.replace(/\s*\(.*\)\s*$/, ""));
 function parseLocation(location: unknown, code: string | null): { city: string; code: string } | null {
@@ -65,6 +72,16 @@ function parseLocation(location: unknown, code: string | null): { city: string; 
   if (code ? c !== code : !/^[A-Z0-9]{3,5}$/.test(c)) return null;
   return { city: parts[0], code: c };
 }
+// What a device is, from the fields every SNMP extension reports (device_type, sysDescr): the product
+// lines say it plainly. The name rules below only add what these miss.
+const DESCR_ROLES: [RegExp, string][] = [
+  [/adaptive security appliance|\basa\b|fortigate|fortios|pan-os|palo ?alto|check ?point|firepower|srx\d|sonicwall/i, "firewall"],
+  [/big-?ip|\bf5\b|netscaler|citrix adc|load ?balanc/i, "lb"],
+  [/wireless lan controller|\bwlc\b|aireos|mobility controller/i, "wlc"],
+  [/access point|aironet|\bap\d{2,}|instant on/i, "ap"],
+  [/nexus|catalyst|\bex\d{3,}|\bqfx|arista|switch/i, "switch"],
+  [/\b(asr|isr)[\s-]?\d*\b|\bmx\d{2,}|\bptx|router|ios xr|junos/i, "edge"],
+];
 const ROLE_RULES: [RegExp, string][] = [
   [/core-router/, "core"], [/edge-router/, "edge"], [/firewall|asa|fortigate|paloalto|palo-alto/, "firewall"],
   [/wlc/, "wlc"], [/-ap-|aironet|aruba-ap/, "ap"], [/big-ip|f5/, "lb"], [/switch|nexus|catalyst/, "switch"], [/ucs/, "compute"],
@@ -87,8 +104,8 @@ export function deriveTags(name: string, deviceType?: string): { site: string; r
   const m = name.split(".")[0].toUpperCase().match(CONVENTION);
   if (m) return { site: m[3], role: ROLE_CODES[m[4]] ?? "other", country: m[1], uf: m[2], matched: true };
   const n = `${name} ${deviceType ?? ""}`.toLowerCase();
-  const site = (name.split("-")[0] || "—").toUpperCase();
-  return { site, role: ROLE_RULES.find(([re]) => re.test(n))?.[1] ?? "other", matched: false };
+  // no convention: the site comes from the standard fields (see the device loop), never from a name fragment
+  return { site: "", role: ROLE_RULES.find(([re]) => re.test(n))?.[1] ?? "other", matched: false };
 }
 
 
@@ -234,8 +251,30 @@ function buildAppNet(L: (k: string) => Rec[]): AppNetwork | undefined {
   };
 }
 
+/** OneAgent path quality: each workload and the network at the other end, placed like any address. */
+function buildPaths(L: (k: string) => Rec[], addressing: Addressing): AppPath[] | undefined {
+  const rows = L("appPaths");
+  if (!rows.length) return undefined;
+  return rows.map((r) => {
+    const net = String(r.r24 ?? ""), owner = addressing.ownerOf(net), port = String(r.port ?? "");
+    const pk = num(r.pk) ?? 0, re = num(r.re) ?? 0;
+    return {
+      workload: String(r.grp ?? "unnamed"), server: r.server === true || r.server === "true",
+      remoteKind: owner.kind, remoteSite: owner.site, remoteNet: `${net}/24`,
+      app: appName("tcp", port), port, conversations: num(r.conv) ?? 0,
+      rttP90Ms: num(r.rtt90) == null ? null : round((num(r.rtt90) as number) / 1e6, 1),
+      // a share of a few dozen packets is noise (and can pass 100%: retransmissions and packets are counted apart)
+      retrPct: pk >= 1000 ? Math.min(100, round((100 * re) / pk, 3)) : null, packets: pk,
+      resets: num(r.resets) ?? 0, timeouts: num(r.timeouts) ?? 0,
+    };
+  });
+}
+
 export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   const L = (k: string) => r[k] ?? [];
+  // a measure read per extension family ("cpu:network_device", "cpu:cisco" …), in catalog order: the
+  // common set first, so it wins where a vendor family reports the same thing
+  const LF = (m: string) => [...(r[m] ?? []), ...FAMILIES.flatMap((f) => r[`${m}:${f.id}`] ?? [])];
 
   // ---------- devices (Extension > Discovery; Neighbor duplicates dropped) ----------
   const byName = new Map<string, Rec>();
@@ -260,8 +299,10 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     // device already carries (the tag "currais-de-laranjeiras" on devices whose sysLocation is
     // "Currais de Laranjeiras - LRJ1 - …"), the short code is kept so the site is not split in two.
     const site = tagSite && !(code && loc && slug(tagSite) === slug(loc.city)) ? tagSite
-      : code ?? location ?? realLocation(d.activation_tag) ?? groupSite(d["autodiscovery.group_label"]) ?? derived.site;
-    const role = tag(d, "device_role") ?? derived.role;
+      : code ?? location ?? realLocation(d.activation_tag) ?? groupSite(d["autodiscovery.group_label"]) ?? subnetSite(d);
+    // the role: the customer's tag, the naming convention when it matched, else what the device says it is
+    const described = DESCR_ROLES.find(([re]) => re.test(`${d.device_type ?? ""} ${d.description ?? ""}`))?.[1];
+    const role = tag(d, "device_role") ?? (derived.matched || !described ? derived.role : described);
     if (!siteTags.has(site) && tagSite) siteTags.set(site, d);
     const hint = siteHints.get(site) ?? { cities: [] };
     if (loc) hint.cities.push(loc.city);
@@ -282,17 +323,34 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   const ipToName = new Map([...devices.values()].filter((d) => d.ip).map((d) => [d.ip, d.name]));
   const chassisToName = new Map([...byName.values()].filter((d) => d.chassis_mac && d.monitoring_mode === "Extension").map((d) => [d.chassis_mac, d.name]));
 
-  // ---------- CPU and SNMP availability ----------
-  for (const row of L("cpu")) {
-    const d = devOf(row["dt.smartscape.ext_network_device"]);
-    if (!d) continue;
+  // Every extension family names its device its own way: the Smartscape node when it has one, else the
+  // polled address, else the system name. The first family that reports a measure for a device wins.
+  const addrToName = new Map<string, string>();
+  devices.forEach((d) => [d.ip, ...(d.ips ?? [])].forEach((ip) => ip && !addrToName.has(ip) && addrToName.set(ip, d.name)));
+  const sysNameTo = new Map([...devices.values()].map((d) => [d.name.toLowerCase().split(".")[0], d.name] as const));
+  const devFor = (row: Rec) => devOf(row["dt.smartscape.ext_network_device"])
+    ?? devices.get(addrToName.get(String(row["device.address"] ?? "")) ?? "")
+    ?? devices.get(sysNameTo.get(String(row["sys.name"] ?? "").toLowerCase().split(".")[0]) ?? "");
+
+  // ---------- CPU, memory and SNMP availability ----------
+  for (const row of LF("cpu")) {
+    const d = devFor(row);
+    if (!d || d.cpu.length) continue;
     d.cpu = clean(row.cpu).map((v) => round(v));
     d.cpuNow = d.cpu.length ? d.cpu[d.cpu.length - 1] : null;
   }
+  for (const row of LF("memory")) {
+    const d = devFor(row);
+    if (!d || d.memNow != null) continue;
+    const m = clean(row.mem);
+    if (m.length) d.memNow = round(m[m.length - 1]);
+  }
   const snmpSilentSince = new Map<string, string>();
-  for (const row of L("uptime")) {
-    const d = devOf(row["dt.smartscape.ext_network_device"]);
-    if (!d) continue;
+  const availDone = new Set<string>();
+  for (const row of LF("uptime")) {
+    const d = devFor(row);
+    if (!d || availDone.has(d.name)) continue;
+    availDone.add(d.name);
     const pts: (number | null)[] = (row.c ?? []).slice(0, 24);
     d.availTs = pts.map((v) => (v ? 1 : 0));
     const known = pts.filter((v) => v !== null).length || 24;
@@ -303,19 +361,23 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
 
   // ---------- interfaces ----------
   const nodes = new Map(L("interfaces").map((n) => [n.id, n]));
+  // a port is its Smartscape node when the family reports one, else the device and the port name
+  const ifName = (row: Rec) => String(row["if.name"] ?? row["interface.name"] ?? row["if.descr"] ?? "");
+  const portKey = (row: Rec, d: Device | undefined) => String(row["dt.smartscape.ext_network_interface"] ?? "") || (d ? `${d.name}|${ifName(row)}` : "");
   const errs = new Map<string, Record<string, number>>();
-  for (const k of ["errJuniper", "errCisco", "errGeneric"]) {
-    for (const row of L(k)) {
-      const e: Record<string, number> = {};
-      for (const f of ["ie", "oe", "crc", "idc", "odc"]) if (row[f]) e[f] = clean(row[f]).reduce((a, b) => a + b, 0);
-      errs.set(row["dt.smartscape.ext_network_interface"], e);
-    }
+  for (const row of LF("ifErrors")) {
+    const key = portKey(row, devFor(row));
+    if (!key || errs.has(key)) continue;
+    const e: Record<string, number> = {};
+    // totals already summed by the query, or a series to sum
+    for (const f of ["ie", "oe", "crc", "idc", "odc"]) if (row[f] != null) e[f] = Array.isArray(row[f]) ? clean(row[f]).reduce((a, b) => a + b, 0) : num(row[f]) ?? 0;
+    errs.set(key, e);
   }
   const isUplink = (name: string, speed: number | null) => (speed ?? 0) >= 10000 || /^(te|xe-|et-|po|lc-|hundred|fortygig|tengig)/i.test(name || "");
   const seen = new Set<string>();
   const addIface = (dname: string | undefined, sid: string, ifname: string, speed: number | null, i: unknown, o: unknown) => {
     const d = dname ? devices.get(dname) : undefined;
-    if (!d) return;
+    if (!d || seen.has(sid)) return;
     const node = nodes.get(sid) ?? {};
     seen.add(sid);
     const bin = clean(i).map((v) => Math.round((v * 8) / 300));
@@ -324,24 +386,42 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     const e = errs.get(sid) ?? {};
     const flag: Iface["flag"] = util == null ? null : util > 100 ? "inconsistent" : util >= T.util_crit ? "saturated" : util >= T.util_warn ? "high" : null;
     d.interfaces.push({
-      id: sid || undefined, name: ifname || node.name, speed, oper: node.operational_status || "unknown", admin: node.admin_status || "unknown",
+      id: sid.startsWith("EXT_NETWORK_INTERFACE") ? sid : undefined, name: ifname || node.name, speed, oper: node.operational_status || "unknown", admin: node.admin_status || "unknown",
       type: node.interface_type, util, in: bin, out: bout,
       errors: (e.ie ?? 0) + (e.oe ?? 0), discards: (e.idc ?? 0) + (e.odc ?? 0), crc: e.crc ?? 0,
       uplink: isUplink(ifname, speed), flag,
     });
   };
-  for (const row of L("trJuniper")) addIface(idAlias.get(row["dt.smartscape.ext_network_device"]), row["dt.smartscape.ext_network_interface"], row["if.name"], num(row["if.speed"]), row.i, row.o);
-  for (const k of ["trCisco", "trGeneric"]) {
-    for (const row of L(k)) {
-      const s = clean(row.s);
-      addIface(idAlias.get(row["dt.smartscape.ext_network_device"]), row["dt.smartscape.ext_network_interface"], row["if.name"], s.length ? s[s.length - 1] : null, row.i, row.o);
-    }
+  // every family's ports, the first family to report a port winning (network_device comes first)
+  for (const row of LF("ifTraffic")) {
+    const d = devFor(row);
+    const s = clean(row.s);
+    const speed = s.length ? s[s.length - 1] : num(row["if.speed"]) || null;
+    addIface(d?.name, portKey(row, d), ifName(row), speed, row.i, row.o);
   }
   for (const [sid, node] of nodes) {
     if (seen.has(sid)) continue;
     const dname = chassisToName.get(node["device.chassis_mac"]);
     if (dname) addIface(dname, sid, node.name, num(node.speed), [], []);
   }
+
+  // ---------- VLANs: the extension's VLAN table, then the VLAN interfaces a device carries ----------
+  for (const row of L("vlans")) {
+    const d = devFor(row);
+    if (!d) continue;
+    const tag = row["ex.vlan.tag"] != null ? String(row["ex.vlan.tag"]) : null;
+    if (tag == null && !row["ex.vlan.name"]) continue; // a table row without a VLAN in it
+    (d.vlans ??= []).push({ tag, name: String(row["ex.vlan.name"] ?? "").replace(/^"|"$/g, "") || `VLAN ${tag ?? "?"}`, source: "vlan table" });
+  }
+  // "Vlan20", "vlan 20", "/DMZ/VLAN_31_DMZ_SERVER", "Vl20": the number right after the word is the tag
+  const VLAN_IF = /(?:^|[^a-z])vla?n[\s_.-]*(\d{1,4})(?!\d)|^vl(\d{1,4})$/i;
+  devices.forEach((d) => d.interfaces.forEach((i) => {
+    const m = VLAN_IF.exec(i.name ?? "");
+    if (!m && !/l3ipvlan/i.test(i.type ?? "")) return;
+    const tag = m ? m[1] ?? m[2] : null;
+    if (tag && (d.vlans ?? []).some((v) => v.tag === tag && v.source === "interface")) return;
+    (d.vlans ??= []).push({ tag, name: i.name, source: "interface", iface: i.name, util: i.util });
+  }));
 
   // ---------- syslog and traps ----------
   // 24 h counted per device, kind and level per hour; the records themselves only for the last 3 h
@@ -380,6 +460,19 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
 
   // ---------- topology facts ----------
   const links: NetworkModel["links"] = L("lldp").filter((x) => x["neighbor.sys.name"]).map((x) => ({ a: x["sys.name"], b: x["neighbor.sys.name"], kind: "LLDP", label: `remote port ${x["neighbor.port.id"] ?? "?"}` }));
+  // the documented topology first: Smartscape "calls" between network devices, or between their interfaces
+  const macOwner = new Map<string, string>();
+  byName.forEach((d, n) => { if (d.chassis_mac) macOwner.set(String(d.chassis_mac), n); });
+  const ifaceOwner = new Map<string, { device: string; name: string }>();
+  L("interfaces").forEach((x) => { const dev = macOwner.get(String(x["device.chassis_mac"] ?? "")); if (dev) ifaceOwner.set(String(x.id), { device: dev, name: String(x.name ?? "") }); });
+  const devName = (id: string) => { const n = idAlias.get(id); return n && byName.has(n) ? n : undefined; };
+  for (const e of L("netEdges")) {
+    const iface = e.source_type === "EXT_NETWORK_INTERFACE";
+    const a = iface ? ifaceOwner.get(String(e.source_id)) : undefined, b = iface ? ifaceOwner.get(String(e.target_id)) : undefined;
+    const from = iface ? a?.device : devName(String(e.source_id)), to = iface ? b?.device : devName(String(e.target_id));
+    if (!from || !to || from === to) continue;
+    links.push({ a: from, b: to, kind: "Smartscape", label: iface ? `${a!.name} → ${b!.name}` : "device to device", ...(iface ? { ifA: a!.name, ifAId: String(e.source_id), ifB: b!.name } : {}) });
+  }
   // the neighbours SNMP autodiscovery records, port to port, resolved to the monitored devices by Smartscape id
   const nameById = new Map<string, string>();
   L("devices").forEach((d) => { const n = idAlias.get(d.id); if (n && byName.has(n)) nameById.set(d.id, n); });
@@ -476,18 +569,20 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   }
 
   // ---------- per-device interface summary (the only interface data in a large estate) ----------
-  for (const k of ["statsCisco", "statsGeneric", "statsJuniper"]) {
-    for (const row of L(k)) {
-      const d = devOf(row["dt.smartscape.ext_network_device"]);
-      if (!d) continue;
-      const cur = d.ifStats ?? { maxUtil: null, interfaces: 0, errors: 0, discards: 0 };
-      const util = num(row.maxUtil);
-      d.ifStats = { ...cur, maxUtil: util == null ? cur.maxUtil : Math.max(cur.maxUtil ?? 0, util), interfaces: cur.interfaces + (num(row.interfaces) ?? 0) };
-    }
-  }
-  for (const row of L("errStats")) {
-    const d = devOf(row["dt.smartscape.ext_network_device"]);
+  // families overlap (the common set and the vendor set count the same ports): the busiest and the most
+  // ports any family saw, never their sum
+  for (const row of LF("ifSummary")) {
+    const d = devFor(row);
     if (!d) continue;
+    const cur = d.ifStats ?? { maxUtil: null, interfaces: 0, errors: 0, discards: 0 };
+    const util = num(row.maxUtil);
+    d.ifStats = { ...cur, maxUtil: util == null ? cur.maxUtil : Math.max(cur.maxUtil ?? 0, util), interfaces: Math.max(cur.interfaces, num(row.interfaces) ?? 0) };
+  }
+  const errDone = new Set<string>();
+  for (const row of LF("errSummary")) {
+    const d = devFor(row);
+    if (!d || errDone.has(d.name)) continue;
+    errDone.add(d.name);
     d.ifStats = { maxUtil: d.ifStats?.maxUtil ?? null, interfaces: d.ifStats?.interfaces ?? 0, errors: num(row.errors) ?? 0, discards: num(row.discards) ?? 0 };
   }
 
@@ -542,8 +637,11 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     const base = {
       eventId: String(p["event.id"]), eventKind: String(p["event.kind"] ?? "DAVIS_PROBLEM"), displayId: String(p.display_id ?? ""),
       name: String(p["event.name"] ?? ""), start: String(p["event.start"] ?? ""), category: p["event.category"] ? String(p["event.category"]) : undefined,
-      muted: String(p["dt.davis.mute.status"] ?? "NOT_MUTED") !== "NOT_MUTED",
+      muted: String(p["dt.davis.mute.status"] ?? "NOT_MUTED") !== "NOT_MUTED" || p["maintenance.is_under_maintenance"] === true,
+      ...(num(p["event.severity"]) != null ? { severity: num(p["event.severity"])! } : {}),
+      ...(p["maintenance.is_under_maintenance"] === true ? { maintenance: true } : {}),
     };
+    const rootId = (p["root_cause.smartscape_entity"] as { id?: string } | null)?.id ?? null;
     const onDevice = new Map<Device, string | undefined>();
     entityNames.forEach((n) => {
       const d = byDeviceName.get(String(n).toLowerCase());
@@ -560,7 +658,7 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     if (!onDevice.size && !onCircuits.size) {
       unmappedAlerts.push({ ...base, scope: scopeOf(ids), entities: entityNames });
     }
-    onDevice.forEach((on, d) => { (d.problems ??= []).push({ ...base, ...(on ? { on } : {}) }); });
+    onDevice.forEach((on, d) => { (d.problems ??= []).push({ ...base, ...(on ? { on } : {}), ...(rootId && rootId === d.id ? { rootCause: true } : {}) }); });
     onCircuits.forEach((c) => { (c.problems ??= []).push(base); });
   }
 
@@ -574,7 +672,9 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
       eventId: id, eventKind: String(e["event.kind"] ?? "DAVIS_EVENT"), displayId: "",
       name: String(e["event.name"] ?? type), start: String(e["event.start"] ?? ""),
       category: e["event.category"] ? String(e["event.category"]) : type,
-      muted: String(e["dt.davis.mute.status"] ?? "NOT_MUTED") !== "NOT_MUTED",
+      muted: String(e["dt.davis.mute.status"] ?? "NOT_MUTED") !== "NOT_MUTED" || e["maintenance.is_under_maintenance"] === true,
+      ...(num(e["event.severity"]) != null ? { severity: num(e["event.severity"])! } : {}),
+      ...(e["maintenance.is_under_maintenance"] === true ? { maintenance: true } : {}),
     };
     const ids = [
       ...entitiesOf(e).ids,
@@ -762,11 +862,13 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     sites, siteVerdicts,
     devices: devList.sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || b.impact - a.impact || a.name.localeCompare(b.name)),
     circuits, links, peers, traps, unmappedAlerts,
+    extensions: [...new Set(["ifTraffic", "ifSummary", "cpu", "memory", "uptime"].flatMap((k) => LF(k).map((row) => String(row.family ?? ""))).filter(Boolean))],
     flows: {
       exporters,
       top: [],
     },
     appNet: buildAppNet(L),
+    paths: buildPaths(L, addressing),
     flowMap: buildFlowMap(L, devList, addressing, sites),
     oneagent: L("cloudTop").map((x) => ({ host: x.host, cluster: x.cluster ?? null, dst: x.dst, dport: String(x.dport ?? ""), bytes: num(x.bytes) ?? 0, retr: num(x.retr) ?? 0, resets: num(x.resets) ?? 0, rttMs: null })),
     e2e: { probe: "synthetic ICMP monitors", paths },

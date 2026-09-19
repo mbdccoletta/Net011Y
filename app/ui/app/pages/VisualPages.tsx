@@ -19,7 +19,8 @@ import { DataNeeds } from "../components/DataNeeds";
 import { PageEmpty } from "../components/PageEmpty";
 import { useElementWidth } from "../hooks/useElementWidth";
 import { SlaBars } from "../components/EntityDetails";
-import { VIEW_NEEDS, type Need, type NeedKey } from "../data/requirements";
+import { VIEW_NEEDS, type Need, type NeedKey } from "../data/requirements";import { ReachabilityTile } from "../components/Traffic";
+
 
 interface VisualProps extends PageProps {
   needs: Record<NeedKey, Need>;
@@ -30,6 +31,10 @@ interface VisualProps extends PageProps {
   onExample?: () => void;
   /** Opens Settings › Data on the entry a page is waiting for */
   onSettings?: (key: NeedKey) => void;
+  /** leaves the example data for the environment's own */
+  onLive?: () => void;
+  /** the next step to get more from the app, preferring the one this page needs */
+  nextFor?: (keys: NeedKey[]) => React.ComponentProps<typeof DataNeeds>["next"];
 }
 
 const STATUS_CHIPS = [
@@ -72,10 +77,10 @@ export function SitesVisual(p: VisualProps) {
 
   return (
     <div className="lm vz">
-      <PageBar model={model} failed={p.failed} view={p.view} onView={p.onView}>
+      <PageBar model={model} failed={p.failed} view={p.view} onView={p.onView} onLive={p.onLive}>
         <span className="lm-pill">{fmtInt(infos.length)} sites · {groups.length} groups</span>
       </PageBar>
-      <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.sites} needs={p.needs} compact /></div>
+      <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.sites} needs={p.needs} compact next={p.nextFor?.(VIEW_NEEDS.sites)} /></div>
       {!infos.length ? (
         <PageEmpty title="No sites yet" onExample={p.onExample} onSettings={p.onSettings} configure="sites" needs={p.needs} keys={VIEW_NEEDS.sites}
           detail="Sites come from the primary tags on the SNMP monitoring configurations. Once the devices carry a site tag, they group here by region and carrier." />
@@ -209,10 +214,10 @@ export function DevicesVisual(p: VisualProps) {
 
   return (
     <div className="lm vz">
-      <PageBar model={model} failed={p.failed} view={p.view} onView={p.onView}>
+      <PageBar model={model} failed={p.failed} view={p.view} onView={p.onView} onLive={p.onLive}>
         <span className="lm-pill">{fmtInt(model.devices.length)} devices · {groups.length} roles</span>
       </PageBar>
-      <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.devices} needs={p.needs} compact /></div>
+      <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.devices} needs={p.needs} compact next={p.nextFor?.(VIEW_NEEDS.devices)} /></div>
       {!model.devices.length ? (
         <PageEmpty title="No network devices yet" onExample={p.onExample} onSettings={p.onSettings} configure="devices" needs={p.needs} keys={VIEW_NEEDS.devices}
           detail="Devices come from the SNMP extensions. Each router, switch, firewall and access point they monitor appears here with its interfaces, CPU and events." />
@@ -310,11 +315,14 @@ export function LinksVisual(p: VisualProps) {
 
   return (
     <div className="lm vz">
-      <PageBar model={model} failed={p.failed} view={p.view} onView={p.onView}>
+      <PageBar model={model} failed={p.failed} view={p.view} onView={p.onView} onLive={p.onLive}>
         <span className="lm-pill">{fmtInt(circuits.length)} circuits · {carriers.length} carriers</span>
       </PageBar>
-      <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.links} needs={p.needs} compact /></div>
-      {!circuits.length ? (
+      <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.links} needs={p.needs} compact next={p.nextFor?.(VIEW_NEEDS.links)} /></div>
+      {!circuits.length && model.devices.some((d) => d.icmp) ? (
+        // no circuit tags yet: what the ICMP monitors already say, site by site
+        <div className="vz-body"><ReachabilityTile model={model} onSite={(code) => p.onSelect(`site:${code}`)} /></div>
+      ) : !circuits.length ? (
         <PageEmpty title="No WAN circuits yet" onExample={p.onExample} onSettings={p.onSettings} configure="wan" needs={p.needs} keys={VIEW_NEEDS.links}
           detail="Circuits come from ICMP network availability monitors tagged with site, circuit_id, circuit_role, carrier, circuit_tech and sla_ms. This page shows their latency against the SLA." />
       ) : p.view === "table" ? <div className="vz-table"><LinksPage {...p} /></div> : (

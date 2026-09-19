@@ -38,10 +38,9 @@ export interface NetworkState {
  */
 export const SOURCE_GROUPS = {
   netflow: { probes: ["flowNets"], then: ["flowFanIn", "flowTs"] },
-  firewall: { probes: ["fwConns", "fwDeny"], then: [] },
   deviceLogs: { probes: ["deviceLogs"], then: ["deviceLogsRecent"] },
   neighbors: { probes: ["neighbors"], then: [] },
-  oneagentFlows: { probes: ["appNet"], then: ["appNetBy", "cloud", "cloudTop"] },
+  oneagentFlows: { probes: ["appNet"], then: ["appNetBy", "appPaths", "cloud", "cloudTop"] },
 } as const;
 export type SourceGroup = keyof typeof SOURCE_GROUPS;
 export const SOURCE_RECHECK_MS = 12 * 3600 * 1000;
@@ -59,7 +58,9 @@ function writeAbsent(v: Partial<Record<SourceGroup, number>>) {
 
 const REQUIRED = ["devices", "interfaces"];
 // Enough to judge every device; logs and flows refine the views when they arrive (progressive loading).
-const CORE = ["devices", "interfaces", "trJuniper", "trCisco", "trGeneric", "errJuniper", "errCisco", "errGeneric", "cpu", "uptime", "icmp", "lldp", "neighbors", "routing"];
+// Of the extension families, the common set carries the first screen; vendor families complete it later.
+const FAMILY_CORE = Object.keys(QUERIES).filter((k) => /^(ifSummary|errSummary|cpu|memory|uptime):/.test(k) || k === "ifTraffic:network_device" || k === "ifErrors:network_device");
+const CORE = ["devices", "interfaces", ...FAMILY_CORE, "icmp", "lldp", "neighbors", "routing"];
 const NAMES = Object.keys(QUERIES);
 const STALE_MS = 5 * 60 * 1000;
 /**
@@ -90,9 +91,11 @@ export function useNetwork(source: Source): NetworkState {
   }, [live, demo]);
   // The query set is static, so the hooks are always called in the same order.
   // the inventory decides whether the per-interface queries run at all
+  // runInBackground: the SDK cancels a running query when the tab loses focus and does not start it again,
+  // so a user who switched tabs during the load came back to a load that never finished
   const inventory = useDql(
     { query: QUERIES.devices.query, maxResultRecords: QUERIES.devices.maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500 },
-    { enabled: live, staleTime: STALE_MS },
+    { enabled: live, staleTime: STALE_MS, runInBackground: true },
   );
   const estate = inventory.isSuccess ? (inventory.data?.records ?? []).length : null;
   const detailOk = estate != null && estate <= DETAIL_MAX_DEVICES;
@@ -115,7 +118,7 @@ export function useNetwork(source: Source): NetworkState {
     // eslint-disable-next-line react-hooks/rules-of-hooks
     return useDql(
       { query: inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500 },
-      { enabled: live && !gated && (!QUERIES[name].detail || detailOk) && waveOf(name) <= phase, staleTime: STALE_MS },
+      { enabled: live && !gated && (!QUERIES[name].detail || detailOk) && waveOf(name) <= phase, staleTime: STALE_MS, runInBackground: true },
     );
   });
   NAMES.forEach((n, i) => { if (results[i].isSuccess) probeRows.set(n, (results[i].data?.records ?? []).length); });
@@ -184,7 +187,8 @@ export function useNetwork(source: Source): NetworkState {
     done: live ? settled : NAMES.length,
     total: NAMES.length,
     failed,
-    refetch: () => results.forEach((r, i) => { if (!skipped(i)) r.refetch(); }),
+    // Refresh means now: refetch would hand back the cached answer for as long as it is fresh (staleTime)
+    refetch: () => { inventory.forceRefetch(); results.forEach((r, i) => { if (!skipped(i)) r.forceRefetch(); }); },
     absent,
     recheck: () => { writeAbsent({}); setAbsent({}); },
   };

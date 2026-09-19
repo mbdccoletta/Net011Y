@@ -31,7 +31,7 @@ export function PageEmpty({ title, detail, keys, needs, configure, onSettings, o
           {onSettings && target && (
             <Button variant="emphasized" onClick={() => onSettings(target)}>Settings › {needs[target]?.label ?? "Data"}</Button>
           )}
-          {onExample && <Button onClick={onExample}>Show example</Button>}
+          {onExample && <Button onClick={onExample}>Preview this page with example data</Button>}
         </EmptyState.Actions>
       </EmptyState>
     </div>

@@ -51,6 +51,7 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
     source: "SNMP extensions running on an ActiveGate group (Extensions 2.0). They create the Smartscape nodes EXT_NETWORK_DEVICE and EXT_NETWORK_INTERFACE.",
     prerequisites: SNMP_PREREQ,
     steps: [
+      "Only syslog received by the ActiveGate syslog ingestion is read (dt.openpipeline.source = extension:syslog, log.source = syslog). Syslog written to files by a syslog server and collected from there is not in the documented format and is not read.",
       "In Extensions, activate the extension that matches each vendor: com.dynatrace.extension.snmp-generic-cisco-device, snmp-generic-juniper, palo-alto-generic, f5.bigip, or snmp-generic-device for any other device.",
       "Create a monitoring configuration on the ActiveGate group and add every device IP address with its SNMP credentials. For large networks, use the SNMP Autodiscovery extension per IP range.",
       "Name devices BR-<state>-<site>-<role><n> (for example BR-RS-POR1-RTR1) or add the site primary tags below. Roles: RTR edge router, CON core, SWT switch, APW access point, WLC wireless controller, FWL firewall, LBL load balancer.",
@@ -155,8 +156,9 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
     prerequisites: ["ActiveGate 1.343 or later running the extensions.", "Enrichment for extensions enabled in the environment (the schema marks it as in development)."],
     steps: [
       "In each SNMP monitoring configuration, add primary tags to every device (up to 20; keys must start with primary_tags.).",
-      "primary_tags.site: site code. primary_tags.site_name: display name. primary_tags.site_type: branch or datacenter. primary_tags.region: region. primary_tags.state and primary_tags.city. primary_tags.geo_lat and primary_tags.geo_lon: decimal coordinates. primary_tags.hub: code of the data center the site's WAN terminates on.",
-      "Without tags the app falls back to the device naming convention and can't place sites on the map.",
+      "primary_tags.site: site code. primary_tags.site_name: display name. primary_tags.site_type: branch or datacenter. primary_tags.region: region. primary_tags.state and primary_tags.city. primary_tags.geo_lat and primary_tags.geo_lon: decimal coordinates. primary_tags.hub: code of the data center the site's WAN terminates on. primary_tags.site_cidr: the site's address ranges, comma separated.",
+      "Dynatrace defines primary Grail tags (primary_tags.<key>) but no key names: the ones above are this app's convention, and the only names it reads.",
+      "Without tags the app places sites from the fields the SNMP extensions report as standard (sysLocation, the autodiscovery group label) and, as a last resort, from a device naming convention; neither gives map coordinates.",
     ],
     snippets: [{
       title: "Device entry with primary tags",
@@ -204,18 +206,6 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
       "Point each device's syslog to the ActiveGate IP. The device must send from the same IP address that the SNMP extension polls: the app links logs to devices by source IP (dt.ingest.source.ip).",
     ],
     verify: "fetch logs, from:now()-1h\n| filter dt.openpipeline.source == \"extension:syslog\"\n| summarize records = count(), by:{dt.ingest.source.ip, loglevel}",
-    docs: [DOCS.syslog],
-  },
-  firewallLogs: {
-    uses: "The Traffic page and each site's traffic without NetFlow: who talks to whom across the firewall zones, which applications carry the bytes, and what the firewall refuses (for example thousands of DNS queries denied from a handful of hosts).",
-    source: "Firewall logs over syslog on an ActiveGate. Cisco ASA connection teardowns (%ASA-6-302014 TCP, %ASA-6-302016 UDP) name both ends, the zones and the bytes; denies (%ASA-4-106023) name what was refused.",
-    prerequisites: ["Syslog ingestion set up on an ActiveGate (see Syslog).", "Logging level informational (6) on the firewall, so connection teardowns are sent."],
-    steps: [
-      "On the ASA: logging enable, logging trap informational, logging host <zone> <ActiveGate IP>.",
-      "Keep messages 302014, 302016 and 106023 enabled (they are by default at level 6 and 4).",
-      "Monitor the firewall with the SNMP extension too, from the same address it logs from: the app then places its traffic at the firewall's site.",
-    ],
-    verify: "fetch logs, from:now()-1h\n| filter contains(content, \"-302014:\") or contains(content, \"-106023:\")\n| summarize records = count(), by:{log.source}",
     docs: [DOCS.syslog],
   },
   traps: {
@@ -286,7 +276,7 @@ service:
     prerequisites: ["OneAgent 1.337 or later on the application hosts (Linux, Windows or AIX)."],
     steps: [
       "Go to Settings > Collect and capture > Infrastructure > Network connection monitoring and enable it for the application hosts.",
-      "By default only critical connections are reported, up to 100 records per minute per host; widen the filter if you need full volumes.",
+      "By default OneAgent reports only critical connections (sessions that were reset or timed out), up to 100 records per minute: path quality then shows where connections fail, not all traffic. Report all connections for the full picture.",
     ],
     verify: "fetch events, from:now()-1h, bucket:{\"default_network_flows\"}\n| summarize conversations = count(), by:{host.name}",
     docs: [DOCS.oneagentFlows],
@@ -365,7 +355,7 @@ export const DATA_GROUPS: { title: string; hint: string; keys: NeedKey[] }[] = [
   { title: "Reachability and WAN", hint: "Whether sites answer and how their links behave", keys: ["icmp", "wan"] },
   { title: "Alerts and events", hint: "What Dynatrace is alerting on, and what the devices report themselves", keys: ["alerts", "syslog", "traps"] },
   { title: "Topology and routing", hint: "How devices connect to each other", keys: ["lldp", "routing"] },
-  { title: "Traffic and applications", hint: "Where the traffic goes and how applications feel it", keys: ["netflow", "firewallLogs", "appFlows"] },
+  { title: "Traffic and applications", hint: "Where the traffic goes and how applications feel it", keys: ["netflow", "appFlows"] },
   { title: "User impact", hint: "Whether what the network did reached the people using the applications", keys: ["sessions", "requests"] },
   { title: "Intelligence", hint: "Explanations written by Dynatrace Intelligence", keys: ["assist"] },
 ];

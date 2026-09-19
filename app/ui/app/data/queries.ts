@@ -1,6 +1,8 @@
 // DQL used by NetworkO11y. Every query was validated on guu84124 (2026-09-14).
 // Metric keys that contain hyphens must be backticked inside `timeseries`,
 // otherwise Grail answers MANDATORY_PARAMETER_HAS_TO_BE.
+import { familyQueries, vlanQuery } from "./formats";
+
 export interface NetQuery {
   query: string;
   maxResultRecords?: number;
@@ -18,10 +20,6 @@ export interface NetQuery {
   detail?: boolean;
 }
 
-const C = "`com.dynatrace.extension.snmp-generic-cisco-device";
-const G = "`com.dynatrace.extension.snmp-generic-device";
-const J = "com.dynatrace.extension.juniper.generic";
-const ND = "com.dynatrace.extension.network_device";
 const CIRCUIT_TAGS = "primary_tags.site, primary_tags.circuit_id, primary_tags.circuit_role, primary_tags.carrier, primary_tags.circuit_tech, primary_tags.sla_ms, primary_tags.bandwidth_mbps";
 
 /** Hours of syslog and traps read on load; the device timeline can ask for 24 h of one device. */
@@ -34,7 +32,7 @@ export const QUERIES: Record<string, NetQuery> = {
   // Open Davis problems, matched to devices by their Smartscape or classic entity id (drill-down to Problems)
   problems: {
     complete: true,
-    query: 'fetch dt.davis.problems, from:now()-24h | filter event.status == "ACTIVE" and not(dt.davis.is_duplicate) | fields event.id, event.kind, display_id, event.name, event.start, event.category, dt.davis.mute.status, dt.davis.event_ids, smartscape.affected_entity.ids, smartscape.affected_entities, dt.smartscape_source.id, affected_entity_ids, affected_entity_names | sort event.start desc | limit 5000',
+    query: 'fetch dt.davis.problems, from:now()-24h | filter event.status == "ACTIVE" and not(dt.davis.is_duplicate) | fields event.id, event.kind, display_id, event.name, event.start, event.category, dt.davis.mute.status, dt.davis.event_ids, smartscape.affected_entity.ids, smartscape.affected_entities, dt.smartscape_source.id, root_cause.smartscape_entity, event.severity, maintenance.is_under_maintenance, affected_entity_ids, affected_entity_names | sort event.start desc | limit 5000',
     maxResultRecords: 5000,
   },
   // Real user sessions, for the one question this app asks about them: did what the network did reach the
@@ -73,71 +71,24 @@ export const QUERIES: Record<string, NetQuery> = {
   },
   devices: { complete: true, query: "smartscapeNodes EXT_NETWORK_DEVICE", maxResultRecords: 50000 },
   interfaces: { complete: true, query: "smartscapeNodes EXT_NETWORK_INTERFACE", maxResultRecords: 150000, detail: true },
-  trJuniper: {
-    complete: true,
-    detail: true,
-    query: `timeseries {i=sum(${J}.if.in.octets.count), o=sum(${J}.if.out.octets.count)}, by:{dt.smartscape.ext_network_device, dt.smartscape.ext_network_interface, if.name, if.speed}, from:now()-2h, interval:5m`,
-    maxResultRecords: 60000,
-  },
-  trCisco: {
-    complete: true,
-    detail: true,
-    query: `timeseries {i=sum(${C}.if.hc.in.octets.count\`), o=sum(${C}.if.hc.out.octets.count\`), s=avg(${C}.if.highspeed\`)}, by:{dt.smartscape.ext_network_device, dt.smartscape.ext_network_interface, if.name}, from:now()-2h, interval:5m`,
-    maxResultRecords: 60000,
-  },
-  trGeneric: {
-    complete: true,
-    detail: true,
-    query: `timeseries {i=sum(${G}.if.hc.in.octets.count\`), o=sum(${G}.if.hc.out.octets.count\`), s=avg(${G}.if.highspeed\`)}, by:{dt.smartscape.ext_network_device, dt.smartscape.ext_network_interface, if.name}, from:now()-2h, interval:5m`,
-    maxResultRecords: 60000,
-  },
-  errJuniper: {
-    complete: true,
-    detail: true,
-    query: `timeseries {ie=sum(${J}.if.in.err.count), oe=sum(${J}.if.out.err.count), idc=sum(${J}.if.in.discards.count), odc=sum(${J}.if.out.discards.count)}, by:{dt.smartscape.ext_network_interface}, from:now()-2h, interval:5m`,
-    maxResultRecords: 60000,
-  },
-  errCisco: {
-    complete: true,
-    detail: true,
-    query: `timeseries {ie=sum(${C}.if.in.errors.count\`), oe=sum(${C}.if.out.errors.count\`), crc=sum(${C}.if.in.crc_errors.count\`), idc=sum(${C}.if.in.discards.count\`), odc=sum(${C}.if.out.discards.count\`)}, by:{dt.smartscape.ext_network_interface}, from:now()-2h, interval:5m`,
-    maxResultRecords: 60000,
-  },
-  errGeneric: {
-    complete: true,
-    detail: true,
-    query: `timeseries {ie=sum(${G}.if.in.errors.count\`), oe=sum(${G}.if.out.errors.count\`), idc=sum(${G}.if.in.discards.count\`), odc=sum(${G}.if.out.discards.count\`)}, by:{dt.smartscape.ext_network_interface}, from:now()-2h, interval:5m`,
-    maxResultRecords: 60000,
-  },
-  // Interface health summarised per device: what the pages need to show a status without pulling
-  // every port of every device (validated on guu84124 2026-09-17).
-  statsCisco: {
-    complete: true,
-    query: `timeseries i=max(${C}.if.hc.in.octets.count\`), o=max(${C}.if.hc.out.octets.count\`), s=avg(${C}.if.highspeed\`), by:{dt.smartscape.ext_network_device, dt.smartscape.ext_network_interface}, from:now()-2h, interval:5m | fieldsAdd peak = arrayMax(arrayConcat(i, o)), speed = arrayAvg(s) | fieldsAdd util = if(speed > 0, peak * 8 / 300 / (speed * 1000000) * 100, else: 0.0) | summarize maxUtil = round(max(util), decimals: 2), interfaces = count(), by:{dt.smartscape.ext_network_device}`,
-    maxResultRecords: 50000,
-  },
-  statsGeneric: {
-    complete: true,
-    query: `timeseries i=max(${G}.if.hc.in.octets.count\`), o=max(${G}.if.hc.out.octets.count\`), s=avg(${G}.if.highspeed\`), by:{dt.smartscape.ext_network_device, dt.smartscape.ext_network_interface}, from:now()-2h, interval:5m | fieldsAdd peak = arrayMax(arrayConcat(i, o)), speed = arrayAvg(s) | fieldsAdd util = if(speed > 0, peak * 8 / 300 / (speed * 1000000) * 100, else: 0.0) | summarize maxUtil = round(max(util), decimals: 2), interfaces = count(), by:{dt.smartscape.ext_network_device}`,
-    maxResultRecords: 50000,
-  },
-  statsJuniper: {
-    complete: true,
-    query: `timeseries i=max(${J}.if.in.octets.count), o=max(${J}.if.out.octets.count), by:{dt.smartscape.ext_network_device, dt.smartscape.ext_network_interface, if.speed}, from:now()-2h, interval:5m | fieldsAdd peak = arrayMax(arrayConcat(i, o)), speed = toDouble(if.speed) | fieldsAdd util = if(speed > 0, peak * 8 / 300 / (speed * 1000000) * 100, else: 0.0) | summarize maxUtil = round(max(util), decimals: 2), interfaces = count(), by:{dt.smartscape.ext_network_device}`,
-    maxResultRecords: 50000,
-  },
-  errStats: {
-    complete: true,
-    query: `timeseries e=sum(${C}.if.in.errors.count\`), c=sum(${C}.if.in.crc_errors.count\`), d=sum(${C}.if.in.discards.count\`), by:{dt.smartscape.ext_network_device}, from:now()-2h, interval:5m | fieldsAdd errors = arraySum(e) + arraySum(c), discards = arraySum(d) | fields dt.smartscape.ext_network_device, errors, discards`,
-    maxResultRecords: 50000,
-  },
-  cpu: { complete: true, query: `timeseries {cpu=avg(${ND}.cpu_usage)}, by:{dt.smartscape.ext_network_device}, from:now()-2h, interval:5m`, maxResultRecords: 50000 },
-  uptime: { complete: true, query: `timeseries c=count(${ND}.sysuptime), by:{dt.smartscape.ext_network_device}, from:now()-24h, interval:1h`, maxResultRecords: 50000 },
+  // Every metric family of the Dynatrace network extensions, from one catalog (formats.ts): one query per
+  // family and measure, named "<measure>:<family>", so they run side by side. A family the environment does
+  // not send answers at once with nothing.
+  ...Object.fromEntries(([
+    ["ifTraffic", { complete: true, detail: true, maxResultRecords: 60000 }],
+    ["ifErrors", { complete: true, detail: true, maxResultRecords: 60000 }],
+    ["ifSummary", { complete: true, maxResultRecords: 50000 }],
+    ["errSummary", { complete: true, maxResultRecords: 50000 }],
+    ["cpu", { complete: true, maxResultRecords: 50000 }],
+    ["memory", { complete: true, maxResultRecords: 50000 }],
+    ["uptime", { complete: true, maxResultRecords: 50000 }],
+  ] as const).flatMap(([m, opts]) => familyQueries(m).map(([name, query]) => [name, { ...opts, query }]))),
+  vlans: { query: vlanQuery(), maxResultRecords: 20000 },
   // Inventory arrives as primary Grail tags: site tags on the SNMP monitoring configurations,
   // circuit tags (carrier, role, SLA) on the ICMP network availability monitor of each WAN circuit.
   alerts: {
     complete: true,
-    query: 'fetch dt.davis.events, from:now()-24h | filter event.status == "ACTIVE" and event.kind == "DAVIS_EVENT" and not(event.type == "PROBLEM_UPDATE" or event.type == "CUSTOM_INFO" or event.type == "CUSTOM_ANNOTATION" or event.type == "CUSTOM_DEPLOYMENT" or event.type == "CUSTOM_CONFIGURATION") | fields event.id, event.kind, event.type, event.name, event.category, event.start, dt.davis.mute.status, dt.source_entity, dt.smartscape_source.id, smartscape.affected_entities, affected_entity_ids, affected_entity_names, dt.smartscape.ext_network_device, dt.smartscape.ext_network_interface, dt.entity.multiprotocol_monitor | sort event.start desc | limit 5000',
+    query: 'fetch dt.davis.events, from:now()-1h | filter event.status == "ACTIVE" and event.kind == "DAVIS_EVENT" and not(event.type == "PROBLEM_UPDATE" or event.type == "CUSTOM_INFO" or event.type == "CUSTOM_ANNOTATION" or event.type == "CUSTOM_DEPLOYMENT" or event.type == "CUSTOM_CONFIGURATION") | fields event.id, event.kind, event.type, event.name, event.category, event.start, event.severity, maintenance.is_under_maintenance, dt.davis.mute.status, dt.source_entity, dt.smartscape_source.id, smartscape.affected_entities, affected_entity_ids, affected_entity_names, dt.smartscape.ext_network_device, dt.smartscape.ext_network_interface, dt.entity.multiprotocol_monitor | sort event.start desc | limit 5000',
     // a busy environment holds thousands of open events (fxz0998d: over 2000 interface events): the cap
     // matches the query's own limit so none is dropped silently
     maxResultRecords: 5000,
@@ -165,13 +116,21 @@ export const QUERIES: Record<string, NetQuery> = {
     query: 'fetch logs, from:now()-3h | filter (dt.openpipeline.source == "extension:syslog" and dt.ingest.source.ip != "127.0.0.1") or log.source == "snmptraps" | sort timestamp desc | fields timestamp, kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = coalesce(dt.ingest.source.ip, device.address), loglevel, app = syslog.appname, oid = snmp.trap_oid, content | limit 2000',
     maxResultRecords: 2000,
   },
+  // the documented topology of network extensions: Smartscape "calls" between network devices and
+  // between network interfaces (filled by extensions that define it); the neighbour logs below add what
+  // it does not hold
+  netEdges: {
+    query: 'smartscapeEdges calls | filter source_type == "EXT_NETWORK_DEVICE" or source_type == "EXT_NETWORK_INTERFACE" | fields source_id, source_type, target_id, target_type',
+    maxResultRecords: 50000,
+  },
   lldp: {
     query: 'fetch metric.series | filter endsWith(metric.key, "lldp_neighbor") | fields sys.name, neighbor.sys.name, neighbor.port.id',
     maxResultRecords: 2000,
   },
-  // who is cabled to whom: the CDP/LLDP neighbours the SNMP autodiscovery records port by port, every hour
+  // who is cabled to whom: the CDP/LLDP neighbours the SNMP autodiscovery records port by port, every
+  // 10 minutes (so half an hour holds the latest of each)
   neighbors: {
-    query: 'fetch logs, from:now()-2h | filter log.source == "snmp_autodiscovery" and content == "Neighbor discovery" | summarize seen = max(timestamp), by:{dt.smartscape.ext_network_device, dt.smartscape.ext_network_interface, base.interface.name, neighbor.ext_network_device, neighbor.device.name, neighbor.interface.name, neighbor.protocol}',
+    query: 'fetch logs, from:now()-30m | filter log.source == "snmp_autodiscovery" and content == "Neighbor discovery" | summarize seen = max(timestamp), by:{dt.smartscape.ext_network_device, dt.smartscape.ext_network_interface, base.interface.name, neighbor.ext_network_device, neighbor.device.name, neighbor.interface.name, neighbor.protocol}',
     maxResultRecords: 20000,
   },
   routing: {
@@ -184,7 +143,7 @@ export const QUERIES: Record<string, NetQuery> = {
   },
   // who talks to whom: the last hour of NetFlow by exporter and /24 at each end, heaviest first
   flowNets: {
-    query: 'fetch logs, from:now()-1h | filter otel.scope.name == "otelcol/netflowreceiver" | fieldsAdd s24 = ipMask(source.address, 24), d24 = ipMask(destination.address, 24) | summarize bytes = sum(toLong(flow.io.bytes)), flows = count(), by:{exp = flow.sampler_address, s24, d24, proto = network.transport, dport = destination.port} | sort bytes desc | limit 5000',
+    query: 'fetch logs, from:now()-1h | filter otel.scope.name == "otelcol/netflowreceiver" | fieldsAdd s24 = ipMask(source.address, 24), d24 = ipMask(destination.address, 24) | summarize bytes = sum(toLong(flow.io.bytes)), flows = count(), by:{exp = flow.sampler_address, s24, d24, proto = network.transport, dport = destination.port, in_if = flow.in_if, out_if = flow.out_if} | sort bytes desc | limit 5000',
     maxResultRecords: 5000,
   },
   // many talking to one: a range reached from an unusual number of distinct Internet sources (a busy
@@ -193,17 +152,17 @@ export const QUERIES: Record<string, NetQuery> = {
     query: 'fetch logs, from:now()-1h | filter otel.scope.name == "otelcol/netflowreceiver" | filter not(ipIn(source.address, array("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10"))) | summarize srcs = countDistinct(source.address), dsts = countDistinct(destination.address), bytes = sum(toLong(flow.io.bytes)), flows = count(), by:{exp = flow.sampler_address, dst = ipMask(destination.address, 24), dport = destination.port} | filter srcs >= 100 | sort srcs desc | limit 20',
     maxResultRecords: 20,
   },
-  // Firewall connection logs (Cisco ASA over syslog): a closed connection carries both ends, the zones
-  // and the bytes, so a firewall is a flow exporter the customer already has. The ASA orders the ends by
-  // interface security, not by who called: the lower port is read as the service, and its end as the server
-  fwConns: {
-    query: 'fetch logs, from:now()-1h | filter startsWith(log.source, "/syslog/") and (contains(content, "-302014:") or contains(content, "-302016:")) | parse content, "LD \'Teardown \' WORD:proto LD \' for \' LD:za \':\' IPADDR:a \'/\' INT:pa \' to \' LD:zb \':\' IPADDR:b \'/\' INT:pb LD \' bytes \' LONG:bytes" | filter isNotNull(bytes) | fieldsAdd fw = splitString(log.source, "/")[2], srvA = pa < pb | fieldsAdd zs = if(srvA, zb, else:za), zd = if(srvA, za, else:zb), src = if(srvA, b, else:a), dst = if(srvA, a, else:b), dport = if(srvA, pa, else:pb) | summarize bytes = sum(bytes), conns = count(), by:{fw, zs, zd, s24 = ipMask(src, 24), d24 = ipMask(dst, 24), proto, dport} | sort bytes desc | limit 5000',
-    maxResultRecords: 5000,
+  // SNMP interface index to port name, from the series metadata (no log scan): it ties a flow's
+  // flow.in_if / flow.out_if to the port the app measures
+  ifIndex: {
+    query: 'fetch metric.series, from:now()-2h | filter isNotNull(if.idx) and (endsWith(metric.key, "if.hc.in.octets.count") or endsWith(metric.key, "if.in.octets.count")) | fields device.address, if.idx, if.name | dedup {device.address, if.idx}',
+    maxResultRecords: 50000,
   },
-  // what the firewalls refuse, by zone pair and port, with how many hosts are trying
-  fwDeny: {
-    query: 'fetch logs, from:now()-1h | filter startsWith(log.source, "/syslog/") and contains(content, "-106023:") | parse content, "LD \'Deny \' WORD:proto \' src \' LD:zs \':\' IPADDR:src \'/\' INT \' dst \' LD:zd \':\' IPADDR:dst \'/\' INT:dport" | fieldsAdd fw = splitString(log.source, "/")[2] | summarize denies = count(), srcs = countDistinct(src), dsts = countDistinct(dst), by:{fw, zs, zd, proto, dport} | sort denies desc | limit 200',
-    maxResultRecords: 200,
+  // the quality of each path: a workload and the network at the other end of its connections, with the
+  // service port. The remote end is the source when the process serves, the destination when it calls.
+  appPaths: {
+    query: 'fetch events, from:now()-1h, bucket:{"default_network_flows"} | filter network_flow.network.type == "IPV4" | fieldsAdd server = network_flow.process_is_server == true | fieldsAdd remote = if(server, network_flow.source.address, else:network_flow.destination.address), grp = coalesce(k8s.cluster.name, dt.host_group.id, host.name), rtt = if(toLong(network_flow.tcp.rtt) > 0, toLong(network_flow.tcp.rtt)), pk = toLong(network_flow.packets.tx) + toLong(network_flow.packets.rx), re = toLong(network_flow.packets.retransmitted.tx) + toLong(network_flow.packets.retransmitted.rx) | summarize conv = count(), rtt90 = percentile(rtt, 90), pk = sum(pk), re = sum(re), resets = sum(toLong(network_flow.tcp.sessions.reset)), timeouts = sum(toLong(network_flow.tcp.sessions.timeout)), by:{grp, server, r24 = ipMask(remote, 24), port = network_flow.destination.port} | sort conv desc | limit 3000',
+    maxResultRecords: 3000,
   },
   // how the network feels from the applications: TCP retransmissions and round trip, every 10 minutes
   appNet: {

@@ -5,7 +5,7 @@ import type { DeviceProblem, NetworkModel } from "../model/types";
 import type { Cause } from "../model/causes";
 import { trafficDrop, type Suspicion } from "../model/suspicion";
 import type { SiteInfo } from "../model/site";
-import { isBad } from "../model/verdict";import { environmentFindings, trafficInsights } from "../model/traffic";
+import { isBad } from "../model/verdict";import { environmentFindings, portUsers, trafficInsights } from "../model/traffic";
 import { buildJourney } from "../model/journey";
 
 
@@ -231,7 +231,7 @@ function siteTrafficFacts(model: NetworkModel, code: string) {
 export function trafficContext(model: NetworkModel, site?: string) {
   const f = model.flowMap;
   const gb = (b: number) => `${(b / 1e9).toFixed(2)} GB`;
-  const j = f ? buildJourney(f.conversations, f.denies, model.sites, { site }) : null;
+  const j = f ? buildJourney(f.conversations, model.sites, { site }) : null;
   const label = (id: string) => j?.nodes.find((n) => n.id === id)?.label ?? id;
   return {
     dataSource: model.demo ? "simulated example network" : `Dynatrace environment ${model.meta.tenant}`,
@@ -240,16 +240,20 @@ export function trafficContext(model: NetworkModel, site?: string) {
     window: "last hour",
     sources: {
       netflow: f?.sources.netflow ? `${f.sources.netflow.exporters} exporters, ${gb(f.sources.netflow.bytes)}` : "not received",
-      firewallLogs: f?.sources.firewall ? `${f.sources.firewall.firewalls} firewalls, ${f.sources.firewall.connections} connections, ${f.sources.firewall.denies} denies${f.sources.firewall.capped ? ", list reached its query limit" : ""}` : "not received",
       oneAgent: model.appNet ? model.appNet.source : "not received",
       siteAddressRanges: f ? `${f.subnetsTagged} site_cidr ranges tagged, ${f.subnetsKnown} subnets known in total` : "n/a",
     },
-    heaviestPaths: j ? j.links.filter((l) => l.to !== "denied" && j.nodes.find((n) => n.id === l.from)?.col === 1).sort((a, b) => b.bytes - a.bytes).slice(0, 8)
+    heaviestPaths: j ? j.links.filter((l) => j.nodes.find((n) => n.id === l.from)?.col === 1).sort((a, b) => b.bytes - a.bytes).slice(0, 8)
       .map((l) => ({ through: label(l.from), to: label(l.to), volume: gb(l.bytes), count: l.count })) : [],
     sourcesOfTraffic: j ? j.nodes.filter((n) => n.col === 0).sort((a, b) => b.bytes - a.bytes).map((n) => ({ from: n.label, kind: n.kind, volume: gb(n.bytes) })) : [],
-    denied: (f?.denies ?? []).filter((d) => !site || d.site === site).slice(0, 8).map((d) => ({ firewall: d.viaName, fromZone: d.from, toZone: d.to, port: `${d.proto}/${d.port}`, attempts: d.denies, hosts: d.sources })),
     findings: environmentFindings(model).filter((x) => !site || x.site === site).map((x) => x.text),
     retransmissionsByWorkload: (model.appNet?.workloads ?? []).slice(0, 8).map((w) => ({ workload: w.name, lastHourPct: w.retrNow, usualPct: w.retrUsual })),
+    // path quality: each workload and the network at the other end, worst first
+    paths: (model.paths ?? []).filter((p) => !site || p.remoteSite === site)
+      .sort((a, b) => ((b.retrPct ?? 0) * 10 + (b.rttP90Ms ?? 0) / 10) - ((a.retrPct ?? 0) * 10 + (a.rttP90Ms ?? 0) / 10)).slice(0, 10)
+      .map((p) => ({ workload: p.workload, role: p.server ? "serves" : "calls", otherEnd: p.remoteKind === "site" ? model.sites[p.remoteSite!]?.name ?? p.remoteSite : p.remoteKind === "internet" ? `Internet ${p.remoteNet}` : p.remoteNet, service: p.app, conversations: p.conversations, roundTripP90Ms: p.rttP90Ms, retransmittedPct: p.retrPct, resets: p.resets })),
+    // the busiest ports, with what the exporter saw on them
+    busyPorts: model.devices.flatMap((d) => d.interfaces.filter((i) => (i.util ?? 0) >= 80).map((i) => ({ device: d.name, port: i.name, utilizationPct: Math.round(i.util!), users: portUsers(model, d, i.name).slice(0, 4) }))).filter((p) => p.users.length).slice(0, 6),
   };
 }
 

@@ -19,7 +19,7 @@ import { DeviceDetails, HopDetails } from "./Details";
 import { DataNeeds } from "./DataNeeds";
 import { VIEW_NEEDS, type Need, type NeedKey } from "../data/requirements";
 import { useElementWidth } from "../hooks/useElementWidth";
-import { SiteTrafficTile } from "./Traffic";
+import { SitePathsTile, SiteTrafficTile } from "./Traffic";
 
 interface Props {
   needs: Record<NeedKey, Need>;
@@ -251,6 +251,7 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
       )}
       {/* who this site talks to, and what with: NetFlow from its own exporters */}
       <SiteTrafficTile model={model} code={info.code} onSite={(c) => onSelect(`site:${c}`)} />
+      <SitePathsTile model={model} code={info.code} />
       {/* is what is degraded here explained by the network? A suspicion, and Assist to argue it */}
       {(model.users || (model.unmappedAlerts ?? []).some((a) => a.scope === "application" || a.scope === "service" || a.scope === "host")) && (
         <Tile title="Fault domain" right="network or not">
@@ -296,6 +297,8 @@ export function EntityDetails(props: Props) {
                 <span className="vz-stat"><b>{d.interfaces.filter((i) => i.oper.startsWith("up")).length}/{d.interfaces.length}</b>interfaces up</span>
                 <span className="vz-stat"><b>{fmtInt(d.syslog.ERROR)}</b>syslog errors · 6 h</span>
                 <span className="vz-stat"><b>{fmtInt(d.traps)}</b>traps</span>
+                {d.memNow != null && <span className="vz-stat"><b>{Math.round(d.memNow)}%</b>memory in use</span>}
+                {(d.vlans?.length ?? 0) > 0 && <span className="vz-stat"><b>{d.vlans!.length}</b>VLANs</span>}
               </div>
             </div>
             <LimitLine values={d.cpu} limit={T.cpu_crit} label="CPU" />

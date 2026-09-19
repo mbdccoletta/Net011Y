@@ -21,6 +21,8 @@ import { LiveMapPage } from "./pages/LiveMapPage";
 import { TrafficPage } from "./pages/TrafficPage";
 import { evaluateNeeds, VIEW_NEEDS, type NeedKey } from "./data/requirements";
 import { DataNeeds } from "./components/DataNeeds";
+import { coverage, nextSteps } from "./model/nextSteps";
+import { pageCoverage } from "./model/coverage";
 import { SettingsSheet } from "./components/SettingsSheet";
 import { SettingIcon } from "@dynatrace/strato-icons";
 
@@ -61,6 +63,21 @@ export function App() {
 
   const infos = useMemo(() => (model ? allSites(model) : []), [model]);
   const needs = useMemo(() => evaluateNeeds(net.counts, model, url.source, net.absent), [JSON.stringify(net.counts), model, url.source, JSON.stringify(net.absent)]); // eslint-disable-line react-hooks/exhaustive-deps
+  // what to do next to get more from the app, measured on this environment
+  const steps = useMemo(() => nextSteps(model, needs), [model, needs]);
+  const inUse = useMemo(() => coverage(nextSteps(model, needs, { all: true })), [model, needs]);
+  // how much of each page this environment can fill: shown on the tabs, before a page is opened
+  const pageCov = useMemo(() => pageCoverage(model), [model]);
+  const tab = (p: Page, text: string) => {
+    const v = model ? pageCov[p] : null;
+    const level = v == null ? "" : v === 0 ? "none" : v < 0.5 ? "low" : v < 0.9 ? "mid" : "full";
+    return (
+      <span className={`nav-tab${level === "none" ? " is-empty" : ""}`}
+        title={v == null ? undefined : v === 0 ? `${text}: nothing to show yet in this environment — open it to see how to unlock it` : `${text}: ${Math.round(v * 100)}% of what this page can show arrives in this environment`}>
+        {text}{level && <i className={`nav-dot nav-dot--${level}`} aria-hidden="true" />}
+      </span>
+    );
+  };
   const page: Page = url.page;
   const filters: Filters = { status: url.status, region: url.region, role: url.role, carrier: url.carrier, q: url.q };
 
@@ -84,11 +101,11 @@ export function App() {
     <AppHeader>
       <AppHeader.Navigation>
         <AppHeader.Logo appName={APP_NAME} href={hrefOf("causes", url.source)} onClick={nav("causes")} />
-        <AppHeader.NavigationItem isSelected={page === "causes"} href={hrefOf("causes", url.source)} onClick={nav("causes")}>Live map</AppHeader.NavigationItem>
-        <AppHeader.NavigationItem isSelected={page === "sites"} href={hrefOf("sites", url.source)} onClick={nav("sites")}>Sites</AppHeader.NavigationItem>
-        <AppHeader.NavigationItem isSelected={page === "devices"} href={hrefOf("devices", url.source)} onClick={nav("devices")}>Devices</AppHeader.NavigationItem>
-        <AppHeader.NavigationItem isSelected={page === "links"} href={hrefOf("links", url.source)} onClick={nav("links")}>WAN links</AppHeader.NavigationItem>
-        <AppHeader.NavigationItem isSelected={page === "traffic"} href={hrefOf("traffic", url.source)} onClick={nav("traffic")}>Traffic</AppHeader.NavigationItem>
+        <AppHeader.NavigationItem isSelected={page === "causes"} href={hrefOf("causes", url.source)} onClick={nav("causes")}>{tab("causes", "Live map")}</AppHeader.NavigationItem>
+        <AppHeader.NavigationItem isSelected={page === "sites"} href={hrefOf("sites", url.source)} onClick={nav("sites")}>{tab("sites", "Sites")}</AppHeader.NavigationItem>
+        <AppHeader.NavigationItem isSelected={page === "devices"} href={hrefOf("devices", url.source)} onClick={nav("devices")}>{tab("devices", "Devices")}</AppHeader.NavigationItem>
+        <AppHeader.NavigationItem isSelected={page === "links"} href={hrefOf("links", url.source)} onClick={nav("links")}>{tab("links", "WAN links")}</AppHeader.NavigationItem>
+        <AppHeader.NavigationItem isSelected={page === "traffic"} href={hrefOf("traffic", url.source)} onClick={nav("traffic")}>{tab("traffic", "Traffic")}</AppHeader.NavigationItem>
       </AppHeader.Navigation>
       <AppHeader.ActionItems>
         {url.source === "live" && (
@@ -114,7 +131,7 @@ export function App() {
   );
 
   const settings = (
-    <SettingsSheet show={settingsOpen} onDismiss={() => setSettingsOpen(false)} model={model} needs={needs} source={url.source} focus={settingsFocus}
+    <SettingsSheet show={settingsOpen} onDismiss={() => setSettingsOpen(false)} model={model} needs={needs} source={url.source} focus={settingsFocus} steps={steps} inUse={inUse}
       absent={net.absent} onRecheck={() => { net.recheck(); showToast({ title: "Reading every source again", type: "info" }); }}
       onSource={(source) => setUrl({ source, page: "causes", cause: null, sel: null, ...NO_FILTERS })} />
   );
@@ -149,8 +166,15 @@ export function App() {
   }
 
   const pageProps = { model, infos, filters, onFilters: (patch: Partial<Filters>) => setUrl(patch, false), selected: url.sel, onSelect: select };
-  const onExample = url.source === "live" ? () => setUrl({ source: "example", page: "causes", cause: null, sel: null, ...NO_FILTERS }) : undefined;
-  const visualProps = { ...pageProps, needs, failed: net.failed, view: url.view, onView: (view: "visual" | "table") => setUrl({ view }, false), onExample, onSettings: openSettings };
+  // a preview keeps the page: an empty WAN links page shows what WAN links would look like
+  const onExample = url.source === "live" ? () => setUrl({ source: "example", cause: null, sel: null, ...NO_FILTERS }) : undefined;
+  const onLive = url.source === "example" ? () => setUrl({ source: "live", cause: null, sel: null, ...NO_FILTERS }) : undefined;
+  // each page offers the step it needs itself first, then the most valuable one overall
+  const nextFor = (keys: NeedKey[]) => {
+    const pending = steps.find((s) => !s.done && keys.includes(s.need)) ?? steps.find((s) => !s.done);
+    return pending ? { step: pending, coverage: inUse, onHow: (need: NeedKey) => openSettings(need) } : null;
+  };
+  const visualProps = { ...pageProps, needs, failed: net.failed, view: url.view, onView: (view: "visual" | "table") => setUrl({ view }, false), onExample, onLive, onSettings: openSettings, nextFor };
 
   return (
     <div className="np-root">
@@ -159,7 +183,7 @@ export function App() {
 
         <PageLayout.Content>
           {page === "causes" ? (
-            <LiveMapPage model={model} infos={infos} causeId={url.cause} failed={net.failed} needs={needs} onExample={onExample} onSettings={openSettings} onCause={(cause) => setUrl({ cause }, false)}
+            <LiveMapPage model={model} infos={infos} causeId={url.cause} failed={net.failed} needs={needs} onExample={onExample} onSettings={openSettings} next={nextFor(VIEW_NEEDS.map)} onLive={onLive} onCause={(cause) => setUrl({ cause }, false)}
               onSite={(code) => select(`site:${code}`)} onDevice={(name) => select(`device:${name}`)}
               onSites={(patch) => setUrl({ page: "sites", sel: null, ...NO_FILTERS, ...patch })} />
           ) : page === "traffic" ? (

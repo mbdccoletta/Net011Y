@@ -1,12 +1,10 @@
-// Who talks to whom, site by site, from every source that sees conversations.
-//
-// Two sources today, read into one shape: NetFlow / IPFIX exporters, and firewalls whose connection logs
-// arrive over syslog (a closed connection names both ends, the zones and the bytes). Either way the
-// device that saw the traffic sits at a site, and each end's address falls in a site's address space
-// (site_cidr tag or a device /24), in a firewall zone, in a private range no site claims, or on the
-// Internet. Nothing is inferred beyond that: an unplaced private range is named as such, never assigned
-// to the nearest site.
-import type { Conversation, Device, FlowApp, FlowDeny, FlowFanIn, FlowMap, FlowPeer, NetworkModel, SiteTraffic } from "../model/types";
+// Who talks to whom, site by site, from NetFlow / IPFIX as the Dynatrace OpenTelemetry Collector ingests
+// it (the netflow receiver: flow.*, source.address, destination.address). The exporter is a device, so
+// it sits at a site; each end's address falls in a site's address space (site_cidr tag or a device /24),
+// in a private range no site claims, or on the Internet. Nothing is inferred beyond that: an unplaced
+// private range is named as such, never assigned to the nearest site. Only documented formats are read:
+// firewall logs have none, so their raw text is not parsed.
+import type { Conversation, Device, FlowApp, FlowFanIn, FlowMap, FlowPeer, NetworkModel, SiteTraffic } from "../model/types";
 import type { Addressing, AddressOwner } from "../model/addressing";
 import { buildJourney } from "../model/journey";
 
@@ -26,38 +24,44 @@ const PORTS: Record<string, string> = {
 };
 export const appName = (proto: string, port: string) => PORTS[port] ?? `${proto.toLowerCase()}/${port}`;
 
-const empty = (): SiteTraffic => ({ bytes: 0, flows: 0, toSites: 0, internet: 0, private: 0, local: 0, peers: [], apps: [], fanIn: [], exporters: [], denies: [] });
+const empty = (): SiteTraffic => ({ bytes: 0, flows: 0, toSites: 0, internet: 0, private: 0, local: 0, peers: [], apps: [], fanIn: [], exporters: [] });
 
 export function buildFlowMap(L: (k: string) => Rec[], devices: Device[], addressing: Addressing, sitesOf: NetworkModel["sites"]): FlowMap | undefined {
-  const nf = L("flowNets"), fw = L("fwConns"), deny = L("fwDeny");
-  if (!nf.length && !fw.length && !deny.length) return undefined;
+  const nf = L("flowNets");
+  if (!nf.length) return undefined;
   const devByIp = new Map<string, Device>();
   devices.forEach((d) => [d.ip, ...(d.ips ?? [])].forEach((ip) => ip && !devByIp.has(ip) && devByIp.set(ip, d)));
-  // the device that saw the traffic; a firewall nobody monitors over SNMP is still placed by its own address
-  const viaOf = (ip: string, kind: "exporter" | "firewall") => {
+  // the device that exported the flows; one nobody monitors over SNMP is still placed by its own address
+  const viaOf = (ip: string) => {
     const d = devByIp.get(ip);
-    return d ? { via: ip, viaName: d.name, viaSite: d.site as string | null, viaKind: kind }
-      : { via: ip, viaName: `${kind === "firewall" ? "Firewall" : "Exporter"} ${ip}`, viaSite: addressing.ownerOf(ip).site ?? null, viaKind: kind };
+    return d ? { via: ip, viaName: d.name, viaSite: d.site as string | null }
+      : { via: ip, viaName: `Exporter ${ip}`, viaSite: addressing.ownerOf(ip).site ?? null };
   };
-  const end = (o: AddressOwner, zone: string | undefined, net: string) =>
+  const end = (o: AddressOwner, net: string) =>
     o.kind === "site" ? { kind: "site" as const, site: o.site, label: o.site! }
     : o.kind === "internet" ? { kind: "internet" as const, site: undefined, label: "Internet" }
-    : zone ? { kind: "zone" as const, site: undefined, label: zone }
     : { kind: "private" as const, site: undefined, label: `${net}/24` };
 
-  const conversations: Conversation[] = [];
-  const add = (r: Rec, source: Conversation["source"], ip: string, count: number) => {
-    const s24 = String(r.s24 ?? ""), d24 = String(r.d24 ?? ""), proto = String(r.proto ?? "").toLowerCase(), port = String(r.dport ?? "");
-    const a = end(addressing.ownerOf(s24), r.zs ?? undefined, s24), b = end(addressing.ownerOf(d24), r.zd ?? undefined, d24);
-    conversations.push({
-      source, ...viaOf(ip, source === "firewall" ? "firewall" : "exporter"),
-      fromKind: a.kind, fromSite: a.site, fromLabel: a.label, toKind: b.kind, toSite: b.site, toLabel: b.label,
-      zoneFrom: r.zs ?? undefined, zoneTo: r.zd ?? undefined,
-      app: appName(proto, port), proto, port, s24, d24, bytes: num(r.bytes), count,
-    });
+  // SNMP ifIndex → port name, per polled address; an exporter is looked up through its device
+  const ifName = new Map<string, string>();
+  L("ifIndex").forEach((r) => ifName.set(`${r["device.address"]}|${r["if.idx"]}`, String(r["if.name"] ?? "")));
+  const portOf = (ip: string, idx: unknown) => {
+    if (idx == null || idx === "" || idx === "0") return undefined;
+    const d = devByIp.get(ip);
+    return ifName.get(`${d?.ip ?? ip}|${idx}`) ?? ifName.get(`${ip}|${idx}`) ?? `ifIndex ${idx}`;
   };
-  nf.forEach((r) => add(r, "netflow", String(r.exp ?? ""), num(r.flows)));
-  fw.forEach((r) => add(r, "firewall", String(r.fw ?? ""), num(r.conns)));
+  const conversations: Conversation[] = [];
+  for (const r of nf) {
+    const ip = String(r.exp ?? "");
+    const s24 = String(r.s24 ?? ""), d24 = String(r.d24 ?? ""), proto = String(r.proto ?? "").toLowerCase(), port = String(r.dport ?? "");
+    const a = end(addressing.ownerOf(s24), s24), b = end(addressing.ownerOf(d24), d24);
+    conversations.push({
+      ...viaOf(ip),
+      fromKind: a.kind, fromSite: a.site, fromLabel: a.label, toKind: b.kind, toSite: b.site, toLabel: b.label,
+      app: appName(proto, port), proto, port, s24, d24, bytes: num(r.bytes), count: num(r.flows),
+      inIf: portOf(ip, r.in_if), outIf: portOf(ip, r.out_if),
+    });
+  }
 
   const sites: Record<string, SiteTraffic> = {};
   const peers = new Map<string, Map<string, FlowPeer>>();
@@ -85,13 +89,13 @@ export function buildFlowMap(L: (k: string) => Rec[], devices: Device[], address
     if (farSite) { t.toSites += c.bytes; addPeer(here, { kind: "site", name: farSite, site: farSite }, c.bytes, c.count); continue; }
     if (c.fromKind === "internet" || c.toKind === "internet") { t.internet += c.bytes; addPeer(here, { kind: "internet", name: "Internet" }, c.bytes, c.count); continue; }
     if (c.fromSite === here && c.toSite === here) { t.local += c.bytes; continue; }
-    // a private range or zone no site claims: named as it is, never guessed
-    const unk = c.toKind === "zone" || c.toKind === "private" ? c.toLabel : c.fromLabel;
+    // a private range no site claims: named as it is, never guessed
+    const unk = c.toKind === "private" ? c.toLabel : c.fromLabel;
     t.private += c.bytes; addPeer(here, { kind: "private", name: unk }, c.bytes, c.count);
   }
 
   // applications per site, from the same conversation groups (a query of their own read the same logs twice)
-  const siteOfVia = (ip: string, kind: "exporter" | "firewall") => viaOf(ip, kind).viaSite;
+  const siteOfVia = (ip: string) => viaOf(ip).viaSite;
   const apps = new Map<string, Map<string, FlowApp>>();
   for (const c of conversations) {
     if (!c.viaSite) continue;
@@ -103,16 +107,11 @@ export function buildFlowMap(L: (k: string) => Rec[], devices: Device[], address
   }
 
   const fanIn: FlowFanIn[] = L("flowFanIn").map((r) => ({ dst: `${r.dst ?? ""}/24`, hosts: num(r.dsts), port: String(r.dport ?? ""), sources: num(r.srcs), bytes: num(r.bytes), flows: num(r.flows), exporter: String(r.exp ?? "") }));
-  const denies: FlowDeny[] = deny.map((r) => {
-    const v = viaOf(String(r.fw ?? ""), "firewall");
-    return { via: v.via, viaName: v.viaName, site: v.viaSite, from: String(r.zs ?? "?"), to: String(r.zd ?? "?"), proto: String(r.proto ?? "").toLowerCase(), port: String(r.dport ?? ""), denies: num(r.denies), sources: num(r.srcs), destinations: num(r.dsts) };
-  }).sort((a, b) => b.denies - a.denies);
 
   for (const [code, t] of Object.entries(sites)) {
     t.peers = [...(peers.get(code)?.values() ?? [])].sort((x, y) => y.bytes - x.bytes).slice(0, 8);
     t.apps = [...(apps.get(code)?.values() ?? [])].sort((x, y) => y.bytes - x.bytes).slice(0, 8);
-    t.fanIn = fanIn.filter((f) => siteOfVia(f.exporter, "exporter") === code && f.sources >= FAN_IN_SOURCES).slice(0, 5);
-    t.denies = denies.filter((d) => d.site === code).slice(0, 8);
+    t.fanIn = fanIn.filter((f) => siteOfVia(f.exporter) === code && f.sources >= FAN_IN_SOURCES).slice(0, 5);
   }
 
   // exporters: flows in the last complete five minutes against the hour before
@@ -126,19 +125,11 @@ export function buildFlowMap(L: (k: string) => Rec[], devices: Device[], address
     return { ip: String(r.exp ?? ""), device: d?.name ?? null, site: d?.site ?? null, flows5m: now, usual5m: usual, falling: now != null && usual != null && usual >= 10 && now < EXPORTER_FALL * usual };
   });
 
-  const sum = (xs: Conversation[], k: "bytes" | "count") => xs.reduce((a, c) => a + c[k], 0);
-  const byNf = conversations.filter((c) => c.source === "netflow"), byFw = conversations.filter((c) => c.source === "firewall");
   return {
     windowMs: 3600000, exporters, pairs: [...pairs.values()].sort((x, y) => y.bytes - x.bytes), sites, unattributed,
     subnetsKnown: addressing.known, subnetsTagged: addressing.tagged,
-    sources: {
-      ...(byNf.length ? { netflow: { exporters: new Set(byNf.map((c) => c.via)).size, bytes: sum(byNf, "bytes") } } : {}),
-      ...(byFw.length || denies.length ? { firewall: {
-        firewalls: new Set([...byFw.map((c) => c.via), ...denies.map((d) => d.via)]).size, bytes: sum(byFw, "bytes"), connections: sum(byFw, "count"),
-        denies: denies.reduce((a, d) => a + d.denies, 0), capped: fw.length >= 5000,
-      } } : {}),
-    },
-    denies, conversations,
-    journey: buildJourney(conversations, denies, sitesOf),
+    sources: { netflow: { exporters: new Set(conversations.map((c) => c.via)).size, bytes: conversations.reduce((a, c) => a + c.bytes, 0) } },
+    conversations,
+    journey: buildJourney(conversations, sitesOf),
   };
 }

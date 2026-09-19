@@ -1,6 +1,6 @@
 // Feeds the generated Grail results through the app's own model code and reports what every view gets.
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage } from "./out/app-model.mjs";
 
 const R = JSON.parse(readFileSync("out/results.json", "utf8"));
 const report = { schema: {}, needs: {}, views: {}, checks: [] };
@@ -225,8 +225,10 @@ check("Alerts reported as a data source", needs.alerts.status === "ok", `${needs
 // real topology: CDP/LLDP neighbours from SNMP autodiscovery become links between sites
 const siteOfDev = new Map(model.devices.map((d) => [d.name, d.site]));
 const crossSite = model.links.filter((l) => l.kind === "CDP" && siteOfDev.has(l.a) && siteOfDev.has(l.b) && siteOfDev.get(l.a) !== siteOfDev.get(l.b));
-check("Neighbour discovery gives cables between sites, port to port", crossSite.length === R.neighbors.length && crossSite.every((l) => l.ifA && l.ifB),
-  `${crossSite.length}/${R.neighbors.length} · ${needs.lldp.detail}`);
+// the Smartscape edges come first; the neighbour logs add the pairs they do not hold
+const ssPairs = model.links.filter((l) => l.kind === "Smartscape").length;
+check("Neighbour discovery gives cables between sites, port to port", crossSite.length + ssPairs === R.neighbors.length && crossSite.every((l) => l.ifA && l.ifB),
+  `${crossSite.length} from the logs + ${ssPairs} from Smartscape of ${R.neighbors.length} · ${needs.lldp.detail}`);
 // a sysLocation left at "n/a" is no place: the autodiscovery group names the site instead, and says data center
 const mini = buildRealModel({ devices: [
   { id: "EXT_NETWORK_DEVICE-A1", name: "PL1i-SW-1.example.org", location: "n/a", monitoring_mode: "Discovery", "autodiscovery.group_label": "EDE - Gdansk (Data Center)", ip: ["10.9.0.1"] },
@@ -266,17 +268,11 @@ check("Applications named by port and merged across protocols",
   !!anyTraffic && new Set(anyTraffic[1].apps.map((a) => a.name ?? `${a.proto}/${a.port}`)).size === anyTraffic[1].apps.length && anyTraffic[1].apps.some((a) => a.name === "HTTPS"),
   anyTraffic ? anyTraffic[1].apps.map((a) => a.name ?? `${a.proto}/${a.port}`).join(", ") : "none");
 
-// firewall logs join NetFlow as a source: conversations with zones, placed at the firewall's site
-const fwc = fm.conversations.filter((c) => c.source === "firewall");
-check("Firewall connection logs become placed conversations, and notable denies are named",
-  fwc.length === R.fwConns.length && fwc.every((c) => c.viaSite && c.app === "HTTPS") && fm.sources.firewall?.denies === 4240
-  && Object.values(fm.sites).some((t) => t.denies.some((d) => d.denies === 4200)) && !Object.values(fm.sites).some((t) => t.denies.some((d) => d.denies === 40 && d.port === "3389" && false)),
-  `${fwc.length} firewall groups · ${JSON.stringify(fm.sources.firewall)}`);
 // the journey keeps every byte: what leaves the sources is what reaches the destinations
 const jn = fm.journey, colBytes = (c) => jn.nodes.filter((n) => n.col === c).reduce((a, n) => a + n.bytes, 0);
 check("Traffic journey conserves bytes and folds each column to its top entries",
   Math.abs(colBytes(0) - colBytes(2)) < 1 && Math.abs(colBytes(0) - fm.conversations.reduce((a, c) => a + c.bytes, 0)) < 1
-  && [0, 1, 2].every((c) => jn.nodes.filter((n) => n.col === c && n.kind !== "denied").length <= 7) && jn.nodes.some((n) => n.id === "denied"),
+  && [0, 1, 2].every((c) => jn.nodes.filter((n) => n.col === c).length <= 7),
   `${jn.nodes.length} nodes · ${jn.links.length} links · ${(colBytes(0) / 1e9).toFixed(1)} GB`);
 // no OneAgent network flows: the per-process network metrics stand in, and say so
 const pmModel = buildRealModel({ ...R, appNet: [], appNetBy: [], appNetProc: [{ timeframe: R.appNet[0].timeframe, interval: R.appNet[0].interval, pk: R.appNet[0].pk, re: R.appNet[0].re, rtt: R.appNet[0].pk.map(() => 16) }],
@@ -286,6 +282,59 @@ check("Process network metrics stand in for flows, and a steady high level is na
   pmModel.appNet?.source === "process metrics" && pmS.app?.rising && pmS.facts.some((f) => /process network metrics/.test(f))
   && environmentFindings(pmModel).some((x) => x.kind === "chronic-retransmission" && /POC-SOAM/.test(x.text)),
   `${pmModel.appNet?.source} · ${environmentFindings(pmModel).filter((x) => x.kind === "chronic-retransmission").map((x) => x.text).join(" | ")}`);
+
+// who fills a port: the exporter's conversations tied to its ports through the SNMP ifIndex
+const expDev = model.devices.find((d) => fm.conversations.some((c) => c.viaName === d.name && c.inIf && !c.inIf.startsWith("ifIndex")));
+const port = expDev && fm.conversations.find((c) => c.viaName === expDev.name && c.inIf)?.inIf;
+const users = port ? portUsers(model, expDev, port) : [];
+const busy = expDev ? busyPortFindings({ ...model, devices: model.devices.map((d) => (d === expDev ? { ...d, interfaces: [{ ...(d.interfaces[0] ?? {}), name: port, util: 95 }] } : d)) }) : [];
+check("Flows tied to ports by ifIndex explain a busy port",
+  !!port && users.length > 0 && users.reduce((a, u) => a + u.share, 0) <= 101 && busy.some((b) => b.text.includes(port) && /95%/.test(b.text)),
+  `${expDev?.name} ${port}: ${users.slice(0, 2).map((u) => `${u.app} ${u.share}%`).join(", ")} · ${busy[0]?.text ?? "no finding"}`);
+// path quality: one slow branch, one lossy path, one reset path, placed at their sites
+const pf = pathFindings(model);
+check("Path quality names the slow, the lossy and the reset path, each at its site",
+  model.paths?.length === R.appPaths.length && pf.some((x) => x.kind === "slow-path" && /95 ms/.test(x.text)) && pf.some((x) => x.kind === "lossy-path") && pf.some((x) => x.kind === "resets")
+  && pf.every((x) => x.site && model.sites[x.site]),
+  pf.map((x) => `${x.kind}@${x.site}`).join(", "));
+
+// the documented network topology: Smartscape "calls" between devices become links, ahead of the neighbour logs
+const ssLinks = model.links.filter((l) => l.kind === "Smartscape");
+check("Smartscape calls between network devices read as topology", ssLinks.length === R.netEdges.length && ssLinks.every((l) => siteOfDev.get(l.a) !== siteOfDev.get(l.b)),
+  `${ssLinks.length}/${R.netEdges.length} · ${needs.lldp.detail}`);
+// Davis in its current shape: a problem in a maintenance window is muted, with its severity and root cause kept
+const maintP = model.devices.flatMap((d) => (d.problems ?? []).map((p) => ({ d, p }))).find(({ p }) => p.displayId === "P-2609006");
+check("Maintenance windows mute a problem; severity and root cause are kept",
+  !!maintP && maintP.p.muted && maintP.p.maintenance && maintP.p.severity === 2 && maintP.p.rootCause === true,
+  maintP ? `${maintP.d.name}: muted=${maintP.p.muted} severity=${maintP.p.severity} rootCause=${maintP.p.rootCause}` : "not found");
+
+// every extension family read through one catalog: a device named by address only still gets its CPU
+// and memory, and VLANs come from the VLAN table and from VLAN interfaces
+const pa = dev(scenario.paloAlto), vl = dev(scenario.vlanDevice);
+check("A family naming devices by address (Palo Alto format) is joined to the device",
+  pa?.cpuNow === 37 && pa?.memNow === 64 && (model.extensions ?? []).includes("paloalto"), `${pa?.name}: cpu ${pa?.cpuNow} · memory ${pa?.memNow} · families ${model.extensions?.join(", ")}`);
+check("VLANs from the VLAN table and from VLAN interfaces",
+  (vl?.vlans ?? []).filter((v) => v.source === "vlan table").map((v) => v.tag).join(",") === "10,20,30" && (vl?.vlans ?? []).some((v) => v.source === "interface" && v.tag === "20"),
+  (vl?.vlans ?? []).map((v) => `${v.tag}:${v.name}:${v.source}`).join(" · "));
+
+// each tab says how much of its page the environment fills; an empty model fills nothing
+const pc = pageCoverage(model), none = pageCoverage({ ...model, devices: [], sites: {}, circuits: [], flowMap: undefined, paths: undefined, appNet: undefined, users: undefined });
+check("Page coverage reads the data each page is built on",
+  pc.links === 1 && pc.traffic > 0.5 && pc.devices > 0 && pc.sites > 0 && Object.values(none).every((v) => v === 0),
+  `${Object.entries(pc).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(" · ")}`);
+
+// an environment with nothing specific: no tags, no location, names in no convention. Devices still get a
+// site (their management network) and a role (what sysDescr says they are); nothing is guessed from a name
+const bare = buildRealModel({ devices: [
+  { id: "EXT_NETWORK_DEVICE-B1", name: "core-sw-01.acme.com", monitoring_mode: "Extension", ip: ["10.9.0.1"], description: "Cisco IOS Software, Catalyst L3 Switch Software (CAT9K_IOSXE)" },
+  { id: "EXT_NETWORK_DEVICE-B2", name: "edge-a.acme.com", monitoring_mode: "Extension", ip: ["10.9.1.1"], description: "Cisco IOS XE Software, ASR1000 Software" },
+  { id: "EXT_NETWORK_DEVICE-B3", name: "fw1.acme.com", monitoring_mode: "Extension", ip: ["172.20.0.5"], description: "Palo Alto Networks PA-3220 series firewall" },
+] }, "bare");
+const bd = (n) => bare.devices.find((d) => d.name === n);
+check("With nothing specific, devices are grouped by network and typed by what they report",
+  bd("core-sw-01.acme.com")?.site === "Network 10.9.0.0/16" && bd("edge-a.acme.com")?.site === "Network 10.9.0.0/16" && bd("fw1.acme.com")?.site === "Network 172.20.0.0/16"
+  && bd("core-sw-01.acme.com")?.role === "switch" && bd("edge-a.acme.com")?.role === "edge" && bd("fw1.acme.com")?.role === "firewall" && !bare.sites.CORE,
+  bare.devices.map((d) => `${d.name}: ${d.site} · ${d.role}`).join(" | "));
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 

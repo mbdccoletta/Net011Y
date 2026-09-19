@@ -12,9 +12,12 @@ import { useDropThreshold, setDropThreshold } from "../hooks/useDropThreshold";
 import { DEFAULT_DROP_PCT } from "../model/suspicion";
 import { parseBuckets, setLogBuckets, useLogBuckets } from "../hooks/useLogBucket";
 import { SOURCE_RECHECK_MS, type SourceGroup } from "../data/useNetwork";
+import { FAMILIES } from "../data/formats";
+import type { Step } from "../model/nextSteps";
+import type { NetworkModel } from "../model/types";
 
 const SOURCE_LABEL: Record<SourceGroup, string> = {
-  netflow: "NetFlow / IPFIX", firewall: "Firewall connection logs", deviceLogs: "Syslog and SNMP traps",
+  netflow: "NetFlow / IPFIX", deviceLogs: "Syslog and SNMP traps",
   neighbors: "CDP / LLDP neighbours", oneagentFlows: "OneAgent network flows",
 };
 
@@ -66,7 +69,7 @@ const STATUS: Record<NeedStatus, { status: "ideal" | "good" | "neutral" | "warni
   manual: { status: "neutral", label: "Checked when used" },
 };
 
-const ORDER: NeedKey[] = ["alerts", "devices", "sites", "interfaces", "traffic", "cpu", "availability", "icmp", "wan", "syslog", "traps", "lldp", "routing", "netflow", "firewallLogs", "appFlows", "sessions", "requests", "assist"];
+const ORDER: NeedKey[] = ["alerts", "devices", "sites", "interfaces", "traffic", "cpu", "availability", "icmp", "wan", "syslog", "traps", "lldp", "routing", "netflow", "appFlows", "sessions", "requests", "assist"];
 
 function NeedStatusIndicator({ need }: { need: Need }) {
   const s = STATUS[need.status];
@@ -263,6 +266,47 @@ export function SendDataSection({ needs, source, focus }: Pick<Props, "needs" | 
           </div>
         ))}
       </section>
+  );
+}
+
+/** Every step from what this environment sends to everything the app can show, taken or not. */
+export function StepsSection({ steps, inUse }: { steps: Step[]; inUse: number }) {
+  const pct = inUse;
+  return (
+    <section className="ds-block" aria-labelledby="ds-steps">
+      <Heading level={5} id="ds-steps">Getting more from NetO11y · {pct}% in use</Heading>
+      <Text textStyle="small">
+        The app always shows the best it can with what arrives. Each step below is measured on this environment and says what it unlocks;
+        the first open one is the most valuable. The entries further down explain how.
+      </Text>
+      <List>
+        {steps.map((s) => (
+          <Text key={s.id}>{s.done ? "✓ " : "○ "}<Strong>{s.title}</Strong>{" — "}{s.unlocks}</Text>
+        ))}
+      </List>
+    </section>
+  );
+}
+
+/** The metric formats the app knows, from the Dynatrace network extensions, and which this environment sends. */
+export function ExtensionsSection({ model }: { model: NetworkModel | null }) {
+  const sending = new Set(model?.extensions ?? []);
+  return (
+    <section className="ds-block" aria-labelledby="ds-ext">
+      <Heading level={5} id="ds-ext">Network extensions the app reads</Heading>
+      <Text textStyle="small">
+        The app reads the metrics of every Dynatrace network extension below and uses, per device and port, the first one that reports a
+        measure: the common set the current SNMP extensions share, then the vendor&apos;s own. Nothing to configure in the app.
+      </Text>
+      <List>
+        {FAMILIES.map((f) => (
+          <Text key={f.id}>
+            {sending.has(f.id) ? "● " : "○ "}<ExternalLink href={f.docs}>{f.label}</ExternalLink>
+            {" — "}{sending.has(f.id) ? "sending" : "not in this environment"}
+          </Text>
+        ))}
+      </List>
+    </section>
   );
 }
 

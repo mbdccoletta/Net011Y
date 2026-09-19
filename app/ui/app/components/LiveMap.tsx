@@ -38,6 +38,8 @@ interface Props {
   hitAt: (code: string) => boolean;
   insets: Insets;
   onSite: (code: string) => void;
+  /** sites placed by the app rather than by coordinates: no continents behind them */
+  schematic?: boolean;
 }
 
 /** Status colours for DOM and SVG: the Delivery Chain tokens (Strato status fills). */
@@ -45,10 +47,15 @@ export const MAP_COLORS: Record<Verdict, string> = { Critical: "var(--lm-bad-fil
 
 interface Palette { status: Record<Verdict, string>; route: string; land: string; landDot: number; bg: string; ink: string; ink2: string; halo: string; glow: number; dim: number; calm: number; stroke: number; mark: number; siteDim: number }
 
-/** Canvas cannot read CSS variables, so the stage tokens are resolved per theme. */
+/**
+ * Canvas cannot read CSS variables, so the stage tokens are resolved per theme. A value the canvas does
+ * not understand is ignored by it silently, and the next stroke then reuses the previous colour: a label
+ * halo drew itself white over the site names that way. Every colour is checked and falls back when invalid.
+ */
 function readPalette(el: HTMLElement): Palette {
   const cs = getComputedStyle(el);
-  const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
+  const valid = (c: string) => { if (!alphaCtx || !c) return !!c; alphaCtx.fillStyle = "#010203"; alphaCtx.fillStyle = c; return String(alphaCtx.fillStyle) !== "#010203" || c.toLowerCase() === "#010203"; };
+  const v = (name: string, fallback: string) => { const c = cs.getPropertyValue(name).trim(); return /^[\d.]+$/.test(c) || valid(c) ? c || fallback : fallback; };
   return {
     status: { Critical: v("--lm-bad-fill", "#c82d40"), Warning: v("--lm-warn-fill", "#d7b43b"), Healthy: v("--lm-good-fill", "#00bb7b"), "Not monitored": v("--lm-neutral", "#7c7f9e") },
     route: v("--lm-route", v("--lm-cyan", "#06b6d4")), land: v("--lm-land", "rgba(173, 176, 255, 0.4)"), bg: v("--lm-bg", "#05080f"),
@@ -102,7 +109,7 @@ interface View { cx: number; cy: number; k: number }
 const hash = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0) / 4294967295; };
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-export function LiveMap({ sites, links, focus, hitAt, insets, onSite }: Props) {
+export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic = false }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const landLayer = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null);
@@ -128,9 +135,9 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite }: Props) {
   }, []);
 
   const byCode = useMemo(() => new Map(sites.map((s) => [s.code, s])), [sites]);
-  const props = useRef({ sites, links, focus, hitAt, insets, byCode });
-  props.current = { sites, links, focus, hitAt, insets, byCode };
-  useEffect(() => { dirty.current = true; }, [sites, links, focus, hitAt, insets]);
+  const props = useRef({ sites, links, focus, hitAt, insets, byCode, schematic });
+  props.current = { sites, links, focus, hitAt, insets, byCode, schematic };
+  useEffect(() => { dirty.current = true; }, [sites, links, focus, hitAt, insets, schematic]);
 
   const fitTo = useCallback((codes: Set<string> | null, animate: boolean) => {
     const { w, h } = size.current;
@@ -251,7 +258,7 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite }: Props) {
         }
       }
 
-      ctx.drawImage(landLayer.current.canvas, 0, 0, w, h);
+      if (!props.current.schematic) ctx.drawImage(landLayer.current.canvas, 0, 0, w, h);
 
       // routes: width, packet count and packet speed follow the traffic volume (log scale across links)
       ctx.lineCap = "round";
@@ -306,11 +313,12 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite }: Props) {
           const half = 8 * P.mark;
           ctx.fillStyle = withAlpha(P.halo, 0.9);
           ctx.beginPath(); ctx.arc(x, y, half + 5, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = P.halo; ctx.strokeStyle = vd === "Healthy" ? P.ink : color; ctx.lineWidth = 2.6;
+          // the edge and the inner dot carry the status, green included, like every other site mark
+          ctx.fillStyle = P.halo; ctx.strokeStyle = color; ctx.lineWidth = 2.6;
           ctx.fillRect(x - half, y - half, half * 2, half * 2);
           ctx.strokeRect(x - half, y - half, half * 2, half * 2);
           // an inner dot carries the status even when the square is read as a shape
-          ctx.fillStyle = vd === "Healthy" ? P.ink : color;
+          ctx.fillStyle = color;
           ctx.beginPath(); ctx.arc(x, y, half * 0.34, 0, Math.PI * 2); ctx.fill();
           labelled.push(s);
           return;

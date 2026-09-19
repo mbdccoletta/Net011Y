@@ -17,23 +17,37 @@ export interface Reason {
 /** One side of a site's conversations: another site, the Internet, or a private range no site claims. */
 export interface FlowPeer { kind: "site" | "private" | "internet"; name: string; site?: string; bytes: number; flows: number }
 export interface FlowApp { proto: string; port: string; name: string | null; bytes: number; flows: number }
-/** What a firewall refused in the last hour, by zone pair and port. */
-export interface FlowDeny { via: string; viaName: string; site: string | null; from: string; to: string; proto: string; port: string; denies: number; sources: number; destinations: number }
 /** One conversation group, whichever source saw it, with both ends already placed. */
 export interface Conversation {
-  source: "netflow" | "firewall";
-  /** the exporter or firewall that saw it: address, name, site and role */
-  via: string; viaName: string; viaSite: string | null; viaKind: "exporter" | "firewall";
-  fromKind: "site" | "zone" | "internet" | "private"; fromSite?: string; fromLabel: string;
-  toKind: "site" | "zone" | "internet" | "private"; toSite?: string; toLabel: string;
-  zoneFrom?: string; zoneTo?: string;
+  /** the device that exported it: address, name and site */
+  via: string; viaName: string; viaSite: string | null;
+  fromKind: "site" | "internet" | "private"; fromSite?: string; fromLabel: string;
+  toKind: "site" | "internet" | "private"; toSite?: string; toLabel: string;
   app: string; proto: string; port: string;
   s24: string; d24: string;
+  /** the ports the exporter says the traffic came in and went out on, by name when the SNMP index is known */
+  inIf?: string; outIf?: string;
   bytes: number; count: number;
 }
+/** How one workload's connections to one remote network behave, for one service port, over the last hour. */
+export interface AppPath {
+  workload: string;
+  /** true when the workload serves these connections, false when it calls out */
+  server: boolean;
+  remoteKind: "site" | "private" | "internet";
+  remoteSite?: string;
+  remoteNet: string;
+  app: string; port: string;
+  conversations: number;
+  rttP90Ms: number | null;
+  retrPct: number | null;
+  packets: number;
+  resets: number;
+  timeouts: number;
+}
 /** One column entry of the traffic journey (from, through, to). */
-export interface JourneyNode { id: string; col: 0 | 1 | 2; label: string; sub?: string; kind: "site" | "zone" | "internet" | "private" | "device" | "app" | "denied"; site?: string; bytes: number }
-export interface JourneyLink { from: string; to: string; bytes: number; count: number; source: "netflow" | "firewall" }
+export interface JourneyNode { id: string; col: 0 | 1 | 2; label: string; sub?: string; kind: "site" | "internet" | "private" | "device" | "app"; site?: string; bytes: number }
+export interface JourneyLink { from: string; to: string; bytes: number; count: number }
 /** A destination reached from an unusual number of distinct sources in the last hour. */
 export interface FlowFanIn { dst: string; hosts: number; port: string; sources: number; bytes: number; flows: number; exporter: string }
 export interface SiteTraffic {
@@ -48,7 +62,6 @@ export interface SiteTraffic {
   apps: FlowApp[];
   fanIn: FlowFanIn[];
   exporters: string[];
-  denies: FlowDeny[];
 }
 /** NetFlow / IPFIX over the last hour, attributed to sites through their exporters and address space. */
 export interface FlowMap {
@@ -62,11 +75,10 @@ export interface FlowMap {
   subnetsKnown: number;
   subnetsTagged: number;
   /** which sources fed it, with what they carried */
-  sources: { netflow?: { exporters: number; bytes: number }; firewall?: { firewalls: number; bytes: number; connections: number; denies: number; capped: boolean } };
-  denies: FlowDeny[];
+  sources: { netflow?: { exporters: number; bytes: number } };
   /** every conversation group the sources returned, placed: the journey and the filters are built from it */
   conversations: Conversation[];
-  /** from → through → to, the heaviest paths, in bytes; denied attempts join as their own destination */
+  /** from → through → to, the heaviest paths, in bytes */
   journey: { nodes: JourneyNode[]; links: JourneyLink[] };
 }
 
@@ -137,6 +149,12 @@ export interface DeviceProblem {
   muted?: boolean;
   /** the affected entity this problem was matched through, e.g. an interface name */
   on?: string;
+  /** Davis severity, 1 (most severe) to 5 */
+  severity?: number;
+  /** open inside a maintenance window: counted as muted, as the platform does */
+  maintenance?: boolean;
+  /** Davis names this device as the root cause of the problem */
+  rootCause?: boolean;
   /**
    * Why an alert is not on the map, when it is not:
    * "network" — it names a network entity (a monitor, a device, an interface) that this environment's
@@ -175,6 +193,10 @@ export interface Device {
   availTs?: number[] | null;
   syslog: { ERROR: number; WARN: number; INFO: number };
   syslogErrTs: number[];
+  /** memory in use, percent, as the device's extension reports it */
+  memNow?: number | null;
+  /** VLANs the device carries: from the extension's VLAN table, or its VLAN interfaces */
+  vlans?: { tag: string | null; name: string; source: "vlan table" | "interface"; iface?: string; util?: number | null }[];
   /** traps received per hour over the last 24 h */
   trapTs?: number[];
   traps: number;
@@ -403,6 +425,8 @@ export interface NetworkModel {
   /** Physical adjacencies the devices report (CDP/LLDP), by device name; ifA is the local port on a. */
   links: { a: string; b: string; kind: string; label: string; ifA?: string; ifAId?: string; ifB?: string }[];
   peers: Peer[];
+  /** the extension families (formats.ts) this environment sends metrics from */
+  extensions?: string[];
   traps: { t: string; ip: string; device: string | null; oid: string }[];
   flows?: {
     exporters: FlowExporter[];
@@ -414,6 +438,8 @@ export interface NetworkModel {
    */
   appNet?: AppNetwork;
   flowMap?: FlowMap;
+  /** path quality from OneAgent network flows: workload × remote network × service port */
+  paths?: AppPath[];
   oneagent?: { host: string; cluster: string | null; dst: string; dport: string; bytes: number; retr: number; resets: number; rttMs: number | null }[];
   e2e: { probe: string; paths: E2EPath[] };
 }

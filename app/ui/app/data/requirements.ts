@@ -3,9 +3,12 @@
 import type { NetworkModel } from "../model/types";
 import { QUERIES } from "./queries";
 
+/** the per-family queries of the given measures ("cpu" → "cpu:network_device", "cpu:cisco" …) */
+const familyKeys = (...measures: string[]) => Object.keys(QUERIES).filter((k) => measures.some((m) => k.startsWith(`${m}:`)));
+
 export type NeedKey =
   | "devices" | "interfaces" | "traffic" | "cpu" | "availability" | "icmp" | "syslog" | "traps"
-  | "lldp" | "routing" | "netflow" | "firewallLogs" | "appFlows" | "wan" | "sites" | "alerts" | "assist" | "sessions" | "requests";
+  | "lldp" | "routing" | "netflow" | "appFlows" | "wan" | "sites" | "alerts" | "assist" | "sessions" | "requests";
 
 export type NeedStatus = "ok" | "partial" | "missing" | "loading" | "simulated" | "manual";
 
@@ -20,17 +23,16 @@ export interface Need {
 const CATALOG: Record<NeedKey, { label: string; how: string; queries?: string[] }> = {
   devices: { label: "Network devices", how: "SNMP extension (generic, Cisco, Juniper, Palo Alto or F5) monitoring each router, switch, firewall and access point", queries: ["devices"] },
   interfaces: { label: "Interfaces", how: "Interface metric group of the SNMP extension (IF-MIB ifTable / ifXTable)", queries: ["interfaces"] },
-  traffic: { label: "Interface traffic and errors", how: "IF-MIB octet, error, discard and CRC counters (64-bit HC counters) in the SNMP extension", queries: ["trJuniper", "trCisco", "trGeneric", "errJuniper", "errCisco", "errGeneric"] },
-  cpu: { label: "Device CPU", how: "CPU metric group of the SNMP extension (network_device.cpu_usage)", queries: ["cpu"] },
-  availability: { label: "Device availability", how: "sysUpTime polled by the SNMP extension every minute", queries: ["uptime"] },
+  traffic: { label: "Interface traffic and errors", how: "Interface counters (octets, errors, discards, CRC) from any Dynatrace network extension: the common network_device set, Generic Cisco, generic SNMP, Juniper, Palo Alto or F5", queries: familyKeys("ifTraffic", "ifErrors") },
+  cpu: { label: "Device CPU and memory", how: "CPU and memory as each network extension reports them (network_device, Cisco CPM, Juniper routing engine, Palo Alto management plane, F5 host)", queries: familyKeys("cpu", "memory") },
+  availability: { label: "Device availability", how: "sysUpTime polled by the network extension every minute (any family)", queries: familyKeys("uptime") },
   icmp: { label: "Reachability and latency", how: "Synthetic network availability monitors (ICMP) targeting device and WAN circuit IPs", queries: ["icmp", "icmpNow"] },
   syslog: { label: "Syslog", how: "Syslog extension or ActiveGate syslog ingest from each device (dt.openpipeline.source = extension:syslog)", queries: ["deviceLogs", "deviceLogsRecent"] },
   traps: { label: "SNMP traps", how: "SNMP traps extension receiving traps from the devices (log.source = snmptraps)", queries: ["deviceLogs", "deviceLogsRecent"] },
-  lldp: { label: "Topology neighbours", how: "Neighbor discovery (CDP and LLDP) in SNMP autodiscovery, or the LLDP metric group of the SNMP extension. The map draws a route between two sites only where a cable between them is reported", queries: ["neighbors", "lldp"] },
+  lldp: { label: "Topology neighbours", how: "Neighbor discovery (CDP and LLDP) in SNMP autodiscovery, or the LLDP metric group of the SNMP extension. The map draws a route between two sites only where a cable between them is reported", queries: ["netEdges", "neighbors", "lldp"] },
   routing: { label: "Routing peers", how: "BGP and OSPF metric groups of the SNMP extension", queries: ["routing"] },
   netflow: { label: "NetFlow / IPFIX", how: "OpenTelemetry Collector netflowreceiver sending flows from the routers and firewalls. The exporter places each flow at a site; the site_cidr tag on each site places the far end, so the map can draw the traffic between sites", queries: ["flowNets", "flowFanIn", "flowTs"] },
-  firewallLogs: { label: "Firewall connection logs", how: "Firewall logs over syslog: Cisco ASA connection teardowns (302014, 302016) name both ends, the zones and the bytes, and denies (106023) name what was refused. A firewall becomes a flow source the network already has", queries: ["fwConns", "fwDeny"] },
-  appFlows: { label: "Application traffic", how: "OneAgent on application hosts with network flows enabled (bucket default_network_flows). Their TCP retransmissions tell the fault domain reading whether the applications feel the network", queries: ["appNet", "appNetBy", "cloud", "cloudTop"] },
+  appFlows: { label: "Application traffic", how: "OneAgent on application hosts with network flows enabled (bucket default_network_flows). Their TCP retransmissions tell the fault domain reading whether the applications feel the network", queries: ["appNet", "appNetBy", "appPaths", "cloud", "cloudTop"] },
   wan: { label: "WAN circuits and SLA", how: "One ICMP network availability monitor per circuit with primary tags site, circuit_id, circuit_role, carrier, circuit_tech and sla_ms", queries: [] },
   sites: { label: "Sites, regions and locations", how: "Primary tags on each SNMP monitoring configuration: site, site_name, site_type, region, geo_lat, geo_lon, hub and site_cidr", queries: [] },
   alerts: { label: "Alerts and problems", how: "Alert templates for network devices in Infrastructure & Operations, plus any custom alert on the extension metrics. Every status in this app comes from the problems they raise", queries: [] },
@@ -44,14 +46,14 @@ export const VIEW_NEEDS: Record<string, NeedKey[]> = {
   sites: ["alerts", "devices", "sites", "wan", "icmp", "sessions", "requests", "appFlows", "assist"],
   devices: ["alerts", "devices", "interfaces", "traffic", "cpu", "availability", "syslog", "traps", "assist"],
   links: ["alerts", "wan", "icmp", "syslog", "assist"],
-  traffic: ["netflow", "firewallLogs", "appFlows", "sites", "assist"],
-  site: ["alerts", "devices", "availability", "icmp", "wan", "sessions", "requests", "netflow", "firewallLogs", "appFlows", "syslog", "assist"],
+  traffic: ["netflow", "appFlows", "sites", "assist"],
+  site: ["alerts", "devices", "availability", "icmp", "wan", "sessions", "requests", "netflow", "appFlows", "syslog", "assist"],
   device: ["alerts", "interfaces", "traffic", "cpu", "availability", "syslog", "traps", "lldp", "routing", "assist"],
-  empty: ["devices", "alerts", "interfaces", "traffic", "cpu", "availability", "icmp", "syslog", "traps", "lldp", "routing", "netflow", "firewallLogs", "appFlows", "wan", "sites", "sessions", "requests", "assist"],
+  empty: ["devices", "alerts", "interfaces", "traffic", "cpu", "availability", "icmp", "syslog", "traps", "lldp", "routing", "netflow", "appFlows", "wan", "sites", "sessions", "requests", "assist"],
 };
 
 // sources the app stops reading once found empty (see SOURCE_GROUPS): which data type each one feeds
-const ABSENT_FEEDS: Partial<Record<NeedKey, string>> = { netflow: "netflow", firewallLogs: "firewall", syslog: "deviceLogs", traps: "deviceLogs", lldp: "neighbors", appFlows: "oneagentFlows" };
+const ABSENT_FEEDS: Partial<Record<NeedKey, string>> = { netflow: "netflow", syslog: "deviceLogs", traps: "deviceLogs", lldp: "neighbors", appFlows: "oneagentFlows" };
 
 export function evaluateNeeds(counts: Record<string, number | null>, model: NetworkModel | null, source: "live" | "example", absent: Record<string, number | undefined> = {}): Record<NeedKey, Need> {
   const out = {} as Record<NeedKey, Need>;
@@ -117,12 +119,6 @@ export function evaluateNeeds(counts: Record<string, number | null>, model: Netw
           const f = model.flowMap, tied = f.exporters.filter((e) => e.device).length;
           status = tied < f.exporters.length || !f.subnetsTagged ? "partial" : "ok";
           detail = `${tied}/${f.exporters.length} exporters tied to a device · ${f.pairs.length ? `${f.pairs.length} routes between sites` : "no traffic between two sites placed yet"} · ${f.subnetsTagged ? `${f.subnetsTagged} site_cidr ranges` : "no site_cidr tag, so only device subnets place addresses"}`;
-        }
-        if (key === "firewallLogs" && model?.flowMap?.sources.firewall) {
-          const fw = model.flowMap.sources.firewall;
-          const unplaced = new Set(model.flowMap.conversations.filter((c) => c.source === "firewall" && !c.viaSite).map((c) => c.via)).size;
-          status = unplaced ? "partial" : "ok";
-          detail = `${fw.firewalls} firewalls · ${fw.connections.toLocaleString("en-US")} connections and ${fw.denies.toLocaleString("en-US")} denies in the last hour${unplaced ? ` · ${unplaced} not monitored over SNMP, so not tied to a site` : ""}`;
         }
         if (key === "appFlows" && model?.appNet) {
           status = "ok";

@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { ExternalLink } from "@dynatrace/strato-components/typography";
 import type { Need, NeedKey } from "../data/requirements";
+import type { Step } from "../model/nextSteps";
 import { SETUP } from "../data/setupGuide";
 import { ChevronDownIcon, ChevronUpIcon, CriticalIcon, HelpIcon, InformationIcon, RefreshIcon, SuccessIcon, WarningIcon } from "@dynatrace/strato-icons";
 
@@ -21,9 +22,11 @@ interface Props {
   /** Start expanded; collapsed by default */
   open?: boolean;
   compact?: boolean;
+  /** the most valuable step not taken yet, and how much of the app this environment already uses */
+  next?: { step: Step; coverage: number; onHow: (need: NeedKey) => void } | null;
 }
 
-export function DataNeeds({ title = "Data this view needs", keys, needs, open, compact }: Props) {
+export function DataNeeds({ title = "Data this view needs", keys, needs, open, compact, next }: Props) {
   const list = keys.map((k) => needs[k]).filter(Boolean);
   const missing = list.filter((n) => n.status === "missing" || n.status === "partial").length;
   const received = list.filter((n) => n.status === "ok").length;
@@ -39,6 +42,13 @@ export function DataNeeds({ title = "Data this view needs", keys, needs, open, c
         </span>
         <span className="dn__chev" aria-hidden="true">{expanded ? <ChevronUpIcon /> : <ChevronDownIcon />}</span>
       </button>
+      {next && (
+        <div className="dn__next">
+          <span className="dn__cov" title="Share of what the app can show that this environment already sends, weighted by value">{next.coverage}% of the app in use</span>
+          <span className="dn__step"><b>Next step · {next.step.title}</b> — {next.step.unlocks}</span>
+          <button type="button" className="tr-set" onClick={() => next.onHow(next.step.need)}>How</button>
+        </div>
+      )}
       {expanded && (
         <ul className="dn__list" id={id}>
           {list.map((n) => {

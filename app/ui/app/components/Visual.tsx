@@ -58,12 +58,14 @@ export function Chips({ label, options, value, onChange }: { label: string; opti
 
 export type View = "visual" | "table";
 
-export function PageBar({ model, failed, view, onView, children }: { model: NetworkModel; failed: string[]; view?: View; onView?: (v: View) => void; children?: React.ReactNode }) {
+export function PageBar({ model, failed, view, onView, onLive, children }: { model: NetworkModel; failed: string[]; view?: View; onView?: (v: View) => void; onLive?: () => void; children?: React.ReactNode }) {
   return (
     <div className="lm-bar">
       <span className="lm-pill lm-pill--live"><span className="lm-live" aria-hidden="true" />Live {hhmm(model.meta.generatedAt)}</span>
       {children}
-      {model.demo && <span className="lm-pill lm-pill--warn">Example data</span>}
+      {model.demo && (onLive
+        ? <button type="button" className="lm-pill lm-pill--warn lm-pill--btn" onClick={onLive}>Example data · back to this environment</button>
+        : <span className="lm-pill lm-pill--warn">Example data</span>)}
       {!model.demo && failed.length > 0 && <span className="lm-pill lm-pill--warn" title={failed.join(", ")}>{failed.length} data source(s) unavailable</span>}
       {view && onView && (
         <span className="vz-seg" role="group" aria-label="View">

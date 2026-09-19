@@ -7,8 +7,10 @@ import { Tab, Tabs } from "@dynatrace/strato-components/navigation";
 import { XmarkIcon } from "@dynatrace/strato-icons";
 import type { NeedKey, Need } from "../data/requirements";
 import type { NetworkModel } from "../model/types";
-import { AppConfigSection, DataSourceSection, PagesSection, QueryCostSection, SendDataSection, SuspicionSection } from "./DataSetup";
+import { AppConfigSection, DataSourceSection, ExtensionsSection, PagesSection, QueryCostSection, SendDataSection, SuspicionSection } from "./DataSetup";
 import type { SourceGroup } from "../data/useNetwork";
+import type { Step } from "../model/nextSteps";
+import { StepsSection } from "./DataSetup";
 import { SiteHierarchySettings } from "./SiteHierarchySettings";
 
 interface Props {
@@ -21,10 +23,12 @@ interface Props {
   /** Data type the caller wants explained: opens the Data tab with that entry expanded */
   focus?: NeedKey | null;
   absent: Partial<Record<SourceGroup, number>>;
+  steps: Step[];
+  inUse: number;
   onRecheck: () => void;
 }
 
-export function SettingsSheet({ show, onDismiss, model, needs, source, onSource, focus, absent, onRecheck }: Props) {
+export function SettingsSheet({ show, onDismiss, model, needs, source, onSource, focus, absent, onRecheck, steps, inUse }: Props) {
   return (
     <Sheet
       title="Settings"
@@ -47,8 +51,10 @@ export function SettingsSheet({ show, onDismiss, model, needs, source, onSource,
         </Tab>
         <Tab title="Data">
           <div className="ds">
+            {source === "live" && steps.length > 0 && <StepsSection steps={steps} inUse={inUse} />}
             <PagesSection needs={needs} />
             <SendDataSection needs={needs} source={source} focus={focus} />
+            {source === "live" && <ExtensionsSection model={model} />}
             {source === "live" && <QueryCostSection absent={absent} onRecheck={onRecheck} />}
           </div>
         </Tab>

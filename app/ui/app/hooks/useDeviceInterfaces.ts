@@ -37,11 +37,11 @@ export function useDeviceInterfaces(device: Device | null, enabled: boolean): De
   const run = !!device && enabled && !fromModel;
   const nodes = useDql(
     { query: device?.chassisMac ? nodesQuery(device.chassisMac) : "smartscapeNodes EXT_NETWORK_INTERFACE | limit 1", maxResultRecords: 2000 },
-    { enabled: run && !!device?.chassisMac, staleTime: 5 * 60 * 1000 },
+    { enabled: run && !!device?.chassisMac, staleTime: 5 * 60 * 1000, runInBackground: true },
   );
   const series = useDql(
     { query: device ? seriesQuery(device) : "", maxResultRecords: 2000, defaultScanLimitGbytes: 100 },
-    { enabled: run, staleTime: 5 * 60 * 1000 },
+    { enabled: run, staleTime: 5 * 60 * 1000, runInBackground: true },
   );
 
   if (fromModel) return { interfaces: device.interfaces, loading: false, fromModel: true };

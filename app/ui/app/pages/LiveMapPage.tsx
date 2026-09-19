@@ -39,6 +39,10 @@ interface Props {
   onExample?: () => void;
   /** Opens Settings › Data, where every item says what to send and links to its documentation */
   onSettings?: (key: NeedKey) => void;
+  /** the next step to get more from the app in this environment */
+  next?: React.ComponentProps<typeof DataNeeds>["next"];
+  /** leaves the example data for the environment's own */
+  onLive?: () => void;
 }
 
 const parseTs = (s: string) => Date.parse(s.length === 17 ? s.replace("Z", ":00Z") : s);
@@ -56,7 +60,7 @@ function causeMeta(c: Cause) {
   ].filter(Boolean).join(" · ");
 }
 
-export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onSite, onDevice, onSites, onExample, onSettings }: Props) {
+export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onSite, onDevice, onSites, onExample, onSettings, next, onLive }: Props) {
   const causes = useMemo(() => buildCauses(model, infos), [model, infos]);
   const shared = causes.filter((c) => c.sites.length > 1 || c.kind === "carrier" || c.kind === "datacenter");
   const isolated = causes.filter((c) => !shared.includes(c));
@@ -64,10 +68,26 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
 
   // map data
   const siteCause = useMemo(() => new Map(causes.flatMap((c) => c.sites.map((s) => [s.code, c.title] as const))), [causes]);
-  const mapSites = useMemo<MapSite[]>(() => infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({
-    code: i.code, name: i.site.name, lat: i.site.lat!, lon: i.site.lon!, verdict: i.verdict, dc: i.site.dc, region: i.site.region,
-    cause: i.cause ? i.cause : siteCause.get(i.code) ?? null,
-  })), [infos, siteCause]);
+  // Coordinates are an enrichment, not a condition: when fewer than half of the sites have one, every site
+  // is drawn in a schematic layout — data centres in the middle, each region a cluster around them — so the
+  // map works in any environment. The reader can switch between the two when both make sense.
+  const placedShare = infos.length ? infos.filter((i) => i.site.lat != null && i.site.lon != null).length / infos.length : 0;
+  const [layout, setLayout] = useState<"geo" | "schematic" | null>(null);
+  const schematic = (layout ?? (placedShare >= 0.5 ? "geo" : "schematic")) === "schematic";
+  const mapSites = useMemo<MapSite[]>(() => {
+    const base = (i: SiteInfo) => ({ code: i.code, name: i.site.name, verdict: i.verdict, dc: i.site.dc, region: i.site.region, cause: i.cause ? i.cause : siteCause.get(i.code) ?? null });
+    if (!schematic) return infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({ ...base(i), lat: i.site.lat!, lon: i.site.lon! }));
+    const dcs = infos.filter((i) => i.site.dc), rest = infos.filter((i) => !i.site.dc);
+    const groups = [...new Set(rest.map((i) => i.site.region ?? "No region"))].sort();
+    const ring = (n: number, k: number, r: number, cx = 0, cy = 0) => ({ lon: cx + r * Math.cos((2 * Math.PI * k) / Math.max(n, 1) - Math.PI / 2), lat: cy + r * 0.8 * Math.sin((2 * Math.PI * k) / Math.max(n, 1) - Math.PI / 2) });
+    const out: MapSite[] = dcs.map((i, k) => ({ ...base(i), ...(dcs.length > 1 ? ring(dcs.length, k, 3) : { lat: 0, lon: 0 }) }));
+    groups.forEach((g, gi) => {
+      const members = rest.filter((i) => (i.site.region ?? "No region") === g);
+      const c = groups.length > 1 || dcs.length ? ring(groups.length, gi, 20) : { lat: 0, lon: 0 };
+      members.forEach((i, k) => out.push({ ...base(i), ...(members.length > 1 ? ring(members.length, k, Math.min(9, 2 + members.length * 0.6), c.lon, c.lat) : c) }));
+    });
+    return out;
+  }, [infos, siteCause, schematic]);
   const mapLinks = useMemo<MapLink[]>(() => {
     const placed = new Set(mapSites.map((s) => s.code));
     // traffic of a site's WAN: latest in + out of the edge routers' uplinks (bits per second)
@@ -217,8 +237,14 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
       <div className="lm-bar">
         <span className="lm-pill lm-pill--live"><span className="lm-live" aria-hidden="true" />Live {hhmm(model.meta.generatedAt)}</span>
         <span className="lm-pill">{fmtInt(infos.length)} sites{regions ? ` · ${regions} regions` : ""}{dcs ? ` · ${dcs} data centers` : ""} · {fmtInt(model.devices.length)} devices</span>
-        {model.demo && <span className="lm-pill lm-pill--warn">Example data</span>}
+        {model.demo && (onLive
+          ? <button type="button" className="lm-pill lm-pill--warn lm-pill--btn" onClick={onLive}>Example data · back to this environment</button>
+          : <span className="lm-pill lm-pill--warn">Example data</span>)}
         {!model.demo && failed.length > 0 && <span className="lm-pill lm-pill--warn" title={failed.join(", ")}>{failed.length} data source(s) unavailable</span>}
+        <span className="vz-seg" role="group" aria-label="Map layout" title={placedShare < 1 ? `${Math.round(placedShare * 100)}% of the sites have coordinates (geo_lat / geo_lon tags or a known place)` : undefined}>
+          <button type="button" className={!schematic ? "is-on" : ""} aria-pressed={!schematic} disabled={placedShare === 0} onClick={() => setLayout("geo")}>Geographic</button>
+          <button type="button" className={schematic ? "is-on" : ""} aria-pressed={schematic} onClick={() => setLayout("schematic")}>Schematic</button>
+        </span>
         <span className="lm-legend" aria-label="Legend">
           <span><Marker verdict="Critical" />Critical</span>
           <span><Marker verdict="Warning" />Warning</span>
@@ -226,10 +252,10 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
         </span>
       </div>
 
-      <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.map} needs={needs} compact /></div>
+      <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.map} needs={needs} compact next={next} /></div>
       <div ref={stage} className={`lm-stage${wide ? " is-wide" : ""}`}>
         {mapSites.length ? (
-          <LiveMap sites={mapSites} links={mapLinks} focus={focus} hitAt={hitAt} insets={insets} onSite={onSite} />
+          <LiveMap sites={mapSites} links={mapLinks} focus={focus} hitAt={hitAt} insets={insets} onSite={onSite} schematic={schematic} />
         ) : (
           // no coordinates: the steps live in Settings › Data, so this points there instead of repeating them
           <div className="lm-map lm-map--empty">

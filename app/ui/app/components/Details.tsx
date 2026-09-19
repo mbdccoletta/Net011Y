@@ -12,6 +12,7 @@ import { Status } from "./Status";
 import { CircuitsTable, DevicesTable, TransactionsTable } from "./Tables";
 import { useDeviceInterfaces } from "../hooks/useDeviceInterfaces";
 import { EventsList } from "./EventsList";
+import { PortUsers } from "./Traffic";
 import { useElementWidth } from "../hooks/useElementWidth";
 import { useDql } from "@dynatrace-sdk/react-hooks";
 import { inBuckets, useLogBuckets } from "../hooks/useLogBucket";
@@ -34,7 +35,7 @@ function Timeline({ model, device }: { model: NetworkModel; device: Device }) {
   const [wide, setWide] = React.useState(false);
   const buckets = useLogBuckets();
   const ipOk = /^[0-9a-fA-F.:]+$/.test(device.ip);
-  const day = useDql({ query: inBuckets(deviceLogs24h(device.ip), buckets), maxResultRecords: 50 }, { enabled: wide && ipOk && !model.demo, staleTime: 5 * 60 * 1000 });
+  const day = useDql({ query: inBuckets(deviceLogs24h(device.ip), buckets), maxResultRecords: 50 }, { enabled: wide && ipOk && !model.demo, staleTime: 5 * 60 * 1000, runInBackground: true });
   React.useEffect(() => { setWide(false); }, [device.name]);
   const dayRows = (day.data?.records ?? []) as { kind?: string; loglevel?: string; n?: (number | null)[] }[];
   const sumBy = (pick: (r: (typeof dayRows)[number]) => boolean) => {
@@ -157,6 +158,28 @@ export function DeviceDetails({ model, device, onDevice }: { model: NetworkModel
               </table>
             </div>
           ) : <Text>No interface with issues.</Text>}
+          <PortUsers model={model} device={device} />
+        </Section>
+      )}
+
+      {(device.vlans?.length ?? 0) > 0 && (
+        <Section title={`VLANs · ${device.vlans!.length}`}>
+          <div className="np-scroll-x">
+            <table className="np-simple-table" style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
+              <thead><tr>{["VLAN", "Name", "From", "Utilization"].map((c) => <th key={c} style={{ textAlign: "left", padding: "6px 8px", color: "var(--np-muted)", fontSize: 12 }}>{c}</th>)}</tr></thead>
+              <tbody>
+                {[...device.vlans!].sort((a, b) => Number(a.tag ?? 1e9) - Number(b.tag ?? 1e9)).map((v, i) => (
+                  <tr key={`${v.tag}-${v.name}-${i}`} style={{ borderTop: "1px solid var(--np-line)" }}>
+                    <td className="np-mono" style={{ padding: "6px 8px" }}>{v.tag ?? "—"}</td>
+                    <td style={{ padding: "6px 8px" }}>{v.name}</td>
+                    <td style={{ padding: "6px 8px" }}>{v.source === "vlan table" ? "VLAN table" : "VLAN interface"}</td>
+                    <td style={{ padding: "6px 8px" }}>{v.util != null ? `${fmtNum(v.util)}%` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Text textStyle="small" className="np-muted">From the device&apos;s extension: its VLAN table where it reports one (Juniper), and its VLAN interfaces (an F5 VLAN, a switch SVI). The generic and Cisco extensions report no VLAN table.</Text>
         </Section>
       )}
 

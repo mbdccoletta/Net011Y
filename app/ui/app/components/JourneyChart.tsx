@@ -1,6 +1,6 @@
 // The traffic journey drawn as a flow diagram: sources on the left, the device that saw the traffic in
 // the middle, the application or the Internet on the right. Band width is bytes on one scale for the
-// whole chart; denied attempts carry no bytes, so they join as a dashed line with their count.
+// whole chart.
 import React, { useMemo } from "react";
 import type { JourneyLink, JourneyNode } from "../model/types";
 import { fmtBytes, fmtInt } from "../utils/format";
@@ -8,8 +8,8 @@ import { fmtBytes, fmtInt } from "../utils/format";
 export type JourneyPick = { kind: "node"; id: string } | { kind: "link"; from: string; to: string } | null;
 
 const TONE: Record<JourneyNode["kind"], string> = {
-  site: "var(--lm-accent)", zone: "var(--lm-violet)", internet: "var(--lm-cyan)", private: "var(--lm-neutral)",
-  device: "var(--lm-ink-3)", app: "var(--lm-good-fill)", denied: "var(--lm-bad-fill)",
+  site: "var(--lm-accent)", internet: "var(--lm-cyan)", private: "var(--lm-neutral)",
+  device: "var(--lm-ink-3)", app: "var(--lm-good-fill)",
 };
 const BOX_MIN = 36, GAP = 12, PAD_Y = 8;
 
@@ -22,7 +22,7 @@ export function JourneyChart({ nodes, links, width, pick, onPick }: {
   const boxW = Math.min(190, Math.round(W * 0.22));
   const colX = [0, Math.round((W - boxW) / 2), W - boxW];
   const layout = useMemo(() => {
-    const cols = [0, 1, 2].map((c) => nodes.filter((n) => n.col === c).sort((a, b) => (a.kind === "denied" ? 1 : b.kind === "denied" ? -1 : b.bytes - a.bytes)));
+    const cols = [0, 1, 2].map((c) => nodes.filter((n) => n.col === c).sort((a, b) => b.bytes - a.bytes));
     const tallest = Math.max(...cols.map((c) => c.length));
     const H = Math.max(360, tallest * (BOX_MIN + GAP) + 140);
     // one scale for every band: the busiest column fills the height left once the gaps are paid
@@ -68,19 +68,10 @@ export function JourneyChart({ nodes, links, width, pick, onPick }: {
   return (
     <svg className="jr" width={W} height={layout.H} viewBox={`0 0 ${W} ${layout.H}`} role="img" aria-label="Traffic journey: where the last hour of traffic came from, which device saw it and where it went">
       {layout.bands.map(({ l, a, b, w, y0, y1 }) => {
-        const tone = TONE[l.to === "denied" ? "denied" : a.col === 0 ? a.kind : b.kind];
+        const tone = TONE[a.col === 0 ? a.kind : b.kind];
         const on = isPicked(l.from, l.to);
-        const title = `${a.label} → ${b.label}: ${l.to === "denied" ? `${fmtInt(l.count)} attempts denied` : `${fmtBytes(l.bytes)} · ${fmtInt(l.count)} ${l.source === "firewall" ? "connections" : "flows"}`}`;
+        const title = `${a.label} → ${b.label}: ${fmtBytes(l.bytes)} · ${fmtInt(l.count)} flows`;
         const select = () => onPick(on && pick?.kind === "link" ? null : { kind: "link", from: l.from, to: l.to });
-        if (l.to === "denied") {
-          const y = b.y + b.h / 2;
-          return (
-            <g key={`${l.from}>${l.to}`} className="jr-deny" onClick={select}>
-              <title>{title}</title>
-              <path d={`M${a.x + boxW},${a.y + a.h / 2} C${(a.x + boxW + b.x) / 2},${a.y + a.h / 2} ${(a.x + boxW + b.x) / 2},${y} ${b.x},${y}`} fill="none" stroke={tone} strokeWidth={on ? 3 : 2} strokeDasharray="5 4" opacity={dim && !on ? 0.25 : 0.9} />
-            </g>
-          );
-        }
         return (
           <path key={`${l.from}>${l.to}`} className="jr-band" d={band(a.x + boxW, y0, b.x, y1, Math.max(1, w))} fill={tone}
             opacity={on ? 0.7 : dim ? 0.12 : 0.35} onClick={select}>
@@ -92,12 +83,12 @@ export function JourneyChart({ nodes, links, width, pick, onPick }: {
         const on = pick?.kind === "node" && pick.id === n.id;
         return (
           <g key={n.id} className={`jr-node${on ? " is-on" : ""}`} transform={`translate(${n.x},${n.y})`} onClick={() => onPick(on ? null : { kind: "node", id: n.id })}
-            role="button" tabIndex={0} aria-label={`${n.label}${n.sub ? `, ${n.sub}` : ""}, ${n.kind === "denied" ? n.sub : fmtBytes(n.bytes)}`}
+            role="button" tabIndex={0} aria-label={`${n.label}${n.sub ? `, ${n.sub}` : ""}, ${fmtBytes(n.bytes)}`}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick(on ? null : { kind: "node", id: n.id }); } }}>
             <rect width={boxW} height={n.h} rx={4} style={{ ["--t" as string]: TONE[n.kind] }} />
             <rect width={3} height={n.h} rx={1} fill={TONE[n.kind]} />
             <text x={10} y={16} className="jr-label">{clip(n.label, boxW)}</text>
-            <text x={10} y={30} className="jr-sub">{clip(n.kind === "denied" ? n.sub ?? "" : `${fmtBytes(n.bytes)}${n.sub ? ` · ${n.sub}` : ""}`, boxW)}</text>
+            <text x={10} y={30} className="jr-sub">{clip(`${fmtBytes(n.bytes)}${n.sub ? ` · ${n.sub}` : ""}`, boxW)}</text>
           </g>
         );
       })}

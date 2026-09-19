@@ -183,6 +183,22 @@ for (const d of devices) {
   }
   results.uptime.push({ c: Array.from({ length: N1H }, (_, k) => (unreachable(d, NOW - (N1H - k) * B1H + B1H - B5) ? null : "60")), "dt.smartscape.ext_network_device": d.id, ...tf(B1H, N1H) });
 }
+// the app reads every extension family through one query per measure (formats.ts): answer the same way
+const FAM = { trCisco: "cisco", trJuniper: "juniper", trGeneric: "generic", errCisco: "cisco", errJuniper: "juniper", errGeneric: "generic" };
+results.ifTraffic = ["trCisco", "trJuniper", "trGeneric"].flatMap((k) => results[k].map((r) => ({ ...r, family: FAM[k] })));
+results.ifErrors = ["errCisco", "errJuniper", "errGeneric"].flatMap((k) => results[k].map((r) => ({ ...r, family: FAM[k] })));
+Object.keys(FAM).forEach((k) => delete results[k]);
+results.cpu = results.cpu.map((r) => ({ ...r, family: "network_device" }));
+results.uptime = results.uptime.map((r) => ({ ...r, family: "network_device" }));
+// a firewall whose extension names the device by address only (like Palo Alto), with CPU and memory
+const PA = devices.find((d) => d.role === "FWL" && !d.site.dc && !outage.includes(d.site.code));
+results.cpu = results.cpu.filter((r) => r["dt.smartscape.ext_network_device"] !== PA.id);
+results.cpu.push({ "device.address": PA.ip, "sys.name": PA.name, ...tf(B5, N5), cpu: Array.from({ length: N5 }, () => 37), family: "paloalto" });
+results.memory = [{ "device.address": PA.ip, ...tf(B5, N5), mem: Array.from({ length: N5 }, () => 64), family: "paloalto" }];
+// the data center core reports its VLAN table (the Juniper format), and one of its ports is a VLAN interface
+const VL = devices.find((d) => d.role === "CON" && d.site.dc);
+results.vlans = [["10", "USERS"], ["20", "VOICE"], ["30", "SERVERS"]].map(([tag, name]) => ({ "device.address": VL.ip, "ex.vlan.tag": tag, "ex.vlan.name": `"${name}"` }));
+results.ifTraffic.push({ "dt.smartscape.ext_network_device": VL.id, "dt.smartscape.ext_network_interface": `EXT_NETWORK_INTERFACE-${hex("vlan20" + VL.id)}`, "if.name": "Vlan20", "if.speed": "1000", ...tf(B5, N5), i: Array.from({ length: N5 }, () => 3e9), o: Array.from({ length: N5 }, () => 1e9), family: "network_device" });
 // ICMP network availability monitors, run from a private location in each hub (one ping every 5 min):
 //  - one per WAN circuit, pinging the carrier side of the circuit, tagged with the circuit inventory;
 //  - one per store, pinging the edge router, tagged with the site only.
@@ -309,17 +325,16 @@ for (let i = 0; i < 1500; i++) netflow.push({ "otel.scope.name": "otelcol/netflo
 const nf2 = within(netflow, 2), nf1 = within(netflow, 1);
 const mask24 = (ip) => `${ip.split(".").slice(0, 3).join(".")}.0`;
 const isPriv = (ip) => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/.test(ip);
-results.flowNets = [...groupBy(nf1, (r) => [r["flow.sampler_address"], mask24(r["source.address"]), mask24(r["destination.address"]), r["network.transport"], r["destination.port"]].join("|"))]
-  .map(([k, rs]) => { const [exp, s24, d24, proto, dport] = k.split("|"); return { exp, s24, d24, proto, dport, bytes: rs.reduce((a, r) => a + +r["flow.io.bytes"], 0), flows: S(rs.length) }; }).sort((a, b) => b.bytes - a.bytes).slice(0, 5000);
-// the data center firewall logs its connections and denies over syslog (Cisco ASA), already aggregated
-const FW1 = devices.find((d) => d.role === "FWL" && d.site.dc);
-results.fwConns = sites.filter((s) => !s.dc).slice(0, 12).flatMap((s, i) => [
-  { fw: FW1.ip, zs: "BRANCHES", zd: "DC-APPS", s24: `${s.net}.30.0`, d24: `${FW1.site.net}.50.0`, proto: "TCP", dport: "443", bytes: 4e8 + i * 1e7, conns: S(900 + i) },
-  { fw: FW1.ip, zs: "BRANCHES", zd: "OUTSIDE", s24: `${s.net}.30.0`, d24: "52.96.0.0", proto: "TCP", dport: "443", bytes: 1e8 + i * 5e6, conns: S(300 + i) },
-]);
-results.fwDeny = [
-  { fw: FW1.ip, zs: "OT", zd: "OUTSIDE", proto: "udp", dport: "53", denies: S(4200), srcs: S(9), dsts: S(4) },
-  { fw: FW1.ip, zs: "BRANCHES", zd: "DC-APPS", proto: "tcp", dport: "3389", denies: S(40), srcs: S(2), dsts: S(1) },
+results.flowNets = [...groupBy(nf1, (r) => [r["flow.sampler_address"], mask24(r["source.address"]), mask24(r["destination.address"]), r["network.transport"], r["destination.port"], r["flow.in_if"], r["flow.out_if"]].join("|"))]
+  .map(([k, rs]) => { const [exp, s24, d24, proto, dport, in_if, out_if] = k.split("|"); return { exp, s24, d24, proto, dport, in_if, out_if, bytes: rs.reduce((a, r) => a + +r["flow.io.bytes"], 0), flows: S(rs.length) }; }).sort((a, b) => b.bytes - a.bytes).slice(0, 5000);
+// SNMP ifIndex of the exporters' first ports, as the Cisco extension reports them
+results.ifIndex = exporters.flatMap((d) => [1, 2, 3, 4].map((i) => ({ "device.address": d.ip, "if.idx": String(i), "if.name": IFNAME[EXT[d.vendor].type === "cisco" ? "cisco" : d.vendor]?.(i - 1, d) ?? `port${i}` })));
+// path quality from OneAgent: the checkout cluster serves the branches; one branch is far slower, one
+// path loses packets, one is reset by something in between
+const pathSites = sites.filter((s) => !s.dc).slice(0, 8);
+results.appPaths = [
+  ...pathSites.map((s, i) => ({ grp: "checkout-cluster", server: true, r24: `${s.net}.30.0`, port: "443", conv: S(400 + i * 10), rtt90: (i === 3 ? 95 : 14 + i) * 1e6, pk: 200000, re: i === 5 ? 9000 : 40, resets: i === 6 ? 180 : 2, timeouts: 0 })),
+  { grp: "checkout-cluster", server: false, r24: "52.96.0.0", port: "443", conv: S(900), rtt90: 22e6, pk: 500000, re: 100, resets: 0, timeouts: 0 },
 ];
 results.flowFanIn = [...groupBy(nf1.filter((r) => !isPriv(r["source.address"])), (r) => [r["flow.sampler_address"], mask24(r["destination.address"]), r["destination.port"]].join("|"))]
   .map(([k, rs]) => { const [exp, dst, dport] = k.split("|"); return { exp, dst, dport, srcs: S(new Set(rs.map((r) => r["source.address"])).size), dsts: S(new Set(rs.map((r) => r["destination.address"])).size), bytes: rs.reduce((a, r) => a + +r["flow.io.bytes"], 0), flows: S(rs.length) }; })
@@ -385,7 +400,16 @@ problem({ "event.id": evid("dup"), display_id: "P-2609005", "event.name": "Acces
 alert({ "event.id": dupEventId, "event.type": "AVAILABILITY_EVENT", "event.name": "Access point unreachable", "event.category": "AVAILABILITY",
   "event.start": iso(NOW - 15 * 60e3), "dt.smartscape.ext_network_device": dupDevice.id });
 
+// 8. a problem inside a maintenance window, named by Davis as caused by the device: muted like the platform does
+const maintDevice = devices.find((d) => d.role === "SWT" && d !== mutedDevice && !outage.includes(d.site.code) && d.site.code !== CRC_SITE);
+problem({ "event.id": evid("maint"), display_id: "P-2609006", "event.name": "Device restart", "event.start": iso(NOW - 10 * 60e3),
+  "event.category": "AVAILABILITY", "maintenance.is_under_maintenance": true, "event.severity": 2,
+  "root_cause.smartscape_entity": { id: maintDevice.id, type: "EXT_NETWORK_DEVICE", name: maintDevice.name }, "smartscape.affected_entity.ids": [maintDevice.id] });
+
 results.problems = problems;
+// the documented topology: Smartscape "calls" between each branch edge router and its hub core
+results.netEdges = devices.filter((d) => d.role === "RTR" && d.site.hub && hubCore(d.site.hub)).slice(0, 10).map((d) => ({
+  source_id: d.id, source_type: "EXT_NETWORK_DEVICE", target_id: hubCore(d.site.hub).id, target_type: "EXT_NETWORK_DEVICE" }));
 results.alerts = alerts;
 
 // ---------------- write ----------------
@@ -444,6 +468,6 @@ results.sessionNets = [
 
 writeFileSync(`${OUT}results.json`, JSON.stringify(results));
 writeFileSync(`${OUT}scenario.json`, JSON.stringify({ generatedFor: iso(NOW), outage: { carrier: "Carrier B", sites: outage, since: iso(OUTAGE_SINCE) },
- firewallCpu: fwName, uplinkSaturation: SAT_SITE, crcErrors: CRC_SITE, slowCircuit: SLOW_SITE, silentCircuit: SILENT_SITE,
+ firewallCpu: fwName, paloAlto: PA.name, vlanDevice: VL.name, uplinkSaturation: SAT_SITE, crcErrors: CRC_SITE, slowCircuit: SLOW_SITE, silentCircuit: SILENT_SITE,
  alerts: { satDevice: satDevice.name, satInterface: satIface.name, crcDevice: crcDevice.name, mutedDevice: mutedDevice.name, dupDevice: dupDevice.name, downMonitors: downMonitors.length } }, null, 1));
 console.log(JSON.stringify({ sites: sites.length, devices: devices.length, interfaces: ifaces.length, circuits: circuits.length, syslog: syslog.length, traps: traps.length, netflow: netflow.length, oneagentFlows: flowsOA.length, rows: Object.fromEntries(Object.entries(results).map(([k, v]) => [k, v.length])), outage }, null, 1));

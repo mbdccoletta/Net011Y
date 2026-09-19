@@ -17,7 +17,7 @@ const tf = (bucket, n) => ({ timeframe: { start: iso(NOW - n * bucket), end: iso
 const B1H = 3600e3, N1H = 24, B5 = 300e3, N5 = 24;
 
 const t0 = process.hrtime.bigint();
-const results = { devices: [], interfaces: [], cpu: [], uptime: [], icmp: [], icmpNow: [], trCisco: [], errCisco: [],
+const results = { devices: [], interfaces: [], cpu: [], uptime: [], icmp: [], icmpNow: [], ifTraffic: [], ifErrors: [],
   deviceLogs: [], deviceLogsRecent: [], lldp: [], routing: [], flowTs: [],
   cloud: [], cloudTop: [], problems: [], alerts: [] };
 
@@ -45,7 +45,7 @@ for (let s = 0; s < SITES; s++) {
       results.interfaces.push({ id: sid, id_classic: `CUSTOM_DEVICE-${hex(n * 10 + f + 2e7)}`, name: `Gi0/0/${f}`,
         "device.chassis_mac": hex(n).slice(0, 12), operational_status: "up(1)", admin_status: "up(1)", speed: "1000",
         interface_index: S(f), interface_type: "ethernetCsmacd(6)" });
-      results.trCisco.push({ "dt.smartscape.ext_network_device": id, "dt.smartscape.ext_network_interface": sid, "if.name": `Gi0/0/${f}`,
+      results.ifTraffic.push({ family: "cisco", "dt.smartscape.ext_network_device": id, "dt.smartscape.ext_network_interface": sid, "if.name": `Gi0/0/${f}`,
         i: Array.from({ length: N5 }, () => S(2e7 + (n % 1e7))), o: Array.from({ length: N5 }, () => S(1e7)), s: Array.from({ length: N5 }, () => "1000"), ...tf(B5, N5) });
     }
   }
