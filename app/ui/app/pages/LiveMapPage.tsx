@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Device, Iface, NetworkModel, Verdict } from "../model/types";
 import type { SiteInfo } from "../model/site";
+import { ChangesPanel } from "../components/Changes";
 import { isBad, worst } from "../model/verdict";
 import { buildCauses, type Cause } from "../model/causes";
 import { LiveMap, MAP_COLORS, type Insets, type MapLink, type MapSite } from "../components/LiveMap";
@@ -138,8 +139,8 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   const { levels } = useSiteHierarchy();
   // until levels are chosen in Settings, group by the region the app already knows
   const defaultLevels = useMemo(() => (infos.some((i) => i.site.region) ? ["site.region"] : []), [infos]);
-  const [leftTab, setLeftTab] = useState<"causes" | "sites">(() => { try { return window.localStorage.getItem("network-pulse.left-tab") === "sites" ? "sites" : "causes"; } catch { return "causes"; } });
-  const chooseTab = (t: "causes" | "sites") => { setLeftTab(t); try { window.localStorage.setItem("network-pulse.left-tab", t); } catch { /* per session only */ } };
+  const [leftTab, setLeftTab] = useState<"causes" | "sites" | "changes">(() => { try { const v = window.localStorage.getItem("network-pulse.left-tab"); return v === "sites" || v === "changes" ? v : "causes"; } catch { return "causes"; } });
+  const chooseTab = (t: "causes" | "sites" | "changes") => { setLeftTab(t); try { window.localStorage.setItem("network-pulse.left-tab", t); } catch { /* per session only */ } };
   const [group, setGroup] = useState<{ id: string; codes: Set<string> } | null>(null);
   const causeFocus = useMemo(() => (cause ? new Set(cause.sites.map((s) => s.code)) : null), [cause]);
   const focus = leftTab === "sites" && group ? group.codes : causeFocus;
@@ -269,12 +270,15 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
           </div>
         )}
 
-        <aside className="lm-panel lm-left" aria-label={leftTab === "sites" ? "Sites" : "Probable causes"}>
+        <aside className="lm-panel lm-left" aria-label={leftTab === "sites" ? "Sites" : leftTab === "changes" ? "Changes in the last 24 hours" : "Probable causes"}>
           <span className="vz-seg lm-lefttabs" role="group" aria-label="List">
             <button type="button" className={leftTab === "causes" ? "is-on" : ""} aria-pressed={leftTab === "causes"} onClick={() => chooseTab("causes")}>Causes</button>
             <button type="button" className={leftTab === "sites" ? "is-on" : ""} aria-pressed={leftTab === "sites"} onClick={() => chooseTab("sites")}>Sites</button>
+            <button type="button" className={leftTab === "changes" ? "is-on" : ""} aria-pressed={leftTab === "changes"} onClick={() => chooseTab("changes")}>Changes</button>
           </span>
-          {leftTab === "sites" ? (
+          {leftTab === "changes" ? (
+            <ChangesPanel model={model} onDevice={onDevice} onSite={onSite} />
+          ) : leftTab === "sites" ? (
             <SiteTree infos={infos} levels={levels.length ? levels : defaultLevels} selected={group?.id ?? null}
               onGroup={(id, codes) => setGroup(id && codes ? { id, codes } : null)} onSite={onSite} />
           ) : (<>

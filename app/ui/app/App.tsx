@@ -15,6 +15,7 @@ import { useNetwork } from "./data/useNetwork";
 import { useUrlState, type Page } from "./hooks/useUrlState";
 import { allSites } from "./model/site";
 import { EntityDetails } from "./components/EntityDetails";
+import { SearchPalette } from "./components/SearchPalette";
 import type { Filters } from "./pages/EntityPages";
 import { DevicesVisual, LinksVisual, SitesVisual } from "./pages/VisualPages";
 import { LiveMapPage } from "./pages/LiveMapPage";
@@ -24,7 +25,7 @@ import { DataNeeds } from "./components/DataNeeds";
 import { coverage, nextSteps } from "./model/nextSteps";
 import { pageCoverage } from "./model/coverage";
 import { SettingsSheet } from "./components/SettingsSheet";
-import { SettingIcon } from "@dynatrace/strato-icons";
+import { MagnifyingGlassIcon, SettingIcon } from "@dynatrace/strato-icons";
 
 const APP_NAME = "NetO11y";
 const LABEL: Record<Page, string> = { causes: "Live map", sites: "Sites", devices: "Devices", links: "WAN links", traffic: "Traffic" };
@@ -93,6 +94,17 @@ export function App() {
   };
   const showProgress = useDelayed(!model, 500);
   const select = (sel: string | null) => setUrl({ sel, tab: "overview" });
+  // search from anywhere: ⌘K / Ctrl+K, or "/" when not typing
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const typing = e.target instanceof HTMLElement && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
+      if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setSearchOpen((o) => !o); }
+      else if (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey) { e.preventDefault(); setSearchOpen(true); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const refresh = () => {
     net.refetch();
     showToast({ title: "Refresh started", type: "info" });
@@ -114,6 +126,7 @@ export function App() {
             {net.loading ? `Loading ${net.done} of ${net.total}` : `Updated ${model?.meta.generatedAt.slice(11, 16) ?? "—"} UTC`}
           </AppHeader.ActionButton>
         )}
+        {model && <AppHeader.ActionButton onClick={() => setSearchOpen(true)} aria-label="Search devices, sites and circuits (⌘K)" prefixIcon={<MagnifyingGlassIcon />}>Search</AppHeader.ActionButton>}
         <AppHeader.ActionButton onClick={() => openSettings()} aria-label="Settings" prefixIcon={<SettingIcon />} showLabel={false}>Settings</AppHeader.ActionButton>
       </AppHeader.ActionItems>
       <AppHeader.Menus>
@@ -192,6 +205,7 @@ export function App() {
           ) : page === "devices" ? <DevicesVisual {...visualProps} /> : page === "links" ? <LinksVisual {...visualProps} /> : <SitesVisual {...visualProps} />}
         </PageLayout.Content>
 
+        <SearchPalette model={model} open={searchOpen} onClose={() => setSearchOpen(false)} onOpen={(sel) => select(sel)} />
         <PageLayout.Details collapsed={!url.sel} defaultWidth="44%" minWidth={460} onCollapsedChange={(collapsed) => { if (collapsed) select(null); }}>
           {url.sel && (
             <EntityDetails model={model} infos={infos} needs={needs} sel={url.sel} tab={url.tab}

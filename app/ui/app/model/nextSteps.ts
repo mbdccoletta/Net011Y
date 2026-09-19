@@ -37,6 +37,23 @@ export function nextSteps(model: NetworkModel | null, needs: Record<NeedKey, Nee
       title: "Discover the network with SNMP autodiscovery",
       unlocks: "no network device reaches this environment yet: every page of the app starts from the devices" });
 
+  // alerting is what turns a device red here: a week of polled devices without a single problem means
+  // nothing watches them, and the whole app stays green whatever happens
+  const al = model.alerting;
+  if (al && polled.length) {
+    const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+    const templates = "The network templates in Infrastructure & Operations cover saturation, errors, drops, flapping and devices going down";
+    // one kind of alert on one device is a custom alert someone made, not the network being watched
+    const broad = al.problems > 0 && (al.kinds.length > 1 || al.devices > 1);
+    add({ id: "alerting", need: "alerts", impact: 90, done: broad, progress: al.problems > 0 ? 0.5 : 0,
+      title: "Turn on the network alert templates",
+      unlocks: broad
+        ? `${plural(al.problems, "network problem")} on ${plural(al.devices, "device")} in ${al.days} days${al.kinds.length ? ` (${al.kinds.slice(0, 3).join(", ")}${al.kinds.length > 3 ? "…" : ""})` : ""}`
+        : al.problems > 0
+          ? `in ${al.days} days only one alert fired on the network (${al.kinds[0] ?? "a custom alert"}, on ${plural(al.devices, "device")} of ${polled.length} polled): the rest of the devices are not watched and stay green whatever happens. ${templates}`
+          : `${plural(polled.length, "polled device")} raised no alert in ${al.days} days: Dynatrace alerts only on what an alert template or custom alert watches, so until one does every device here stays green, whatever happens. ${templates}` });
+  }
+
   const untagged = sites.filter((s) => !s.region || s.lat == null || s.approx);
   add({ id: "sites", need: "sites", impact: 80, done: sites.length > 0 && untagged.length === 0, progress: sites.length ? (sites.length - untagged.length) / sites.length : 0,
     title: "Tag each site: name, region and coordinates",
@@ -81,7 +98,7 @@ export function nextSteps(model: NetworkModel | null, needs: Record<NeedKey, Nee
 
   // with no device yet, the steps that build on devices (sites, circuits, neighbours, syslog, traps, ranges)
   // wait for the first one: listing them now would only bury the one that matters
-  const onDevices = new Set(["sites", "wan", "cidr", "neighbors", "syslog", "traps"]);
+  const onDevices = new Set(["alerting", "sites", "wan", "cidr", "neighbors", "syslog", "traps"]);
   return steps.filter((s) => all || devs.length > 0 || !onDevices.has(s.id)).sort((a, b) => Number(a.done) - Number(b.done) || b.impact - a.impact);
 }
 

@@ -106,6 +106,19 @@ const invY = (y: number) => ((2 * Math.atan(Math.exp((-y * Math.PI) / 180)) - Ma
 
 interface View { cx: number; cy: number; k: number }
 
+/**
+ * Above this many sites the map groups the sites that fall close together on screen into one mark with
+ * their count and a ring of their status shares, and the routes between groups become one route each:
+ * 4,000 sites and their links to the data centers otherwise draw a hairball. What the selected cause is
+ * about always stays a site of its own; zooming in (or clicking a group) opens the groups up.
+ */
+const CLUSTER_AT = 600;
+const CELL = 38;
+/** zoomed in this far, sites are drawn one by one whatever their number */
+const CLUSTER_MAX_K = 120;
+interface Cluster { id: string; x: number; y: number; r: number; codes: string[]; n: number; crit: number; warn: number; healthy: number; other: number; focused: boolean }
+const worstOf = (c: Cluster): Verdict => (c.crit ? "Critical" : c.warn ? "Warning" : c.healthy ? "Healthy" : "Not monitored");
+
 const hash = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0) / 4294967295; };
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
@@ -120,7 +133,8 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
   const dirty = useRef(true);
   /** the wheel zooms once the user clicks the map; leaving it at the default zoom releases the page scroll again */
   const armed = useRef(false);
-  const [hover, setHover] = useState<{ site: MapSite; x: number; y: number } | null>(null);
+  const [hover, setHover] = useState<{ site: MapSite; x: number; y: number; cluster?: Cluster } | null>(null);
+  const clusters = useRef<Cluster[]>([]);
   const hoverCode = useRef<string | null>(null);
   const reduce = prefersReducedMotion();
   const palette = useRef<Palette | null>(null);
@@ -139,15 +153,16 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
   props.current = { sites, links, focus, hitAt, insets, byCode, schematic };
   useEffect(() => { dirty.current = true; }, [sites, links, focus, hitAt, insets, schematic]);
 
-  const fitTo = useCallback((codes: Set<string> | null, animate: boolean) => {
+  const fitTo = useCallback((codes: Set<string> | null, animate: boolean, withHubs = true, tight = false) => {
     const { w, h } = size.current;
     const ins = props.current.insets;
-    const pts = sites.filter((s) => !codes || codes.has(s.code) || (s.dc && links.some((l) => (l.a === s.code && codes.has(l.b)) || (l.b === s.code && codes.has(l.a)))));
+    const pts = sites.filter((s) => !codes || codes.has(s.code) || (withHubs && s.dc && links.some((l) => (l.a === s.code && codes.has(l.b)) || (l.b === s.code && codes.has(l.a)))));
     if (!pts.length) return;
     const xs = pts.map((s) => s.lon), ys = pts.map((s) => projY(s.lat));
     const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
     const fw = Math.max(120, w - ins.left - ins.right), fh = Math.max(120, h - ins.top - ins.bottom);
-    const spanX = Math.max(x1 - x0, 18), spanY = Math.max(y1 - y0, 10);
+    // a group of sites opened from the map can sit within a fraction of a degree
+    const spanX = Math.max(x1 - x0, tight ? 0.3 : 18), spanY = Math.max(y1 - y0, tight ? 0.2 : 10);
     const k = Math.max(1.2, Math.min(260, Math.min(fw / (spanX * 1.35), fh / (spanY * 1.35))));
     const to = { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, k };
     if (animate && !reduce) tween.current = { from: { ...view.current }, to, start: performance.now() };
@@ -260,39 +275,110 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
 
       if (!props.current.schematic) ctx.drawImage(landLayer.current.canvas, 0, 0, w, h);
 
-      // routes: width, packet count and packet speed follow the traffic volume (log scale across links)
-      ctx.lineCap = "round";
-      const vols = L.map((l) => l.bps ?? 0).filter((v) => v > 0);
-      const vMin = vols.length ? Math.log10(Math.min(...vols)) : 0, vMax = vols.length ? Math.log10(Math.max(...vols)) : 1;
-      const volume = (l: MapLink) => (l.bps == null ? null : l.bps <= 0 ? 0 : vMax > vMin ? 0.15 + 0.85 * ((Math.log10(l.bps) - vMin) / (vMax - vMin)) : 1);
+      // groups of sites that fall close together on screen (only in a large estate, and not when zoomed in far)
+      const clusterOf = new Map<string, Cluster>();
+      const groups: Cluster[] = [];
+      if (S.length > CLUSTER_AT && v.k < CLUSTER_MAX_K) {
+        const cells = new Map<string, MapSite[]>();
+        for (const s of S) {
+          if (s.dc) continue;
+          const vd = shown(s.code);
+          if (F && F.has(s.code) && (vd === "Critical" || vd === "Warning")) continue;
+          const key = `${Math.floor(sx(s.lon) / CELL)}|${Math.floor(sy(s.lat) / CELL)}`;
+          const l = cells.get(key); if (l) l.push(s); else cells.set(key, [s]);
+        }
+        cells.forEach((list, key) => {
+          if (list.length < 2) return;
+          const cl: Cluster = { id: `cluster:${key}`, x: 0, y: 0, r: 0, codes: [], n: list.length, crit: 0, warn: 0, healthy: 0, other: 0, focused: false };
+          list.forEach((s) => {
+            cl.x += sx(s.lon); cl.y += sy(s.lat); cl.codes.push(s.code);
+            const vd = shown(s.code);
+            if (vd === "Critical") cl.crit++; else if (vd === "Warning") cl.warn++; else if (vd === "Healthy") cl.healthy++; else cl.other++;
+            if (inFocus(s.code)) cl.focused = true;
+            clusterOf.set(s.code, cl);
+          });
+          cl.x /= list.length; cl.y /= list.length;
+          cl.r = 7 + Math.min(13, Math.log2(list.length) * 2.4);
+          groups.push(cl);
+        });
+        // groups from neighbouring cells can overlap: the larger one takes in any group its circle touches
+        const merge = () => {
+          groups.sort((p, q) => q.n - p.n);
+          for (let i = 0; i < groups.length; i++) {
+            const g = groups[i];
+            for (let j = i + 1; j < groups.length; j++) {
+              const o = groups[j];
+              if (Math.hypot(g.x - o.x, g.y - o.y) > g.r + o.r + 3) continue;
+              const n = g.n + o.n;
+              g.x = (g.x * g.n + o.x * o.n) / n; g.y = (g.y * g.n + o.y * o.n) / n;
+              g.n = n; g.crit += o.crit; g.warn += o.warn; g.healthy += o.healthy; g.other += o.other; g.focused = g.focused || o.focused;
+              g.codes.push(...o.codes); o.codes.forEach((c) => clusterOf.set(c, g));
+              g.r = 7 + Math.min(13, Math.log2(n) * 2.4);
+              groups.splice(j, 1); j = i; // the grown circle may now touch groups already passed
+            }
+          }
+        };
+        // a data center is the anchor of the map: a group that would sit on it moves aside, along the line
+        // from the data center (its position is only the average of its sites anyway)
+        const dcs = S.filter((s) => s.dc).map((s) => ({ x: sx(s.lon), y: sy(s.lat) }));
+        const clearDcs = () => groups.forEach((g) => dcs.forEach((d) => {
+          const dx = g.x - d.x, dy = g.y - d.y, dist = Math.hypot(dx, dy), min = g.r + 18;
+          if (dist >= min) return;
+          const ux = dist ? dx / dist : 0, uy = dist ? dy / dist : -1;
+          g.x = d.x + ux * min; g.y = d.y + uy * min;
+        }));
+        // moving aside can push two groups together, and joining them can land on a data center again
+        merge(); clearDcs(); merge(); clearDcs();
+      }
+      clusters.current = groups;
+      const posOf = (code: string) => { const cl = clusterOf.get(code); if (cl) return { x: cl.x, y: cl.y, id: cl.id }; const s = B.get(code); return s ? { x: sx(s.lon), y: sy(s.lat), id: code } : null; };
+
+      // routes: one per pair of ends, a group counting as one end; width, packet count and packet speed follow
+      // the traffic volume (log scale across routes)
+      const RANK: Record<Verdict, number> = { Critical: 3, Warning: 2, Healthy: 1, "Not monitored": 0 };
+      const routes = new Map<string, { id: string; x0: number; y0: number; x1: number; y1: number; verdict: Verdict; focused: boolean; bps: number | null; n: number }>();
       L.forEach((l) => {
-        const a = B.get(l.a), b = B.get(l.b);
-        if (!a || !b) return;
-        const x0 = sx(a.lon), y0 = sy(a.lat), x1 = sx(b.lon), y1 = sy(b.lat);
-        const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
-        const cxp = (x0 + x1) / 2 - (dy / len) * len * 0.18, cyp = (y0 + y1) / 2 + (dx / len) * len * 0.18 - len * 0.08;
+        const a = posOf(l.a), b = posOf(l.b);
+        if (!a || !b || a.id === b.id) return;
         const verdict: Verdict = hit(l.a) && hit(l.b) ? l.verdict : "Healthy";
         const focused = inFocus(l.a) && inFocus(l.b);
+        const key = clusterOf.size ? `${a.id}|${b.id}` : l.id;
+        const r = routes.get(key);
+        if (!r) routes.set(key, { id: l.id, x0: a.x, y0: a.y, x1: b.x, y1: b.y, verdict, focused, bps: l.bps ?? null, n: 1 });
+        else {
+          r.n++; r.focused = r.focused || focused;
+          if (RANK[verdict] > RANK[r.verdict]) r.verdict = verdict;
+          if (l.bps != null) r.bps = (r.bps ?? 0) + l.bps;
+        }
+      });
+      ctx.lineCap = "round";
+      const vols = [...routes.values()].map((r) => r.bps ?? 0).filter((x) => x > 0);
+      const vMin = vols.length ? Math.log10(Math.min(...vols)) : 0, vMax = vols.length ? Math.log10(Math.max(...vols)) : 1;
+      const volume = (bps: number | null) => (bps == null ? null : bps <= 0 ? 0 : vMax > vMin ? 0.15 + 0.85 * ((Math.log10(bps) - vMin) / (vMax - vMin)) : 1);
+      routes.forEach(({ id, x0, y0, x1, y1, verdict, focused, bps, n }) => {
+        const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
+        const cxp = (x0 + x1) / 2 - (dy / len) * len * 0.18, cyp = (y0 + y1) / 2 + (dx / len) * len * 0.18 - len * 0.08;
         const bad = verdict === "Critical" || verdict === "Warning";
         const alpha = (focused ? 1 : P.dim) * (verdict === "Critical" ? 0.85 : verdict === "Warning" ? 0.45 : P.calm);
         ctx.strokeStyle = bad ? COL[verdict] : P.route;
         ctx.globalAlpha = alpha;
-        const vol = volume(l);
-        ctx.lineWidth = (bad ? 1.5 : 0.9) * (vol == null ? 1 : 0.7 + vol * 1.6) * P.stroke;
+        const vol = volume(bps);
+        // a route that stands for a group of links is as much wider as it carries
+        ctx.lineWidth = (bad ? 1.5 : 0.9) * (vol == null ? 1 : 0.7 + vol * 1.6) * P.stroke * (n > 1 ? 1 + Math.min(2.2, Math.log2(n) * 0.35) : 1);
         ctx.setLineDash(verdict === "Critical" && !reduce ? [4, 4] : []);
         ctx.lineDashOffset = verdict === "Critical" ? -(now / 70) % 8 : 0;
         ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(cxp, cyp, x1, y1); ctx.stroke();
         // packets travelling to the data center: more, faster and bigger packets on busier links, none when nothing flows
         if (!reduce && vol !== 0 && (focused || !F)) {
-          const phase = hash(l.id), v = vol ?? 0.3;
-          const count = Math.max(1, Math.round(1 + v * 5));
-          const period = 3400 - v * 2400;
+          const phase = hash(id), vv = vol ?? 0.3;
+          const count = Math.max(1, Math.round(1 + vv * 5));
+          const period = 3400 - vv * 2400;
           for (let p = 0; p < count; p++) {
             const t = ((now / period) + phase + p / count) % 1, u = 1 - t;
             const px = u * u * x0 + 2 * u * t * cxp + t * t * x1, py = u * u * y0 + 2 * u * t * cyp + t * t * y1;
             ctx.globalAlpha = focused ? 0.95 : Math.max(0.45, P.dim);
             ctx.fillStyle = bad ? COL[verdict] : P.route;
-            ctx.beginPath(); ctx.arc(px, py, (bad ? 1.5 : 1.1) + v * 1.2, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(px, py, (bad ? 1.5 : 1.1) + vv * 1.2, 0, Math.PI * 2); ctx.fill();
           }
         }
       });
@@ -300,7 +386,35 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
       ctx.globalAlpha = 1;
 
       // sites, healthy first so problems stay on top
-      const order = [...S].sort((p, q) => Number(shown(p.code) !== "Healthy") - Number(shown(q.code) !== "Healthy") || Number(!!p.dc) - Number(!!q.dc));
+      // groups: the count in the middle and a ring of status shares (critical, warning, healthy, other)
+      groups.forEach((cl) => {
+        if (cl.x < -40 || cl.y < -40 || cl.x > w + 40 || cl.y > h + 40) return;
+        ctx.globalAlpha = cl.focused ? 1 : P.siteDim;
+        if (cl.crit && cl.focused && !reduce) {
+          const t = ((now / 1800) + hash(cl.id)) % 1;
+          ctx.strokeStyle = COL.Critical; ctx.globalAlpha = 1 - t; ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.arc(cl.x, cl.y, cl.r + 2 + t * 14, 0, Math.PI * 2); ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+        ctx.fillStyle = withAlpha(P.halo, 0.92);
+        ctx.beginPath(); ctx.arc(cl.x, cl.y, cl.r + 3, 0, Math.PI * 2); ctx.fill();
+        let a0 = -Math.PI / 2;
+        ([["Critical", cl.crit], ["Warning", cl.warn], ["Healthy", cl.healthy], ["Not monitored", cl.other]] as [Verdict, number][]).forEach(([vd, k]) => {
+          if (!k) return;
+          const a1 = a0 + (k / cl.n) * Math.PI * 2;
+          ctx.strokeStyle = COL[vd]; ctx.lineWidth = 3.2;
+          ctx.beginPath(); ctx.arc(cl.x, cl.y, cl.r, a0, a1); ctx.stroke();
+          a0 = a1;
+        });
+        if (hoverCode.current === cl.id) { ctx.strokeStyle = P.ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cl.x, cl.y, cl.r + 5, 0, Math.PI * 2); ctx.stroke(); }
+        ctx.fillStyle = P.ink; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.font = `600 ${cl.n >= 100 ? 9.5 : 10.5}px ${mono}`;
+        ctx.fillText(cl.n >= 1000 ? `${(cl.n / 1000).toFixed(1)}k` : String(cl.n), cl.x, cl.y + 0.5);
+        ctx.textAlign = "start";
+      });
+      ctx.globalAlpha = 1;
+
+      const order = [...S].filter((s) => !clusterOf.has(s.code)).sort((p, q) => Number(shown(p.code) !== "Healthy") - Number(shown(q.code) !== "Healthy") || Number(!!p.dc) - Number(!!q.dc));
       const labelled: MapSite[] = [];
       order.forEach((s) => {
         const x = sx(s.lon), y = sy(s.lat);
@@ -370,12 +484,20 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
     const px = clientX - rect.left, py = clientY - rect.top;
     const { w, h } = size.current, v = view.current, ins = props.current.insets;
     const ox = ins.left + (w - ins.left - ins.right) / 2, oy = ins.top + (h - ins.top - ins.bottom) / 2;
+    for (const cl of clusters.current) {
+      if (Math.hypot(cl.x - px, cl.y - py) <= cl.r + 4) {
+        const bits = [cl.crit ? `${cl.crit} critical` : null, cl.warn ? `${cl.warn} warning` : null, cl.healthy ? `${cl.healthy} healthy` : null].filter(Boolean).join(" · ");
+        return { site: { code: cl.id, name: `${cl.n} sites`, lat: 0, lon: 0, verdict: worstOf(cl), cause: `${bits} · click to zoom in` }, x: px, y: py, cluster: cl };
+      }
+    }
+    const grouped = new Set(clusters.current.flatMap((cl) => cl.codes));
     let best: MapSite | null = null, dist = 12;
     props.current.sites.forEach((s) => {
+      if (grouped.has(s.code)) return;
       const d = Math.hypot(ox + (s.lon - v.cx) * v.k - px, oy + (projY(s.lat) - v.cy) * v.k - py);
       if (d < dist) { dist = d; best = s; }
     });
-    return best ? { site: best as MapSite, x: px, y: py } : null;
+    return best ? { site: best as MapSite, x: px, y: py } as { site: MapSite; x: number; y: number; cluster?: Cluster } : null;
   };
 
   const zoomBy = (f: number, px?: number, py?: number) => {
@@ -424,12 +546,17 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
         onPointerUp={(e) => {
           const d = drag.current;
           drag.current = null;
-          if (d && !d.moved) { const hit = siteAt(e.clientX, e.clientY); if (hit) onSite(hit.site.code); }
+          if (d && !d.moved) {
+            const hit = siteAt(e.clientX, e.clientY);
+            // a group opens up: fly to its sites (not their data centers) until they stand apart
+            if (hit?.cluster) fitTo(new Set(hit.cluster.codes), true, false, true);
+            else if (hit) onSite(hit.site.code);
+          }
         }} />
       {hover && (
         <div className="lm-tip" style={{ left: hover.x, top: hover.y }}>
           <b><i style={{ background: MAP_COLORS[hover.site.verdict] }} />{hover.site.name}</b>
-          <span>{[hover.site.code, hover.site.region, hover.site.dc ? "Data center" : null].filter(Boolean).join(" · ")}</span>
+          {!hover.cluster && <span>{[hover.site.code, hover.site.region, hover.site.dc ? "Data center" : null].filter(Boolean).join(" · ")}</span>}
           {hover.site.cause && <span className="lm-tip__cause">{hover.site.cause}</span>}
         </div>
       )}

@@ -359,6 +359,19 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     if (silent) snmpSilentSince.set(d.name, silent);
   }
 
+  // ---------- restarts: the last step down of sysUpTime in 24 h ----------
+  const rebootDone = new Set<string>();
+  for (const row of LF("reboots")) {
+    const d = devFor(row);
+    if (!d || rebootDone.has(d.name)) continue;
+    const deltas = (Array.isArray(row.d) ? row.d : []) as (number | null)[];
+    let i = deltas.length - 1;
+    while (i >= 0 && !((deltas[i] ?? 0) < 0)) i--;
+    const start = Date.parse(String(row.timeframe?.start ?? "").replace(/(\.\d{3})\d*Z$/, "$1Z")), step = Number(row.interval) / 1e6;
+    // delta i sits between buckets i and i + 1: the restart happened in bucket i + 1
+    if (i >= 0 && Number.isFinite(start) && Number.isFinite(step)) { d.rebootedAt = new Date(start + (i + 1) * step).toISOString(); rebootDone.add(d.name); }
+  }
+
   // ---------- interfaces ----------
   const nodes = new Map(L("interfaces").map((n) => [n.id, n]));
   // a port is its Smartscape node when the family reports one, else the device and the port name
@@ -644,6 +657,31 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     return "other";
   };
 
+  // a week of alerting on the network devices, open or closed
+  let alerting: NetworkModel["alerting"];
+  if (r.problems7d) {
+    const ids7 = new Set<string>(), devs7 = new Set<Device>(), kinds = new Set<string>();
+    const recent: NonNullable<NetworkModel["alerting"]>["recent"] = [];
+    const dayAgo = Date.now() - 24 * 3600e3;
+    const at = (v: unknown) => (v ? Date.parse(String(v).replace(/(\.\d{3})\d*Z$/, "$1Z")) : NaN);
+    for (const p of L("problems7d")) {
+      const { ids, names } = entitiesOf(p);
+      const hit = new Set<Device>();
+      ids.forEach((id) => { const d = byEntity.get(id) ?? byInterface.get(id)?.device; if (d) hit.add(d); });
+      names.forEach((n) => { const d = byDeviceName.get(String(n).toLowerCase()); if (d) hit.add(d); });
+      // above DETAIL_MAX_DEVICES the ports are not read, so an interface problem names a port the model
+      // does not hold: it still is a network problem
+      if (!hit.size && !ids.some((id) => id.startsWith("EXT_NETWORK"))) continue;
+      const id = String(p["event.id"]);
+      const closed = String(p["event.status"] ?? "") === "CLOSED";
+      if (!ids7.has(id) && (at(p["event.start"]) >= dayAgo || (closed && at(p["event.end"]) >= dayAgo))) {
+        recent.push({ id, name: String(p["event.name"] ?? ""), start: String(p["event.start"] ?? ""), end: closed && p["event.end"] ? String(p["event.end"]) : null, device: [...hit][0]?.name ?? null });
+      }
+      ids7.add(id); hit.forEach((d) => devs7.add(d)); kinds.add(String(p["event.name"] ?? ""));
+    }
+    recent.sort((a, b) => Math.max(at(b.start), at(b.end)) - Math.max(at(a.start), at(a.end)));
+    alerting = { days: 7, problems: ids7.size, devices: devs7.size, kinds: [...kinds].filter(Boolean).sort(), recent };
+  }
   const coveredEventIds = new Set<string>();
   const unmappedAlerts: DeviceProblem[] = [];
   for (const p of L("problems")) {
@@ -876,7 +914,7 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     users,
     sites, siteVerdicts,
     devices: devList.sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || b.impact - a.impact || a.name.localeCompare(b.name)),
-    circuits, links, peers, traps, unmappedAlerts,
+    circuits, links, peers, traps, unmappedAlerts, alerting,
     extensions: [...new Set(["ifTraffic", "ifSummary", "cpu", "memory", "uptime"].flatMap((k) => LF(k).map((row) => String(row.family ?? ""))).filter(Boolean))],
     flows: {
       exporters,

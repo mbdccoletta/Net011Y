@@ -73,8 +73,13 @@ export function evaluateNeeds(counts: Record<string, number | null>, model: Netw
         ...(model?.devices ?? []).flatMap((d) => (d.problems ?? []).filter((p) => !p.muted).map((p) => p.eventId)),
         ...(model?.circuits ?? []).flatMap((c) => (c.problems ?? []).filter((p) => !p.muted).map((p) => p.eventId)),
       ]);
-      status = !model ? "loading" : ids.size ? "ok" : "missing";
-      detail = !model ? "loading" : ids.size ? `${ids.size} open problem(s) on ${devices + circuits} network element(s)` : "no alert is raising anything on your network";
+      // a quiet network with alerting in place is not missing anything: the week's history says which it is
+      const week = model?.alerting;
+      status = !model ? "loading" : ids.size || (week?.problems ?? 0) > 0 ? "ok" : "missing";
+      detail = !model ? "loading"
+        : ids.size ? `${ids.size} open problem(s) on ${devices + circuits} network element(s)${week ? ` · ${week.problems} in ${week.days} days` : ""}`
+        : week?.problems ? `none open now · ${week.problems} problem(s) on ${week.devices} device(s) in ${week.days} days`
+        : week ? `no alert raised on the network devices in ${week.days} days` : "no alert is raising anything on your network";
     } else if (key === "sites") {
       const sites = model ? Object.values(model.sites) : [];
       const located = sites.filter((s) => s.lat != null).length, regions = sites.filter((s) => s.region).length;

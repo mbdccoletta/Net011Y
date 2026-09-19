@@ -203,6 +203,8 @@ export interface Device {
   events: NetEvent[];
   interfaces: Iface[];
   /** Per-device interface summary, used when the estate is too large to fetch every port */
+  /** when sysUpTime last stepped down in the last 24 h: the device restarted */
+  rebootedAt?: string;
   ifStats?: { maxUtil: number | null; interfaces: number; errors: number; discards: number };
   reasons: Reason[];
   verdict: Verdict;
@@ -415,6 +417,15 @@ export interface NetworkModel {
   users?: Users;
   /** Alerts Dynatrace raised that name no network entity (for example a metric event bound to the environment) */
   unmappedAlerts?: DeviceProblem[];
+  /**
+   * What alerting produced on the network devices over the last days, open or closed: none at all on polled
+   * devices means no alert template or custom alert watches them. Absent when it was not read.
+   */
+  alerting?: {
+    days: number; problems: number; devices: number; kinds: string[];
+    /** the network problems that opened or closed in the last 24 h, newest first */
+    recent: { id: string; name: string; start: string; end: string | null; device: string | null }[];
+  };
   demo?: boolean;
   meta: { tenant: string; generatedAt: string; thresholds: Record<string, number> };
   sites: Record<string, Site>;

@@ -33,10 +33,14 @@ reason.
 | Map | A schematic layout by region | Coordinates, for the geographic map |
 | WAN | Reachability per site from any ICMP monitor that pings a device (network coverage monitors included) | Circuit tags on the monitors: `circuit_id`, `circuit_role`, `carrier`, `circuit_tech`, `sla_ms` |
 | Topology | Smartscape `calls` between network devices and interfaces | SNMP autodiscovery neighbour discovery (CDP / LLDP) |
-| Status | `dt.davis.problems`, `dt.davis.events` (severity, maintenance, root cause) | Network alert templates in Infrastructure & Operations |
+| Status | `dt.davis.problems`, `dt.davis.events` (severity, maintenance, root cause); a week of problems says whether any alert watches the polled devices at all | Network alert templates in Infrastructure & Operations |
+| What changed (24 h) | Restarts (sysUpTime stepping down), devices that stopped or started answering, Davis problems opened and closed, circuits down — all included in the subscription | — |
 | Events | ActiveGate syslog, SNMP Traps extension | — |
 | Traffic | — | NetFlow / IPFIX through the OpenTelemetry Collector; OneAgent network connection monitoring |
 | Fault domain | OneAgent process network metrics, service requests | Real user sessions, `site_cidr` |
+
+The map groups sites that fall close together once an estate passes 600 sites (a click opens a group), and ⌘K
+searches every device, address, site and circuit from any page.
 
 Settings › Data documents every item: what each page uses it for, how to send it, a query to verify it,
 and the link to the Dynatrace documentation. Settings also lists the next steps for the environment, the

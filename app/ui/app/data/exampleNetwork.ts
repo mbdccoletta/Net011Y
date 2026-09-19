@@ -488,11 +488,23 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
     return buildFlowMap((k) => (rows[k] ?? []) as Record<string, any>[], devices, addressing, sites);
   })();
 
+  // ---------- what changed today: restarts and alerts that already closed, besides what is open ----------
+  const healthy = devices.filter((d) => d.verdict === "Healthy" && !sites[d.site]?.dc);
+  const restarts = [0.07, 0.31, 0.58, 0.83].map((f, k) => ({ d: healthy[Math.floor(f * healthy.length)], min: [95, 240, 610, 1180][k] })).filter((x) => x.d);
+  restarts.forEach(({ d, min }) => { d.rebootedAt = new Date(t0 - min * 60000).toISOString(); });
+  const flappy = healthy[Math.floor(0.44 * healthy.length)];
+  const closedToday = flappy ? [{ id: "demo-closed-1", name: "Interface flapping", start: ago(310), end: ago(262), device: flappy.name }] : [];
+  const firstOn = new Map<string, string>();
+  devices.forEach((d) => (d.problems ?? []).forEach((p) => { if (!firstOn.has(p.eventId)) firstOn.set(p.eventId, d.name); }));
+  const recent = [...[...problems.values()].map((p) => ({ id: p.eventId, name: p.name, start: p.start, end: null as string | null, device: firstOn.get(p.eventId) ?? null })), ...closedToday]
+    .sort((a, b) => (b.end ?? b.start).localeCompare(a.end ?? a.start));
+
   return {
     demo: true,
     flowMap: traffic,
     users,
     unmappedAlerts: outsideAlerts,
+    alerting: { days: 7, problems: problems.size + closedToday.length, devices: devices.filter((d) => d.problems?.length).length, kinds: [...new Set([...problems.values()].map((p) => p.name))].sort(), recent },
     meta: { tenant: "example", generatedAt: new Date(t0).toISOString().slice(0, 16) + "Z", thresholds: T },
     sites, siteVerdicts,
     devices: devices.sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || b.impact - a.impact || a.name.localeCompare(b.name)),

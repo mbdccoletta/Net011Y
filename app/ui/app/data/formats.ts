@@ -81,7 +81,7 @@ const port = (f: Family) => `${f.devDims}, ${f.ifDims}`;
  * One query per family and measure, so they run side by side and a family that is absent answers at once.
  * Named "<measure>:<family>"; the model reads them in catalog order, the common set first.
  */
-export type Measure = "ifTraffic" | "ifErrors" | "ifSummary" | "errSummary" | "cpu" | "memory" | "uptime";
+export type Measure = "ifTraffic" | "ifErrors" | "ifSummary" | "errSummary" | "cpu" | "memory" | "uptime" | "reboots";
 const BUILD: Record<Measure, (f: Family) => string | null> = {
   // traffic per port, every 5 minutes over 2 h
   ifTraffic: (f) => f.ifIn && f.ifOut
@@ -116,6 +116,9 @@ const BUILD: Record<Measure, (f: Family) => string | null> = {
       + ` | fieldsAdd mem = 100 * u[] / ${f.memTotal ? "t[]" : "(u[] + t[])"} | fieldsRemove u, t | ${tag(f)}` : null,
   // sysUpTime samples per hour over 24 h: an hour with none is an hour the device did not answer
   uptime: (f) => f.uptime ? `timeseries {c = count(${mk(f, f.uptime)})}, by:{${dev(f)}}, from:now()-24h, interval:1h | ${tag(f)}` : null,
+  // restarts over 24 h: sysUpTime only grows until the device restarts, so a step down is a restart; only
+  // the devices that restarted come back
+  reboots: (f) => f.uptime ? `timeseries {u = max(${mk(f, f.uptime)})}, by:{${dev(f)}}, from:now()-24h, interval:15m | fieldsAdd d = arrayDelta(u) | filter arrayMin(d) < 0 | fieldsRemove u | ${tag(f)}` : null,
 };
 
 /** Every family query for a measure, as [name, query] in catalog order. */
