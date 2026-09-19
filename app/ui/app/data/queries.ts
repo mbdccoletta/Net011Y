@@ -27,6 +27,12 @@ const CIRCUIT_TAGS = "primary_tags.site, primary_tags.circuit_id, primary_tags.c
 
 /** Hours of syslog and traps read on load; the device timeline can ask for 24 h of one device. */
 export const DEVICE_LOG_HOURS = 6;
+/**
+ * Above this many devices the app stops pulling every port of every device (that is hundreds of
+ * thousands of rows) and works from the per-device summaries; the ports of one device are fetched
+ * when somebody opens it.
+ */
+export const DETAIL_MAX_DEVICES = 3000;
 /** The 24 h of one device, run only on request: it scans 24 h of logs like the load used to. */
 export const deviceLogs24h = (ip: string) =>
   `fetch logs, from:now()-24h | filter dt.openpipeline.source == "extension:syslog" or log.source == "snmptraps" | fieldsAdd kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = coalesce(dt.ingest.source.ip, device.address) | filter ip == "${ip.replace(/[^0-9a-fA-F.:]/g, "")}" | makeTimeseries n = count(), by:{kind, loglevel}, interval:1h`;

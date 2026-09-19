@@ -1,10 +1,10 @@
 // Sites, Devices and WAN links as visual pages: every site is a cell in its region's
 // honeycomb, devices are dots grouped by role, circuits sit on a ruler against their SLA.
 // A table view of each page stays one click away.
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { ExternalLinkIcon } from "@dynatrace/strato-icons";
 import type { Circuit, Device, NetworkModel, Verdict } from "../model/types";
-import { ROLE_LABEL, type SiteInfo } from "../model/site";
+import { devicesAt, ROLE_LABEL, type SiteInfo } from "../model/site";
 import { isBad, ORDER, T } from "../model/verdict";
 import { fmtInt, fmtNum, stripDevice } from "../utils/format";
 import { NativeDrill } from "../components/NativeDrill";
@@ -64,7 +64,7 @@ export function SitesVisual(p: VisualProps) {
     && (!kind || kinds(i) === kind);
   const groups = useMemo(() => {
     const map = new Map<string, SiteInfo[]>();
-    infos.forEach((i) => { const r = i.site.dc ? "Data centers" : i.site.region ?? i.site.name; map.set(r, [...(map.get(r) ?? []), i]); });
+    infos.forEach((i) => { const r = i.site.dc ? "Data centers" : i.site.region ?? i.site.name; const l = map.get(r); if (l) l.push(i); else map.set(r, [i]); });
     return [...map.entries()].map(([name, sites]) => ({
       name, sites: [...sites].sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || a.code.localeCompare(b.code)),
     })).sort((a, b) => Number(a.name === "Data centers") - Number(b.name === "Data centers") || count(b.sites, (s) => isBad(s.verdict)) / b.sites.length - count(a.sites, (s) => isBad(s.verdict)) / a.sites.length);
@@ -87,10 +87,10 @@ export function SitesVisual(p: VisualProps) {
       ) : p.view === "table" ? <div className="vz-table"><SitesPage {...p} /></div> : (
         <div className="vz-body">
           <div className="vz-k4">
-            <KpiTile tone={TONE.bad} label="Critical sites" value={n("Critical")} caption={`${offline} dark`} active={filters.status === "Critical"} onClick={() => setStatus("Critical")} />
-            <KpiTile tone={TONE.warn} label="Warning" value={n("Warning")} caption={topCause && topCause.sites.length > 1 ? `${topCause.sites.length} behind ${topCause.title}` : "sites degraded"} active={filters.status === "Warning"} onClick={() => setStatus("Warning")} />
-            <KpiTile tone={TONE.good} label="Healthy" value={n("Healthy")} caption={`${Math.round((100 * n("Healthy")) / Math.max(1, infos.length))}% of ${fmtInt(infos.length)}`} active={filters.status === "Healthy"} onClick={() => setStatus("Healthy")} />
-            <KpiTile tone={TONE.accent} label="Not monitored" value={n("Not monitored")} caption={`${count(model.devices, (d) => d.verdict === "Not monitored")} devices without polling`} active={filters.status === "Not monitored"} onClick={() => setStatus("Not monitored")} />
+            <KpiTile tone={TONE.bad} label="Critical sites" value={fmtInt(n("Critical"))} caption={`${fmtInt(offline)} dark`} active={filters.status === "Critical"} onClick={() => setStatus("Critical")} />
+            <KpiTile tone={TONE.warn} label="Warning" value={fmtInt(n("Warning"))} caption={topCause && topCause.sites.length > 1 ? `${fmtInt(topCause.sites.length)} behind ${topCause.title}` : "sites degraded"} active={filters.status === "Warning"} onClick={() => setStatus("Warning")} />
+            <KpiTile tone={TONE.good} label="Healthy" value={fmtInt(n("Healthy"))} caption={`${Math.round((100 * n("Healthy")) / Math.max(1, infos.length))}% of ${fmtInt(infos.length)}`} active={filters.status === "Healthy"} onClick={() => setStatus("Healthy")} />
+            <KpiTile tone={TONE.accent} label="Not monitored" value={fmtInt(n("Not monitored"))} caption={`${fmtInt(count(model.devices, (d) => d.verdict === "Not monitored"))} devices without polling`} active={filters.status === "Not monitored"} onClick={() => setStatus("Not monitored")} />
           </div>
           <div className="vz-filters">
             {carriers.length > 0 && <Chips label="Carrier" options={carriers.map((c) => ({ key: c, label: c }))} value={filters.carrier} onChange={(carrier) => onFilters({ carrier })} />}
@@ -134,6 +134,8 @@ export function SitesVisual(p: VisualProps) {
 function sitesBehind(infos: SiteInfo[], d: Device, model: NetworkModel) {
   return model.sites[d.site]?.dc ? count(infos, (i) => i.site.hub === d.site) : 1;
 }
+const behindCounts = (infos: SiteInfo[]) => { const m = new Map<string, number>(); infos.forEach((i) => { if (i.site.hub) m.set(i.site.hub, (m.get(i.site.hub) ?? 0) + 1); }); return m; };
+const sitesBehindIn = (behind: Map<string, number>, d: Device, model: NetworkModel) => (model.sites[d.site]?.dc ? behind.get(d.site) ?? 0 : 1);
 
 function DeviceInstrument({ model, infos, device, onDetails }: { model: NetworkModel; infos: SiteInfo[]; device: Device; onDetails: () => void }) {
   const upIfs = count(device.interfaces, (i) => i.oper.startsWith("up"));
@@ -167,14 +169,19 @@ export function DevicesVisual(p: VisualProps) {
   const { model, infos, filters, onFilters, onSelect } = p;
   const [picked, setPicked] = useState<string | null>(null);
   const regions = useMemo(() => [...new Set(Object.values(model.sites).map((s) => s.region).filter((r): r is string => !!r))].sort(), [model]);
-  const visible = (d: Device) => matches(d.verdict, filters.status) && (!filters.region || model.sites[d.site]?.region === filters.region);
+  const visible = useCallback((d: Device) => matches(d.verdict, filters.status) && (!filters.region || model.sites[d.site]?.region === filters.region), [filters.status, filters.region, model]);
   const groups = useMemo(() => {
     const map = new Map<string, Device[]>();
-    model.devices.forEach((d) => map.set(d.role, [...(map.get(d.role) ?? []), d]));
+    model.devices.forEach((d) => { const l = map.get(d.role); if (l) l.push(d); else map.set(d.role, [d]); });
     return [...map.entries()].sort((a, b) => ROLE_ORDER.indexOf(a[0]) - ROLE_ORDER.indexOf(b[0]))
       .map(([role, devices]) => ({ role, devices: [...devices].sort((a, b) => ORDER[b.verdict] - ORDER[a.verdict]) }));
   }, [model]);
-  const worst = useMemo(() => [...model.devices].sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || b.impact - a.impact || sitesBehind(infos, b, model) - sitesBehind(infos, a, model))[0], [model, infos]);
+  // sites behind each data center, counted once: the ranking below compares it for every pair
+  const behind = useMemo(() => behindCounts(infos), [infos]);
+  const worst = useMemo(() => {
+    const bad = model.devices.filter((d) => isBad(d.verdict));
+    return (bad.length ? bad : model.devices).slice().sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || b.impact - a.impact || sitesBehindIn(behind, b, model) - sitesBehindIn(behind, a, model))[0];
+  }, [model, behind]);
   const device = model.devices.find((d) => d.name === picked) ?? worst;
 
   // bubble layout: one circle per role, dots on a sunflower spiral, problems drawn last and larger.
@@ -224,10 +231,10 @@ export function DevicesVisual(p: VisualProps) {
       ) : p.view === "table" ? <div className="vz-table"><DevicesPage {...p} /></div> : (
         <div className="vz-body">
           <div className="vz-k4">
-            <KpiTile tone={TONE.bad} label="Critical devices" value={n("Critical")} caption={`${count(model.devices, (d) => !!d.unreachableSince)} not responding`} active={filters.status === "Critical"} onClick={() => setStatus("Critical")} />
-            <KpiTile tone={TONE.warn} label="Warning" value={n("Warning")} caption="alerted, not critical" active={filters.status === "Warning"} onClick={() => setStatus("Warning")} />
+            <KpiTile tone={TONE.bad} label="Critical devices" value={fmtInt(n("Critical"))} caption={`${fmtInt(count(model.devices, (d) => !!d.unreachableSince))} not responding`} active={filters.status === "Critical"} onClick={() => setStatus("Critical")} />
+            <KpiTile tone={TONE.warn} label="Warning" value={fmtInt(n("Warning"))} caption="alerted, not critical" active={filters.status === "Warning"} onClick={() => setStatus("Warning")} />
             <KpiTile tone={TONE.good} label="Healthy" value={fmtInt(n("Healthy"))} caption={`${Math.round((100 * n("Healthy")) / Math.max(1, model.devices.length))}% of devices`} active={filters.status === "Healthy"} onClick={() => setStatus("Healthy")} />
-            <KpiTile tone={TONE.accent} label="Not monitored" value={n("Not monitored")} caption="discovered, no polling" active={filters.status === "Not monitored"} onClick={() => setStatus("Not monitored")} />
+            <KpiTile tone={TONE.accent} label="Not monitored" value={fmtInt(n("Not monitored"))} caption="discovered, no polling" active={filters.status === "Not monitored"} onClick={() => setStatus("Not monitored")} />
           </div>
           {regions.length > 0 && <div className="vz-filters"><Chips label="Region" options={regions.map((r) => ({ key: r, label: r }))} value={filters.region} onChange={(region) => onFilters({ region })} /></div>}
           <div className="vz-split">
@@ -236,7 +243,7 @@ export function DevicesVisual(p: VisualProps) {
                 <DeviceBubbles groups={layout.placed} width={W} height={layout.h} visible={visible} selected={device?.name ?? null} onPick={setPicked} />
               </div>
               <div className="vz-top" role="list" aria-label="Most impactful devices">
-                {[...model.devices].filter((d) => isBad(d.verdict) && visible(d)).sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || sitesBehind(infos, b, model) - sitesBehind(infos, a, model)).slice(0, 6).map((d) => (
+                {model.devices.filter((d) => isBad(d.verdict) && visible(d)).sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || sitesBehindIn(behind, b, model) - sitesBehindIn(behind, a, model)).slice(0, 6).map((d) => (
                   <button key={d.name} type="button" role="listitem" className={`vz-chip${device?.name === d.name ? " is-on" : ""}`} style={{ "--c": verdictTone(d.verdict) } as React.CSSProperties} onClick={() => setPicked(d.name)}>
                     <i aria-hidden="true" />{shortDevice(d.name)} · {model.sites[d.site]?.name.split(" · ")[0] ?? d.site}
                   </button>
@@ -258,7 +265,9 @@ export function LinksVisual(p: VisualProps) {
   const circuits = model.circuits ?? [];
   const carriers = useMemo(() => {
     const map = new Map<string, Circuit[]>();
-    circuits.forEach((c) => map.set(c.carrier, [...(map.get(c.carrier) ?? []), c]));
+    circuits.forEach((c) => { const l = map.get(c.carrier); if (l) l.push(c); else map.set(c.carrier, [c]); });
+    // sites whose primary is down, once: a backup that is up there is carrying the site
+    const primaryDown = new Set(circuits.filter((x) => x.kind === "primary" && x.status === "down").map((x) => x.site));
     // Percentiles of the latency as a share of each circuit's own SLA, plus the same in milliseconds:
     // carriers are compared against their own target instead of a single scale that squashes MPLS next
     // to satellite.
@@ -271,7 +280,7 @@ export function LinksVisual(p: VisualProps) {
       cs.forEach((c) => slaCount.set(c.slaMs, (slaCount.get(c.slaMs) ?? 0) + 1));
       return {
         name, circuits: cs, down: count(cs, (c) => c.status === "down"), over: count(cs, (c) => c.status === "up" && isBad(c.verdict)),
-        backupActive: count(cs, (c) => c.kind === "backup" && c.status === "up" && circuits.some((x) => x.site === c.site && x.kind === "primary" && x.status === "down")),
+        backupActive: count(cs, (c) => c.kind === "backup" && c.status === "up" && primaryDown.has(c.site)),
         tech: [...new Set(cs.map((c) => c.tech.split(" ")[0]))].join(", "),
         median: q(ratios, 0.5), p95: q(ratios, 0.95), medianMs: q(ms, 0.5), p95Ms: q(ms, 0.95),
         sla: [...slaCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null,
@@ -423,7 +432,7 @@ export function LinksVisual(p: VisualProps) {
               <Chips label="Status" options={STATUS_CHIPS.slice(0, 3)} value={filters.status} onChange={(status) => onFilters({ status })} />
               <NativeDrill demo={model.demo}
                 circuits={circuits.filter((c) => c.status === "down" && (!focusCarrier || c.carrier === focusCarrier))}
-                devices={circuits.filter((c) => c.status === "down" && (!focusCarrier || c.carrier === focusCarrier)).map((c) => model.devices.find((d) => d.site === c.site && d.role === "edge")).filter((d): d is Device => !!d).slice(0, 40)} />
+                devices={circuits.filter((c) => c.status === "down" && (!focusCarrier || c.carrier === focusCarrier)).map((c) => devicesAt(model, c.site).find((d) => d.role === "edge")).filter((d): d is Device => !!d).slice(0, 40)} />
             </Tile>
             <Tile tone={TONE.violet}>
               <AssistPanel subject={`carrier|${focusCarrier ?? "all"}`} questions={carrierQuestions(focusCarrier)} object="carriers"

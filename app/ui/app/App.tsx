@@ -33,10 +33,11 @@ const DOCS = {
   networks: "https://docs.dynatrace.com/docs/observe/infrastructure-observability/networks",
   networkDevices: "https://docs.dynatrace.com/docs/observe/infrastructure-observability/networks/network-devices/network-devices-get-started-guide",
 };
-const hrefOf = (p: Page, source: "live" | "example") => {
+const hrefOf = (p: Page, source: "live" | "example", scale: "xl" | null = null) => {
   const q = new URLSearchParams();
   if (p !== "causes") q.set("page", p);
   if (source === "example") q.set("source", "example");
+  if (source === "example" && scale === "xl") q.set("scale", "xl");
   return `${window.location.pathname}${q.toString() ? `?${q}` : ""}`;
 };
 
@@ -54,7 +55,7 @@ function useDelayed(active: boolean, ms: number) {
 
 export function App() {
   const [url, setUrl] = useUrlState();
-  const net = useNetwork(url.source);
+  const net = useNetwork(url.source, url.scale);
   const model = net.model;
   const [settingsOpen, setSettingsOpen] = useState(false);
   // a page can ask Settings to open on the data type it is missing, instead of repeating the steps itself
@@ -100,12 +101,12 @@ export function App() {
   const header = (
     <AppHeader>
       <AppHeader.Navigation>
-        <AppHeader.Logo appName={APP_NAME} href={hrefOf("causes", url.source)} onClick={nav("causes")} />
-        <AppHeader.NavigationItem isSelected={page === "causes"} href={hrefOf("causes", url.source)} onClick={nav("causes")}>{tab("causes", "Live map")}</AppHeader.NavigationItem>
-        <AppHeader.NavigationItem isSelected={page === "sites"} href={hrefOf("sites", url.source)} onClick={nav("sites")}>{tab("sites", "Sites")}</AppHeader.NavigationItem>
-        <AppHeader.NavigationItem isSelected={page === "devices"} href={hrefOf("devices", url.source)} onClick={nav("devices")}>{tab("devices", "Devices")}</AppHeader.NavigationItem>
-        <AppHeader.NavigationItem isSelected={page === "links"} href={hrefOf("links", url.source)} onClick={nav("links")}>{tab("links", "WAN links")}</AppHeader.NavigationItem>
-        <AppHeader.NavigationItem isSelected={page === "traffic"} href={hrefOf("traffic", url.source)} onClick={nav("traffic")}>{tab("traffic", "Traffic")}</AppHeader.NavigationItem>
+        <AppHeader.Logo appName={APP_NAME} href={hrefOf("causes", url.source, url.scale)} onClick={nav("causes")} />
+        <AppHeader.NavigationItem isSelected={page === "causes"} href={hrefOf("causes", url.source, url.scale)} onClick={nav("causes")}>{tab("causes", "Live map")}</AppHeader.NavigationItem>
+        <AppHeader.NavigationItem isSelected={page === "sites"} href={hrefOf("sites", url.source, url.scale)} onClick={nav("sites")}>{tab("sites", "Sites")}</AppHeader.NavigationItem>
+        <AppHeader.NavigationItem isSelected={page === "devices"} href={hrefOf("devices", url.source, url.scale)} onClick={nav("devices")}>{tab("devices", "Devices")}</AppHeader.NavigationItem>
+        <AppHeader.NavigationItem isSelected={page === "links"} href={hrefOf("links", url.source, url.scale)} onClick={nav("links")}>{tab("links", "WAN links")}</AppHeader.NavigationItem>
+        <AppHeader.NavigationItem isSelected={page === "traffic"} href={hrefOf("traffic", url.source, url.scale)} onClick={nav("traffic")}>{tab("traffic", "Traffic")}</AppHeader.NavigationItem>
       </AppHeader.Navigation>
       <AppHeader.ActionItems>
         {url.source === "live" && (
@@ -131,9 +132,9 @@ export function App() {
   );
 
   const settings = (
-    <SettingsSheet show={settingsOpen} onDismiss={() => setSettingsOpen(false)} model={model} needs={needs} source={url.source} focus={settingsFocus} steps={steps} inUse={inUse}
+    <SettingsSheet show={settingsOpen} onDismiss={() => setSettingsOpen(false)} model={model} needs={needs} source={url.source} scale={url.scale} focus={settingsFocus} steps={steps} inUse={inUse}
       absent={net.absent} cost={net.cost} onFocus={(k) => openSettings(k)} onRecheck={() => { net.recheck(); showToast({ title: "Reading every source again", type: "info" }); }}
-      onSource={(source) => setUrl({ source, page: "causes", cause: null, sel: null, ...NO_FILTERS })} />
+      onSource={(source, scale = null) => setUrl({ source, scale, page: "causes", cause: null, sel: null, ...NO_FILTERS })} />
   );
 
   if (!model) {
@@ -155,7 +156,7 @@ export function App() {
           ) : showProgress ? (
             <>
               <ProgressCircle aria-label="Loading network data" />
-              <Text>{url.source === "example" ? "Building the example network" : `Loading network data · ${net.done} of ${net.total} queries`}</Text>
+              <Text>{url.source === "example" ? (url.scale === "xl" ? "Building the extra-large example network · 20,000 devices" : "Building the example network") : `Loading network data · ${net.done} of ${net.total} queries`}</Text>
             </>
           ) : null}
         </div>

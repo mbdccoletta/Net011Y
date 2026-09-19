@@ -621,7 +621,7 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   devices.forEach((d) => {
     const mid = d.icmp?.monitorId;
     if (!mid || circuitByMonitor.has(mid)) return;
-    devicesByMonitor.set(mid, [...(devicesByMonitor.get(mid) ?? []), d]);
+    { const l = devicesByMonitor.get(mid); if (l) l.push(d); else devicesByMonitor.set(mid, [d]); }
   });
   // What an alert names when the app cannot place it. Different environments report different things —
   // a monitor nobody tagged as a circuit, a metric event bound to the environment, a host problem — and
@@ -770,7 +770,7 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   }
   // sites that share a state centre are spread a little around it, so none hides another
   const byCentre = new Map<string, Site[]>();
-  Object.values(sites).filter((x) => x.approx === "state").forEach((x) => { const k = `${x.lat},${x.lon}`; byCentre.set(k, [...(byCentre.get(k) ?? []), x]); });
+  Object.values(sites).filter((x) => x.approx === "state").forEach((x) => { const k = `${x.lat},${x.lon}`; { const l = byCentre.get(k); if (l) l.push(x); else byCentre.set(k, [x]); } });
   byCentre.forEach((group) => {
     if (group.length < 2) return;
     group.sort((a, b) => a.code.localeCompare(b.code)).forEach((x, i) => {

@@ -27,7 +27,7 @@ function build(infos: SiteInfo[], levels: string[], level = 0, parent = ""): Gro
   const byValue = new Map<string, SiteInfo[]>();
   infos.forEach((i) => {
     const v = levelValue(i.site, key) ?? NOT_TAGGED;
-    byValue.set(v, [...(byValue.get(v) ?? []), i]);
+    { const l = byValue.get(v); if (l) l.push(i); else byValue.set(v, [i]); }
   });
   return [...byValue].map(([value, sites]): Group => {
     const id = `${parent}/${key}=${value}`;

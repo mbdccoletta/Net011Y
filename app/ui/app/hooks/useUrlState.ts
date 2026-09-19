@@ -20,6 +20,8 @@ export interface UrlState {
   /** Visual or table rendering of the entity pages */
   view: "visual" | "table";
   source: "live" | "example";
+  /** size of the example network: the enterprise one, or an extra-large estate of about 20,000 devices */
+  scale: "xl" | null;
 }
 
 const KEYS = ["cause", "sel", "tab", "status", "region", "role", "carrier", "q"] as const;
@@ -39,6 +41,7 @@ function read(): UrlState {
     q: p.get("q") ?? "",
     view: p.get("view") === "table" ? "table" : "visual",
     source: p.get("source") === "example" ? "example" : "live",
+    scale: p.get("source") === "example" && p.get("scale") === "xl" ? "xl" : null,
   };
 }
 
@@ -62,6 +65,7 @@ export function useUrlState() {
       });
       if (next.view === "table" && next.page !== "causes") p.set("view", "table");
       if (next.source === "example") p.set("source", "example");
+      if (next.source === "example" && next.scale === "xl") p.set("scale", "xl");
       const url = `${window.location.pathname}${p.toString() ? `?${p}` : ""}`;
       if (push) window.history.pushState(null, "", url);
       else window.history.replaceState(null, "", url);

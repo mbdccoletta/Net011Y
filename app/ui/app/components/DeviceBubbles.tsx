@@ -1,6 +1,6 @@
 // Devices by role as bubbles you can zoom into: click a bubble to fly into it, scroll to zoom,
 // drag to pan, Esc or "All roles" to go back. Zoomed in, problem devices get their names.
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Device } from "../model/types";
 import { ROLE_LABEL } from "../model/site";
 import { isBad } from "../model/verdict";
@@ -23,6 +23,31 @@ interface View { x: number; y: number; k: number }
 const HOME: View = { x: 0, y: 0, k: 1 };
 const shortDevice = (name: string) => name.replace(/^BR-[A-Z]{2}-[A-Z0-9]+-/, "");
 const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+/**
+ * Above this many devices in a bubble, the quiet dots (healthy, not selected) are drawn as one path per
+ * colour instead of one element each: 20,000 devices stay a few hundred elements, the zoom stays smooth,
+ * and a click still opens the dot under the pointer.
+ */
+const BATCH_AT = 300;
+
+interface Dot { d: Device; x: number; y: number; r: number; problem: boolean }
+/** Dot positions on the sunflower spiral, computed once per layout rather than on every frame. */
+function placeDots(g: BubbleGroup): { dots: Dot[]; few: boolean; dotR: number } {
+  const nDots = g.devices.length;
+  // few devices: bigger dots that fill the bubble; many: small dots in a dense sunflower
+  const few = nDots <= 12;
+  const dotR = few ? Math.max(3, Math.min(11, ((g.r - 10) / Math.sqrt(nDots)) * 0.55)) : Math.max(1.3, Math.min(4.2, ((g.r - 8) / Math.sqrt(nDots)) * 0.75));
+  const spread = few ? g.r - 8 - dotR : g.r - 7;
+  const dots = g.devices.map((d, i) => {
+    const idx = nDots - 1 - i;
+    const a = idx * 2.39996 + (few ? -Math.PI / 2 : 0), rad = nDots === 1 ? 0 : Math.sqrt((idx + 0.5) / nDots) * spread;
+    const problem = isBad(d.verdict);
+    return { d, x: g.cx + Math.cos(a) * rad, y: g.cy + Math.sin(a) * rad, r: problem ? dotR * 1.12 : dotR, problem };
+  });
+  return { dots, few, dotR };
+}
+/** Many circles as one path: each dot is two arcs. */
+const dotsPath = (dots: Dot[]) => dots.map(({ x, y, r }) => `M${(x - r).toFixed(2)} ${y.toFixed(2)}a${r.toFixed(2)} ${r.toFixed(2)} 0 1 0 ${(2 * r).toFixed(2)} 0a${r.toFixed(2)} ${r.toFixed(2)} 0 1 0 ${(-2 * r).toFixed(2)} 0`).join("");
 
 export function DeviceBubbles({ groups, width: W, height: H, visible, selected, onPick }: Props) {
   const svg = useRef<SVGSVGElement>(null);
@@ -104,6 +129,28 @@ export function DeviceBubbles({ groups, width: W, height: H, visible, selected, 
 
   const k = view.k;
   const focusGroup = groups.find((g) => g.role === focus);
+  const placed = useMemo(() => new Map(groups.map((g) => [g.role, placeDots(g)])), [groups]);
+  // the quiet dots of the large bubbles, batched by colour and visibility; rebuilt only when the data,
+  // the filters or the selection change, never while zooming
+  const batches = useMemo(() => new Map(groups.map((g) => {
+    const pl = placed.get(g.role)!;
+    if (pl.dots.length <= BATCH_AT) return [g.role, null] as const;
+    const byKey = new Map<string, Dot[]>();
+    pl.dots.forEach((dot) => {
+      if (dot.problem || dot.d.name === selected) return;
+      const key = `${dot.d.verdict}|${visible(dot.d) ? 1 : 0}`;
+      const l = byKey.get(key); if (l) l.push(dot); else byKey.set(key, [dot]);
+    });
+    return [g.role, [...byKey.entries()].map(([key, dots]) => ({ key, verdict: key.split("|")[0] as Device["verdict"], on: key.endsWith("|1"), dots, d: dotsPath(dots) }))] as const;
+  })), [groups, placed, visible, selected]);
+  // a click on a batched path opens the dot nearest the pointer
+  const pickNearest = (dots: Dot[], e: React.MouseEvent) => {
+    const w = toSvg(e.clientX, e.clientY), v = viewRef.current;
+    const x = (w.x - v.x) / v.k, y = (w.y - v.y) / v.k;
+    let best: Dot | null = null, bd = Infinity;
+    dots.forEach((dot) => { const dd = (dot.x - x) ** 2 + (dot.y - y) ** 2; if (dd < bd) { bd = dd; best = dot; } });
+    if (best && !drag.current?.moved) onPick((best as Dot).d.name);
+  };
 
   return (
     <div className="vz-zoom">
@@ -135,10 +182,8 @@ export function DeviceBubbles({ groups, width: W, height: H, visible, selected, 
         <g transform={`translate(${view.x} ${view.y}) scale(${k})`}>
           {groups.map((g) => {
             const nDots = g.devices.length;
-            // few devices: bigger dots that fill the bubble; many: small dots in a dense sunflower
-            const few = nDots <= 12;
-            const dotR = few ? Math.max(3, Math.min(11, ((g.r - 10) / Math.sqrt(nDots)) * 0.55)) : Math.max(1.3, Math.min(4.2, ((g.r - 8) / Math.sqrt(nDots)) * 0.75));
-            const spread = few ? g.r - 8 - dotR : g.r - 7;
+            const { dots, few } = placed.get(g.role)!;
+            const batch = batches.get(g.role);
             const bad = g.devices.filter((d) => isBad(d.verdict)).length;
             const dim = focus && focus !== g.role && k > 1.5;
             // status ring: share of critical, warning, healthy and not monitored devices around the bubble
@@ -164,12 +209,14 @@ export function DeviceBubbles({ groups, width: W, height: H, visible, selected, 
                 })}
                 <text x={g.cx} y={g.cy + g.r + 18 / Math.sqrt(k)} textAnchor="middle" className="vz-svg-label" style={{ fontSize: 14 / Math.sqrt(k) }}>{(ROLE_LABEL[g.role] ?? g.role).toUpperCase()}</text>
                 <text x={g.cx} y={g.cy + g.r + 34 / Math.sqrt(k)} textAnchor="middle" className="vz-svg-cap" style={{ fontSize: 12 / Math.sqrt(k) }}>{fmtInt(nDots)}{bad ? ` · ${bad} with issues` : ""}</text>
-                {g.devices.map((d, i) => {
-                  const idx = nDots - 1 - i;
-                  const a = idx * 2.39996 + (few ? -Math.PI / 2 : 0), rad = nDots === 1 ? 0 : Math.sqrt((idx + 0.5) / nDots) * spread;
-                  const problem = isBad(d.verdict), on = visible(d), sel = selected === d.name;
-                  const x = g.cx + Math.cos(a) * rad, y = g.cy + Math.sin(a) * rad;
-                  const r = problem ? dotR * 1.12 : dotR;
+                {batch?.map((b) => (
+                  <path key={b.key} d={b.d} fill={verdictTone(b.verdict)} opacity={b.on ? 0.72 : 0.1} className="vz-dot"
+                    onClick={(e) => { e.stopPropagation(); if (b.on) pickNearest(b.dots, e); }}>
+                    <title>{`${fmtInt(b.dots.length)} ${(ROLE_LABEL[g.role] ?? g.role).toLowerCase()} devices · ${b.verdict} · click a dot to open it`}</title>
+                  </path>
+                ))}
+                {dots.filter((dot) => !batch || dot.problem || dot.d.name === selected).map(({ d, x, y, r, problem }) => {
+                  const on = visible(d), sel = selected === d.name;
                   const detailed = r * k >= 7;
                   return (
                     <g key={d.name}>

@@ -19,7 +19,8 @@ interface Props {
   model: NetworkModel | null;
   needs: Record<NeedKey, Need>;
   source: "live" | "example";
-  onSource: (source: "live" | "example") => void;
+  onSource: (source: "live" | "example", scale?: "xl" | null) => void;
+  scale?: "xl" | null;
   /** Data type the caller wants explained: opens the Data tab with that entry expanded */
   focus?: NeedKey | null;
   absent: Partial<Record<SourceGroup, number>>;
@@ -32,7 +33,7 @@ interface Props {
   onFocus?: (key: NeedKey) => void;
 }
 
-export function SettingsSheet({ show, onDismiss, model, needs, source, onSource, focus, absent, onRecheck, steps, inUse, cost, onFocus }: Props) {
+export function SettingsSheet({ show, onDismiss, model, needs, source, scale, onSource, focus, absent, onRecheck, steps, inUse, cost, onFocus }: Props) {
   return (
     <Sheet
       title="Settings"
@@ -48,7 +49,7 @@ export function SettingsSheet({ show, onDismiss, model, needs, source, onSource,
       <Tabs key={`${focus ?? "settings"}-${show}`} defaultIndex={focus ? 1 : 0} panelOverflow="scroll-y">
         <Tab title="General">
           <div className="ds">
-            <DataSourceSection source={source} onSource={onSource} />
+            <DataSourceSection source={source} scale={scale ?? null} onSource={onSource} />
             <SiteHierarchySettings model={model} />
             <SuspicionSection />
           </div>

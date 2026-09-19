@@ -162,22 +162,25 @@ function NeedStatusIndicator({ need }: { need: Need }) {
 interface Props {
   needs: Record<NeedKey, Need>;
   source: "live" | "example";
-  onSource: (source: "live" | "example") => void;
+  onSource: (source: "live" | "example", scale?: "xl" | null) => void;
 }
 
-export function DataSourceSection({ source, onSource }: Pick<Props, "source" | "onSource">) {
+export function DataSourceSection({ source, scale, onSource }: Pick<Props, "source" | "onSource"> & { scale: "xl" | null }) {
+  const value = source === "example" ? (scale === "xl" ? "example-xl" : "example") : "live";
   return (
       <section className="ds-block" aria-labelledby="ds-source">
         <Heading level={5} id="ds-source">Data source</Heading>
-        <Select value={source} onChange={(v) => onSource(v === "example" ? "example" : "live")}>
+        <Select value={value} onChange={(v) => (v === "example-xl" ? onSource("example", "xl") : v === "example" ? onSource("example", null) : onSource("live", null))}>
           <Select.Trigger placeholder="Data source" />
           <Select.Content>
             <Select.Option value="live" textValue="This environment">This environment</Select.Option>
             <Select.Option value="example" textValue="Example network">Example network (simulated)</Select.Option>
+            <Select.Option value="example-xl" textValue="Example network, extra large">Example network, extra large · 20,000 devices (simulated)</Select.Option>
           </Select.Content>
         </Select>
         <Text textStyle="small">
-          This environment reads what your Dynatrace environment already stores. The example network is a fictitious retail company with about 400 sites, so you can explore the app before sending data.
+          This environment reads what your Dynatrace environment already stores. The example network is a fictitious retail company with about 400 sites, so you can explore the app before sending data;
+          the extra-large one is the same company at about 4,200 sites and 20,000 devices, read the way the app reads an estate that size (per-device summaries, not every port).
         </Text>
       </section>
   );

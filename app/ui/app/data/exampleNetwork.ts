@@ -1,5 +1,7 @@
 // Simulated Brazilian retail and distribution network at enterprise scale: five regions,
-// ~400 sites, two data centers and four carriers. Every name and number is fictitious and
+// ~400 sites, two data centers and four carriers. The extra-large size is the same company at
+// ~4,200 sites and ~20,000 devices with four data centers, read the way the app reads an estate
+// that size: per-device summaries instead of every port (DETAIL_MAX_DEVICES). Every name and number is fictitious and
 // the UI labels it as an example. Health is judged with the same verdict and end-to-end
 // rules as live data (model/verdict.ts, model/e2e.ts).
 import type { AppExperience, AppTransaction, Circuit, Device, DeviceProblem, E2EPath, Hop, Iface, NetEvent, NetworkModel, PathLink, Site, Verdict } from "../model/types";
@@ -7,6 +9,7 @@ import { T, ORDER, worst, deviceVerdict } from "../model/verdict";
 import { appHop, circuitHop, deviceHop, makePath } from "../model/e2e";
 import { buildAddressing } from "../model/addressing";
 import { buildFlowMap } from "./buildFlowMap";
+import { DETAIL_MAX_DEVICES } from "./queries";
 
 type Size = "L" | "M" | "S";
 type CityRow = [name: string, uf: string, lat: number, lon: number];
@@ -38,7 +41,7 @@ const REGIONS: { name: string; sites: number; hub: string; cities: CityRow[] }[]
 ];
 
 type DcSpec = [key: string, role: string, model: string, cpu: number];
-const DCS: { code: string; name: string; uf: string; lat: number; lon: number; specs: DcSpec[] }[] = [
+const BASE_DCS: { code: string; name: string; uf: string; lat: number; lon: number; specs: DcSpec[] }[] = [
   { code: "SPO1", name: "Data Center São Paulo", uf: "SP", lat: -23.55, lon: -46.63, specs: [
     ["CON1", "core", "Cisco ASR 1002-HX", 46], ["CON2", "core", "Cisco ASR 1002-HX", 39], ["COR1", "core", "Cisco Nexus 9336C", 22],
     ["FWL1", "firewall", "Palo Alto PA-5220", 34], ["FWL2", "firewall", "Palo Alto PA-5220", 29], ["LBL1", "lb", "F5 BIG-IP i5800", 18],
@@ -49,6 +52,19 @@ const DCS: { code: string; name: string; uf: string; lat: number; lon: number; s
     ["LBL1", "lb", "F5 BIG-IP i4800", 21], ["SWT1", "switch", "Cisco Nexus 93180YC", 10],
   ] },
 ];
+// an estate of the extra-large size runs regional data centers too
+const XL_DCS: typeof BASE_DCS = [
+  { code: "RIO1", name: "Data Center Rio de Janeiro", uf: "RJ", lat: -22.91, lon: -43.17, specs: [
+    ["CON1", "core", "Cisco ASR 1006-X", 44], ["CON2", "core", "Cisco ASR 1006-X", 37], ["COR1", "core", "Cisco Nexus 9364C", 26],
+    ["FWL1", "firewall", "Palo Alto PA-5250", 41], ["LBL1", "lb", "F5 BIG-IP i7800", 23], ["SWT1", "switch", "Cisco Nexus 93180YC", 11],
+  ] },
+  { code: "REC1", name: "Data Center Recife", uf: "PE", lat: -8.05, lon: -34.88, specs: [
+    ["CON1", "core", "Cisco ASR 1002-HX", 38], ["COR1", "core", "Cisco Nexus 9336C", 21], ["FWL1", "firewall", "Palo Alto PA-3260", 33],
+    ["SWT1", "switch", "Cisco Nexus 93180YC", 9],
+  ] },
+];
+/** Sites per region and single-site scenarios grow by this factor in the extra-large size */
+const XL = 10.25;
 
 interface Scenario {
   circuitsDown?: number;
@@ -87,8 +103,15 @@ function km(lat1: number, lon1: number, lat2: number, lon2: number) {
   return 6371 * 2 * Math.asin(Math.sqrt(a));
 }
 
-export function buildExampleNetwork(now = new Date()): NetworkModel {
-  const rnd = mulberry32(20260914);
+export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" = "enterprise"): NetworkModel {
+  const xl = size === "xl";
+  const K = xl ? XL : 1;
+  const DCS = xl ? [...BASE_DCS, ...XL_DCS] : BASE_DCS;
+  // which data center a branch's WAN terminates on: the extra-large estate splits the Southeast between
+  // São Paulo and Rio and sends the North and Northeast to Recife
+  const hubOf = (region: string, k: number) => (!xl ? REGIONS.find((r) => r.name === region)!.hub
+    : region === "Southeast" ? (k % 2 ? "RIO1" : "SPO1") : region === "Northeast" || region === "North" ? "REC1" : region === "Midwest" ? "CPS1" : "SPO1");
+  const rnd = mulberry32(xl ? 20260919 : 20260914);
   const uni = (a: number, b: number) => a + rnd() * (b - a);
   const int = (a: number, b: number) => Math.floor(uni(a, b + 1));
   const r1 = (v: number) => Math.round(v * 10) / 10;
@@ -154,30 +177,31 @@ export function buildExampleNetwork(now = new Date()): NetworkModel {
   };
 
   DCS.forEach((dc) => {
-    sites[dc.code] = { code: dc.code, name: dc.name, city: dc.name.replace("Data Center ", ""), uf: dc.uf, id: dc.code === "SPO1" ? "1001" : "1002", dc: true, lat: dc.lat, lon: dc.lon, region: "Southeast",
-      tags: { "primary_tags.country": "br", "primary_tags.region": "southeast", "primary_tags.federativeunit": dc.uf.toLowerCase(), "primary_tags.city": dc.name.replace("Data Center ", ""), "primary_tags.site_type": "data center", "primary_tags.site": dc.code.toLowerCase() } };
+    sites[dc.code] = { code: dc.code, name: dc.name, city: dc.name.replace("Data Center ", ""), uf: dc.uf, id: String(1001 + DCS.indexOf(dc)), dc: true, lat: dc.lat, lon: dc.lon, region: dc.uf === "PE" ? "Northeast" : "Southeast",
+      tags: { "primary_tags.country": "br", "primary_tags.region": dc.uf === "PE" ? "northeast" : "southeast", "primary_tags.federativeunit": dc.uf.toLowerCase(), "primary_tags.city": dc.name.replace("Data Center ", ""), "primary_tags.site_type": "data center", "primary_tags.site": dc.code.toLowerCase() } };
     dcEvents[dc.code] = [ev(int(20, 90), "INFO", "%SYS-5-CONFIG_I", 5, "Configured from console by netops on vty0")];
   });
   const firewallCpuEvent = ev(38, "WARN", "%PAN-4-DP_CPU", 4, "Dataplane CPU above 75% for 30 minutes on FWL1 (SSL decryption)");
 
   // ---------- site plan ----------
-  const specs = REGIONS.flatMap((reg) => Array.from({ length: reg.sites }, (_, k) => {
+  const specs = REGIONS.flatMap((reg) => Array.from({ length: Math.round(reg.sites * K) }, (_, k) => {
     const [city, uf, lat, lon] = reg.cities[k % reg.cities.length];
     const roll = rnd();
     const size: Size = roll < 0.08 ? "L" : roll < 0.38 ? "M" : "S";
     const carrier = reg.name === "South" ? "Carrier B" : reg.name === "Midwest" ? (rnd() < 0.65 ? "Carrier B" : "Carrier A") : "Carrier A";
     const satellite = reg.name === "North" && size === "S" && rnd() < 0.4;
-    return { reg, city, uf, lat: lat + uni(-0.12, 0.12), lon: lon + uni(-0.12, 0.12), size, carrier, satellite };
+    return { reg, city, uf, lat: lat + uni(-0.12, 0.12) * Math.sqrt(K), lon: lon + uni(-0.12, 0.12) * Math.sqrt(K), size, carrier, satellite, hub: hubOf(reg.name, k) };
   }));
   type Spec = (typeof specs)[number];
 
   const scen = new Map<number, Scenario>();
-  const pick = (n: number, when: (s: Spec, i: number) => boolean, make: (s: Spec) => Scenario) => {
-    let left = n;
+  // a regional outage grows with the estate; single-site faults grow slower, so the causes stay readable
+  const pick = (n: number, when: (s: Spec, i: number) => boolean, make: (s: Spec) => Scenario, regional = false) => {
+    let left = Math.round(n * (regional ? K : Math.sqrt(K)));
     specs.forEach((s, i) => { if (left > 0 && !scen.has(i) && !s.satellite && when(s, i)) { scen.set(i, make(s)); left--; } });
   };
   // A regional Carrier B outage: sites with a backup run degraded, sites without one go dark.
-  pick(14, (s, i) => s.reg.name === "South" && i % 2 === 0, (s) => (s.size === "S" ? { circuitsDown: 47, incident: "INC-DEMO-3101" } : { primaryDown: 47, incident: "INC-DEMO-3101" }));
+  pick(14, (s, i) => s.reg.name === "South" && i % 2 === 0, (s) => (s.size === "S" ? { circuitsDown: 47, incident: "INC-DEMO-3101" } : { primaryDown: 47, incident: "INC-DEMO-3101" }), true);
   pick(3, (s, i) => s.reg.name === "Midwest" && s.carrier === "Carrier B" && i % 5 === 1, () => ({ degraded: { latencyMs: 104, lossPct: 4.2, jitterMs: 31 }, app: { p90Ms: 2600, errPct: 1.1 } }));
   pick(1, (s, i) => s.reg.name === "Southeast" && s.size === "M" && i % 7 === 3, () => ({ routerDown: 132, incident: "INC-DEMO-3093" }));
   pick(1, (s, i) => s.reg.name === "Southeast" && i % 11 === 5, () => ({ switchDown: 18, incident: "INC-DEMO-3111" }));
@@ -212,7 +236,7 @@ export function buildExampleNetwork(now = new Date()): NetworkModel {
     const nth = (perCityKind.get(`${s.city}|${kind}`) ?? 0) + 1;
     perCityKind.set(`${s.city}|${kind}`, nth);
     const name = `${s.city} · ${kind} ${nth}`;
-    const hub = DCS.find((d) => d.code === s.reg.hub)!;
+    const hub = DCS.find((d) => d.code === s.hub)!;
     sites[code] = { code, name, city: s.city, uf: s.uf, id: String(2000 + i), dc: false, lat: r2(s.lat), lon: r2(s.lon), region: s.reg.name, hub: hub.code,
       tags: { "primary_tags.country": "br", "primary_tags.region": s.reg.name.toLowerCase(), "primary_tags.federativeunit": s.uf.toLowerCase(), "primary_tags.city": s.city, "primary_tags.site_type": kind.toLowerCase(), "primary_tags.site": code.toLowerCase() } };
 
@@ -265,7 +289,7 @@ export function buildExampleNetwork(now = new Date()): NetworkModel {
     });
     if (offline) {
       dcEvents[hub.code].unshift(ev(offline, "WARN", "%BGP-5-ADJCHANGE", 5, `neighbor ${net}.1 Down BGP Notification sent (hold time expired) · ${code}`));
-      traps.push({ t: ago(offline), ip: hub.code === "SPO1" ? "10.0.0.11" : "10.1.0.11", device: `BR-SP-${hub.code}-CON1`, oid: "IF-MIB::linkDown" });
+      traps.push({ t: ago(offline), ip: `10.${DCS.indexOf(hub)}.0.11`, device: `BR-${hub.uf}-${hub.code}-CON1`, oid: "IF-MIB::linkDown" });
     }
 
     // switches
@@ -312,9 +336,9 @@ export function buildExampleNetwork(now = new Date()): NetworkModel {
   DCS.forEach((dc, k) => {
     dc.specs.forEach(([key, role, hw, cpu], j) => {
       const ifs = [iface("Hu1/0/1", 100000, r1(uni(5, 30)), true), iface("Hu1/0/2", 100000, r1(uni(5, 30)), true)];
-      addDevice(`BR-SP-${dc.code}-${key}`, dc.code, role, `10.${k}.0.${11 + j}`, hw, ifs, {
+      addDevice(`BR-${dc.uf}-${dc.code}-${key}`, dc.code, role, `10.${k}.0.${11 + j}`, hw, ifs, {
         cpu, rtt: 0.4, vendor: role === "firewall" ? "paloalto" : role === "lb" ? "f5" : "cisco",
-        events: key === "CON1" ? dcEvents[dc.code] : key === "FWL1" && dc.code === "CPS1" ? [firewallCpuEvent] : undefined, location: `${dc.name.replace("Data Center ", "")} · SP`,
+        events: key === "CON1" ? dcEvents[dc.code] : key === "FWL1" && dc.code === "CPS1" ? [firewallCpuEvent] : undefined, location: `${dc.name.replace("Data Center ", "")} · ${dc.uf}`,
       });
     });
   });
@@ -344,7 +368,9 @@ export function buildExampleNetwork(now = new Date()): NetworkModel {
       attach(c, problem(c.incident ?? `slow:${c.carrier}:${c.site}`, "Network availability monitor performance threshold violation", "SLOWDOWN", ago(45)));
     }
   });
-  const incidentOf = (site: string) => circuits.find((c) => c.site === site && c.incident)?.incident;
+  const incidentBy = new Map<string, string>();
+  circuits.forEach((c) => { if (c.incident && !incidentBy.has(c.site)) incidentBy.set(c.site, c.incident); });
+  const incidentOf = (site: string) => incidentBy.get(site);
   devices.forEach((d) => {
     if (d.unreachableSince) attach(d, problem(incidentOf(d.site) ?? `unreachable:${d.site}`, "Network devices unreachable", "AVAILABILITY", d.unreachableSince));
     if (d.cpuNow != null && d.cpuNow >= T.cpu_crit) attach(d, problem(`cpu:${d.name}`, `${d.vendor === "cisco" ? "Cisco" : "Device"} CPU utilization high`, "CUSTOM_ALERT", ago(35)));
@@ -353,10 +379,22 @@ export function buildExampleNetwork(now = new Date()): NetworkModel {
     d.interfaces.filter((i) => i.uplink && i.oper.startsWith("down") && i.admin.startsWith("up")).forEach((i) => attach(d, problem(`ifdown:${d.name}`, "Interface operationally going down", "AVAILABILITY", ago(25)), i.name));
   });
 
+  // ---------- an estate this size is read from per-device summaries, as live (DETAIL_MAX_DEVICES) ----------
+  if (devices.length > DETAIL_MAX_DEVICES) {
+    devices.forEach((d) => {
+      if (!d.interfaces.length) return;
+      const utils = d.interfaces.filter((i) => i.flag !== "inconsistent").map((i) => i.util).filter((u): u is number => u != null);
+      d.ifStats = { maxUtil: utils.length ? Math.max(...utils) : null, interfaces: d.interfaces.length, errors: d.interfaces.reduce((a, i) => a + i.errors + i.crc, 0), discards: d.interfaces.reduce((a, i) => a + i.discards, 0) };
+      d.interfaces = [];
+    });
+  }
+
   // ---------- verdicts ----------
+  const trapsBy = new Map<string, number>();
+  traps.forEach((t) => { if (t.device) trapsBy.set(t.device, (trapsBy.get(t.device) ?? 0) + 1); });
   devices.forEach((d) => {
     d.events.sort((a, b) => b.t.localeCompare(a.t));
-    d.traps = traps.filter((t) => t.device === d.name).length;
+    d.traps = trapsBy.get(d.name) ?? 0;
     [d.verdict, d.reasons, d.impact] = deviceVerdict(d);
   });
 
@@ -400,7 +438,7 @@ export function buildExampleNetwork(now = new Date()): NetworkModel {
   // configured here, which is exactly the case where the app reports a suspicion instead of a problem.
   const dayShape = [22, 14, 9, 7, 8, 14, 34, 62, 88, 104, 112, 118, 121, 116, 110, 108, 104, 96, 84, 70, 58, 46, 36, 28];
   const hourNow = new Date(t0).getUTCHours();
-  const typical = Array.from({ length: 24 }, (_, i) => dayShape[(hourNow - 23 + i + 48) % 24] * 9);
+  const typical = Array.from({ length: 24 }, (_, i) => Math.round(dayShape[(hourNow - 23 + i + 48) % 24] * 9 * K));
   const sessionSeries = typical.map((v, i) => {
     if (i >= 21) return Math.round(v * 0.18); // the last hours, with sites off the air
     return Math.round(v * (0.92 + ((i * 37) % 17) / 100));
@@ -446,7 +484,7 @@ export function buildExampleNetwork(now = new Date()): NetworkModel {
         { exp: core.ip, s24: net24(d.ip), d24: "10.1.0.0", proto: "tcp", dport: "445", bytes: 6e7 + i * 2e6, flows: 300 + i * 4 },
       ]),
     };
-    const addressing = buildAddressing([{ site: "SPO1", cidr: "10.0.0.0/16" }, { site: "CPS1", cidr: "10.1.0.0/16" }], devices.map((d) => ({ site: d.site, ips: [d.ip] })));
+    const addressing = buildAddressing(DCS.map((dc, k) => ({ site: dc.code, cidr: `10.${k}.0.0/16` })), devices.map((d) => ({ site: d.site, ips: [d.ip] })));
     return buildFlowMap((k) => (rows[k] ?? []) as Record<string, any>[], devices, addressing, sites);
   })();
 

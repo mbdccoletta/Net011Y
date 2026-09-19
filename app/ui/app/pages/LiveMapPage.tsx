@@ -91,15 +91,17 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   const mapLinks = useMemo<MapLink[]>(() => {
     const placed = new Set(mapSites.map((s) => s.code));
     // traffic of a site's WAN: latest in + out of the edge routers' uplinks (bits per second)
-    const trafficOf = (code: string): number | null => {
-      const ifs = model.devices.filter((d) => d.site === code && d.role === "edge").flatMap((d) => (d.unreachableSince ? [] : d.interfaces.filter((f) => f.uplink)));
+    // the site's own devices (SiteInfo), not a scan of the whole estate for every site
+    const trafficOf = (i: SiteInfo): number | null => {
+      const edges = i.devices.filter((d) => d.role === "edge");
+      const ifs = edges.flatMap((d) => (d.unreachableSince ? [] : d.interfaces.filter((f) => f.uplink)));
       const measured = ifs.filter((f) => f.in.length || f.out.length);
-      if (!measured.length) return model.devices.some((d) => d.site === code && d.role === "edge" && d.unreachableSince) ? 0 : null;
+      if (!measured.length) return edges.some((d) => d.unreachableSince) ? 0 : null;
       return measured.reduce((a, f) => a + (f.oper.startsWith("up") ? (f.in[f.in.length - 1] ?? 0) + (f.out[f.out.length - 1] ?? 0) : 0), 0);
     };
     const hubLinks = infos.filter((i) => i.site.hub && placed.has(i.code) && placed.has(i.site.hub)).map((i) => ({
       id: `wan:${i.code}`, a: i.code, b: i.site.hub!, verdict: i.site.wanVerdict ?? (i.causeLayer === "Carrier" ? i.verdict : "Healthy"),
-      bps: i.circuits.length && i.circuits.every((c) => c.status === "down") ? 0 : trafficOf(i.code),
+      bps: i.circuits.length && i.circuits.every((c) => c.status === "down") ? 0 : trafficOf(i),
     }));
     // links the devices themselves report (CDP/LLDP): a cable between two sites is real communication,
     // measured on the port it leaves from

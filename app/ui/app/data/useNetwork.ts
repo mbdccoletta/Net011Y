@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDql } from "@dynatrace-sdk/react-hooks";
 import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
 import type { NetworkModel } from "../model/types";
-import { QUERIES } from "./queries";
+import { DETAIL_MAX_DEVICES, QUERIES } from "./queries";
 import { familyOfToken } from "./formats";
 import { keep, mergeRows, planFor, type Plan } from "./logCache";
 import { inBuckets, useLogBuckets } from "../hooks/useLogBucket";
@@ -89,12 +89,7 @@ const FAMILY_CORE = Object.keys(QUERIES).filter((k) => /^(ifSummary|errSummary|c
 const CORE = ["devices", "interfaces", "families", ...FAMILY_CORE, "problems", "alerts", "icmp", "lldp", "neighbors", "routing"];
 const NAMES = Object.keys(QUERIES);
 const STALE_MS = 5 * 60 * 1000;
-/**
- * Above this many devices the app stops pulling every port of every device (that is hundreds of
- * thousands of rows) and works from the per-device summaries; the ports of one device are fetched
- * when somebody opens it.
- */
-export const DETAIL_MAX_DEVICES = 3000;
+export { DETAIL_MAX_DEVICES } from "./queries";
 
 function tenantName(): string {
   try {
@@ -107,14 +102,15 @@ function tenantName(): string {
 const probeStore = new Map<string, number>();
 const useProbeRows = () => probeStore;
 
-export function useNetwork(source: Source): NetworkState {
+export function useNetwork(source: Source, scale: "xl" | null = null): NetworkState {
   const live = source === "live";
   // The example network is generated on demand, in its own chunk (keeps main.js small).
-  const [demo, setDemo] = useState<NetworkModel | null>(null);
+  const [built, setBuilt] = useState<{ scale: "xl" | null; model: NetworkModel } | null>(null);
+  const demo = built && built.scale === scale ? built.model : null;
   useEffect(() => {
     if (live || demo) return;
-    import("./exampleNetwork").then((m) => setDemo(m.buildExampleNetwork()));
-  }, [live, demo]);
+    import("./exampleNetwork").then((m) => setBuilt({ scale, model: m.buildExampleNetwork(new Date(), scale === "xl" ? "xl" : "enterprise") }));
+  }, [live, demo, scale]);
   // The query set is static, so the hooks are always called in the same order.
   // the inventory decides whether the per-interface queries run at all
   // runInBackground: the SDK cancels a running query when the tab loses focus and does not start it again,

@@ -173,7 +173,7 @@ export function buildCauses(model: NetworkModel, infos: SiteInfo[]): Cause[] {
 
 const byCarrier = (cs: Circuit[]) => {
   const map = new Map<string, Circuit[]>();
-  cs.forEach((c) => map.set(c.carrier, [...(map.get(c.carrier) ?? []), c]));
+  cs.forEach((c) => { const l = map.get(c.carrier); if (l) l.push(c); else map.set(c.carrier, [c]); });
   return map;
 };
 

@@ -66,6 +66,13 @@ the environment being opened.
 cd app && npm install && npm start
 ```
 
+## Example networks
+
+Settings › General › Data source opens two simulated networks, so the app can be explored before any data
+arrives: a retail company with about 400 sites and 2,000 devices, and the same company at extra-large scale
+(`?source=example&scale=xl`) with about 4,200 sites, 20,000 devices and four data centers, read the way the
+app reads an estate that size — per-device summaries instead of every port.
+
 ## Checks
 
 ```bash
