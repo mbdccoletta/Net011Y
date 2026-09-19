@@ -1,8 +1,8 @@
 // Turns live DQL results into the NetworkModel (ported from scripts/build_data.py).
-// Inventory comes from primary Grail tags: site tags (site, site_name, region, geo_lat, geo_lon, hub,
-// site_type) set on the SNMP monitoring configurations, circuit tags (circuit_id, circuit_role, carrier,
-// circuit_tech, sla_ms) set on the ICMP monitor of each WAN circuit. Without tags, sites and roles fall back
-// to the device naming convention (BR-UF-SITE-ROLE, or the first name token and keywords in the name).
+// Inventory comes from the Smartscape network nodes of any SNMP extension, so the model builds in any
+// environment. Sites come from sysLocation, the autodiscovery group or the management network; primary
+// tags (site, site_name, region, geo_lat, geo_lon, hub, site_type, site_cidr) and circuit tags on the ICMP
+// monitors (circuit_id, circuit_role, carrier, circuit_tech, sla_ms) enrich it when the customer sets them.
 import type { AppNetwork, AppPath, Circuit, CloudCluster, Device, DeviceProblem, E2EPath, Hop, Iface, NetEvent, NetworkModel, NonNetworkScope, PathLink, Peer, Site, Users, Verdict } from "../model/types";
 import { T, ORDER, worst, deviceVerdict } from "../model/verdict";
 import { deviceHop, internetHop, circuitHop, cloudHop, makePath } from "../model/e2e";

@@ -47,11 +47,10 @@ const SNMP_PREREQ = [
 
 export const SETUP: Record<NeedKey, SetupGuide> = {
   devices: {
-    uses: "Every page: the list of routers, switches, firewalls, load balancers and access points, and their health.",
+    uses: "Every page: the list of routers, switches, firewalls, load balancers and access points, and their health. A device only discovered (monitoring mode Discovery) is listed but reports no CPU, ports or availability until an extension polls it.",
     source: "SNMP extensions running on an ActiveGate group (Extensions 2.0). They create the Smartscape nodes EXT_NETWORK_DEVICE and EXT_NETWORK_INTERFACE.",
     prerequisites: SNMP_PREREQ,
     steps: [
-      "Only syslog received by the ActiveGate syslog ingestion is read (dt.openpipeline.source = extension:syslog, log.source = syslog). Syslog written to files by a syslog server and collected from there is not in the documented format and is not read.",
       "In Extensions, activate the extension that matches each vendor: com.dynatrace.extension.snmp-generic-cisco-device, snmp-generic-juniper, palo-alto-generic, f5.bigip, or snmp-generic-device for any other device.",
       "Create a monitoring configuration on the ActiveGate group and add every device IP address with its SNMP credentials. For large networks, use the SNMP Autodiscovery extension per IP range.",
       "Name devices BR-<state>-<site>-<role><n> (for example BR-RS-POR1-RTR1) or add the site primary tags below. Roles: RTR edge router, CON core, SWT switch, APW access point, WLC wireless controller, FWL firewall, LBL load balancer.",
@@ -86,31 +85,31 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
     docs: [DOCS.snmpCisco],
   },
   traffic: {
-    uses: "Device details and the live map: uplink utilization, saturation, errors, discards and CRC errors. The map animation speed and packet count follow this traffic.",
-    source: "64-bit and 32-bit interface counters of the SNMP extension.",
-    prerequisites: ["Network devices set up.", "Interface speed (ifHighSpeed) reported correctly by the device."],
+    uses: "Device details and the live map: port utilization, saturation, errors, discards and CRC errors, VLAN interfaces, and the route animation.",
+    source: "Interface counters of any Dynatrace network extension: the common set the current SNMP extensions share (com.dynatrace.extension.network_device.if.*), plus the vendor's own (Generic Cisco if.hc.*, generic SNMP, Juniper, Palo Alto, F5 sys.interface.stat.*). The app reads every family and uses the first that reports a port. Settings › Data › Network extensions lists which ones this environment sends.",
+    prerequisites: ["Network devices set up.", "Interface speed (ifHighSpeed or if.speed) reported correctly by the device."],
     steps: [
-      "Enable Interfaces 64-bit (octets and ifHighSpeed) and Traffic.",
-      "Enable Interfaces 32-bit: error, discard and CRC counters live in this feature set.",
+      "Enable the interface feature sets of the extension (Interfaces, or Interfaces 64-bit and 32-bit on the generic extensions): octets, errors, discards.",
+      "CRC errors come from the Generic Cisco extension; VLAN tables from the Juniper extension; the other extensions report VLANs as interfaces (an F5 VLAN, a switch SVI).",
     ],
-    verify: "timeseries bytes = sum(`com.dynatrace.extension.snmp-generic-cisco-device.if.hc.in.octets.count`), by:{dt.smartscape.ext_network_device}\n| limit 20",
-    docs: [DOCS.snmpCisco],
+    verify: "timeseries bytes = sum(com.dynatrace.extension.network_device.if.bytes_in.count), by:{dt.smartscape.ext_network_device}\n| limit 20",
+    docs: [DOCS.snmpGeneric, DOCS.snmpCisco],
   },
   cpu: {
-    uses: "Device health: CPU above 70% is a warning, above 85% is critical.",
-    source: "Default metrics of the SNMP extension (com.dynatrace.extension.network_device.cpu_usage).",
+    uses: "Device health and instruments: CPU and memory in use. CPU above 70% is a warning, above 85% critical, as a measurement next to the alerts.",
+    source: "As each network extension reports them: the common set (network_device.cpu_usage, memory_used / memory_total), Cisco CPM, the Juniper routing engine, the Palo Alto management plane, the F5 host.",
     prerequisites: ["Network devices set up."],
-    steps: ["Keep the default or Health feature set enabled. Generic devices that don't expose a CPU MIB show no CPU."],
+    steps: ["Keep the default or Health feature set enabled. A device whose extension exposes no CPU or memory MIB shows none."],
     verify: "timeseries cpu = avg(com.dynatrace.extension.network_device.cpu_usage), by:{dt.smartscape.ext_network_device}\n| limit 20",
-    docs: [DOCS.snmpCisco],
+    docs: [DOCS.snmpGeneric, DOCS.snmpCisco],
   },
   availability: {
     uses: "Device health and the 24-hour availability strips: a device that stops answering SNMP is marked unavailable.",
-    source: "sysUpTime polled every minute by the SNMP extension (com.dynatrace.extension.network_device.sysuptime).",
+    source: "sysUpTime polled every minute by the network extension, whichever family reports it (network_device.sysuptime, or the vendor's sys.uptime).",
     prerequisites: ["Network devices set up."],
     steps: ["No extra setting: sysUpTime is part of the default metrics. Keep the polling interval at 1 minute."],
     verify: "timeseries samples = count(com.dynatrace.extension.network_device.sysuptime), by:{dt.smartscape.ext_network_device}, interval:1h",
-    docs: [DOCS.snmpCisco],
+    docs: [DOCS.snmpGeneric],
   },
   icmp: {
     uses: "Reachability and latency of each device, and when a device or link stopped answering (\"not responding since\").",
@@ -124,7 +123,7 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
     docs: [DOCS.nam],
   },
   wan: {
-    uses: "WAN links page, the carrier hop of each site path and carrier outages grouped as one probable cause.",
+    uses: "Without any tag, the WAN links page shows reachability per site (round trip and loss) from every ICMP monitor that pings a device, including the network coverage monitors Dynatrace creates for each SNMP configuration. Circuit tags turn it into circuits with their carrier and SLA: the WAN links page by carrier, the carrier hop of each site path and carrier outages grouped as one probable cause.",
     source: "One network availability monitor (ICMP) per WAN circuit, carrying the circuit inventory as primary Grail tags.",
     prerequisites: ["Private Synthetic location on an ActiveGate 1.331 or later.", "Carrier-side IP address of each circuit (PE or tunnel endpoint)."],
     steps: [
@@ -151,7 +150,7 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
     docs: [DOCS.tagsSynthetic, DOCS.nam],
   },
   sites: {
-    uses: "Live map positions, regions on the Sites page, site names, and which data center each site depends on.",
+    uses: "Site names, regions, map positions and which data center each site depends on. Without tags the app still works: sites come from sysLocation, the autodiscovery group or the management network, and the map switches to a schematic layout when fewer than half of the sites have coordinates.",
     source: "Primary Grail tags on each device in the SNMP monitoring configurations. Dynatrace copies them to the device and interface nodes, metrics and logs.",
     prerequisites: ["ActiveGate 1.343 or later running the extensions.", "Enrichment for extensions enabled in the environment (the schema marks it as in development)."],
     steps: [
@@ -202,6 +201,7 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
     source: "Syslog ingestion on an ActiveGate. Records arrive with dt.openpipeline.source = extension:syslog.",
     prerequisites: ["Environment ActiveGate on Linux 1.295 or later (multi-environment ActiveGates don't support syslog)."],
     steps: [
+      "Only syslog received by the ActiveGate syslog ingestion is read (dt.openpipeline.source = extension:syslog, log.source = syslog). Syslog written to files by a syslog server and collected from there is not in the documented format and is not read.",
       "Enable syslog ingestion on the ActiveGate. It listens on UDP 514 and TCP 601 (RFC 5424); RFC 3164 needs a receiver change.",
       "Point each device's syslog to the ActiveGate IP. The device must send from the same IP address that the SNMP extension polls: the app links logs to devices by source IP (dt.ingest.source.ip).",
     ],
@@ -221,7 +221,7 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
   },
   lldp: {
     uses: "The routes between sites on the map. A route is drawn only where a device reports a cable to a device at another site, and it moves with the traffic measured on that port.",
-    source: "Neighbor discovery in SNMP autodiscovery (CDP and LLDP), recorded port by port.",
+    source: "The documented topology first: Smartscape calls between network devices and between their interfaces, where the extension defines them. Then the neighbours SNMP autodiscovery records port by port every 10 minutes (CDP and LLDP).",
     prerequisites: ["CDP or LLDP enabled on the devices, including the WAN-facing ports of the edge routers.", "SNMP autodiscovery set up for the device ranges."],
     steps: ["In each SNMP autodiscovery configuration, turn on Neighbor discovery.", "Optionally, enable the neighbor-discovery feature set of the SNMP extension as a second source."],
     verify: "fetch logs, from:now()-24h\n| filter log.source == \"snmp_autodiscovery\" and content == \"Neighbor discovery\"\n| summarize ports = count(), by:{dt.smartscape.ext_network_device, neighbor.device.name}",
@@ -337,6 +337,9 @@ export const APP_PERMISSIONS: { scope: string; why: string }[] = [
   { scope: "storage:buckets:read", why: "Reading the buckets that hold the data above." },
   { scope: "storage:system:read", why: "System tables used by DQL." },
   { scope: "davis-copilot:conversations:execute", why: "Explanations by Dynatrace Intelligence." },
+  { scope: "storage:user.sessions:read", why: "Real user sessions per hour, for the fault domain reading." },
+  { scope: "state:app-states:read", why: "Settings shared by the team: site hierarchy, traffic drop threshold, network log buckets." },
+  { scope: "state:app-states:write", why: "Saving those settings for everyone in the environment." },
 ];
 
 /** Pages of the app and the data each one reads, in the order the user meets them. */
