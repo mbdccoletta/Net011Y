@@ -2,14 +2,28 @@
 // in bytes. Built from placed conversations only, so a filter (one site) is a filter on that list.
 import type { Conversation, JourneyLink, JourneyNode, NetworkModel } from "./types";
 
+export interface JourneyRoute { from: string; via: string; to: string; bytes: number; count: number }
+
 export interface Journey {
   nodes: JourneyNode[];
   links: JourneyLink[];
+  /** the whole path a conversation takes, from source through device to application, heaviest first */
+  routes: JourneyRoute[];
   /** the three nodes a conversation passes through, so a click on a band can list what it carries */
   keyOf: (c: Conversation) => [string, string, string];
   /** the conversations in scope */
   scope: Conversation[];
 }
+
+/**
+ * Which shape says it better, from the shape of the data: with a handful of paths, or one path carrying
+ * nearly the whole hour, there is nothing to cross and a ranked list of paths says it in a fifth of the
+ * height; with more, the flow diagram shows where traffic crosses, which the list cannot.
+ */
+export const asRoutes = (j: Pick<Journey, "routes">) => {
+  const total = j.routes.reduce((a, r) => a + r.bytes, 0);
+  return j.routes.length <= 3 || (total > 0 && j.routes[0].bytes >= 0.8 * total);
+};
 
 /** How many entries a column shows before the rest is folded into "Other". */
 export const JOURNEY_TOP = 6;
@@ -52,6 +66,7 @@ export function buildJourney(
     const n = nodes.get(id) ?? { id, bytes: 0, ...init() };
     n.bytes += bytes; nodes.set(id, n);
   };
+  const routes = new Map<string, JourneyRoute>();
   const links = new Map<string, JourneyLink>();
   const link = (from: string, to: string, bytes: number, count: number) => {
     const k = `${from}>${to}`;
@@ -73,7 +88,10 @@ export function buildJourney(
       : { col: 2, label: c.app, sub: c.toKind === "site" ? nameOf(c.toSite!) : undefined, kind: "app" }, c.bytes);
     link(a, b, c.bytes, c.count);
     link(b, z, c.bytes, c.count);
+    const rk = `${a}|${b}|${z}`;
+    const r = routes.get(rk) ?? { from: a, via: b, to: z, bytes: 0, count: 0 };
+    r.bytes += c.bytes; r.count += c.count; routes.set(rk, r);
   }
 
-  return { nodes: [...nodes.values()], links: [...links.values()], keyOf: (c) => [f(c), v(c), t(c)], scope: inScope };
+  return { nodes: [...nodes.values()], links: [...links.values()], routes: [...routes.values()].sort((x, y) => y.bytes - x.bytes), keyOf: (c) => [f(c), v(c), t(c)], scope: inScope };
 }

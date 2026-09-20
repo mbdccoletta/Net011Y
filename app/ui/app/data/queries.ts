@@ -44,11 +44,12 @@ export const QUERIES: Record<string, NetQuery> = {
     query: 'fetch dt.davis.problems, from:now()-24h | filter event.status == "ACTIVE" and not(dt.davis.is_duplicate) | fields event.id, event.kind, display_id, event.name, event.start, event.category, dt.davis.mute.status, dt.davis.event_ids, smartscape.affected_entity.ids, smartscape.affected_entities, dt.smartscape_source.id, root_cause.smartscape_entity, event.severity, maintenance.is_under_maintenance, affected_entity_ids, affected_entity_names | sort event.start desc | limit 5000',
     maxResultRecords: 5000,
   },
-  // What alerting produced on the network over a week: whether the alert templates (or custom alerts) watch
+  // What alerting produced on the network over a week: the devices themselves, and the ICMP monitors that
+  // watch them (a network availability monitor problem is alerting on the network too): whether the alert templates (or custom alerts) watch
   // the devices at all. A week of polled devices with no problem means nothing is watching them, and every
   // status in the app stays green until something does. Davis problems are included in the subscription.
   problems7d: {
-    query: 'fetch dt.davis.problems, from:now()-7d | filter not(dt.davis.is_duplicate) | filter contains(toString(smartscape.affected_entity.ids), "EXT_NETWORK") or contains(toString(smartscape.affected_entities), "EXT_NETWORK") or startsWith(toString(dt.smartscape_source.id), "EXT_NETWORK") or contains(toString(affected_entity_ids), "CUSTOM_DEVICE") | fields event.id, event.name, event.start, event.end, event.status, smartscape.affected_entity.ids, smartscape.affected_entities, dt.smartscape_source.id, affected_entity_ids, affected_entity_names | limit 20000',
+    query: 'fetch dt.davis.problems, from:now()-7d | filter not(dt.davis.is_duplicate) | filter contains(toString(smartscape.affected_entity.ids), "EXT_NETWORK") or contains(toString(smartscape.affected_entities), "EXT_NETWORK") or startsWith(toString(dt.smartscape_source.id), "EXT_NETWORK") or contains(toString(affected_entity_ids), "CUSTOM_DEVICE") or contains(toString(smartscape.affected_entities), "MULTIPROTOCOL_MONITOR") or contains(toString(affected_entity_ids), "MULTIPROTOCOL_MONITOR") | fields event.id, event.name, event.start, event.end, event.status, smartscape.affected_entity.ids, smartscape.affected_entities, dt.smartscape_source.id, affected_entity_ids, affected_entity_names | limit 20000',
     maxResultRecords: 20000,
   },
   // Real user sessions, for the one question this app asks about them: did what the network did reach the

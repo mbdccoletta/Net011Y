@@ -830,3 +830,28 @@
 .sp-row em { font-style: normal; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--dt-colors-text-neutral-subdued, #9a9cb8); }
 .sp-none { padding: 14px 10px; font-size: 13px; color: var(--dt-colors-text-neutral-subdued, #9a9cb8); }
 .sp-keys { margin: 0; padding: 9px 16px; display: flex; gap: 6px; align-items: center; font-size: 12px; border-top: 1px solid var(--dt-colors-border-neutral-default, #34344a); color: var(--dt-colors-text-neutral-subdued, #9a9cb8); }
+
+/* Traffic journey: the colour legend and the ranked paths */
+.jr-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; padding-top: 8px; font-size: 12px; color: var(--lm-ink-3); }
+.jr-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.jr-key--site { background: var(--lm-accent); }
+.jr-key--internet { background: var(--lm-cyan); }
+.jr-key--private { background: var(--lm-neutral); }
+.jr-key--device { background: var(--lm-ink); }
+.jr-key--app { background: var(--lm-violet); }
+.jr-key--alert { background: transparent; box-shadow: inset 0 0 0 2px var(--lm-bad-fill); }
+.rs { display: grid; gap: 6px; }
+.rs-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.rs-row { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 7px 10px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--lm-ink); text-align: left; cursor: pointer; }
+.rs-bar { position: absolute; inset: 0 auto 0 0; border-radius: 8px; background: color-mix(in srgb, var(--lm-cyan) 22%, transparent); }
+.rs-row:hover .rs-bar { background: color-mix(in srgb, var(--lm-cyan) 32%, transparent); }
+.rs-row.is-on { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lm-cyan) 70%, transparent); }
+.rs-path, .rs-val { position: relative; }
+.rs-path { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+.rs-path b { font-weight: 600; color: var(--lm-ink-hi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-path i { font-style: normal; color: var(--lm-ink-3); }
+.rs-path .rs-alert { box-shadow: inset 0 -2px 0 var(--c); }
+.rs-val { flex-shrink: 0; display: flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; color: var(--lm-ink-hi); font-size: 13px; }
+.rs-val small { font-family: var(--lm-mono); font-size: 11px; color: var(--lm-ink-3); }
+.rs-foot { margin: 2px 0 0; font-size: 12px; color: var(--lm-ink-3); }

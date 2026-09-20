@@ -1,6 +1,6 @@
 // Feeds the generated Grail results through the app's own model code and reports what every view gets.
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, mergeRows } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, mergeRows, buildJourney, asRoutes } from "./out/app-model.mjs";
 
 const R = JSON.parse(readFileSync("out/results.json", "utf8"));
 const report = { schema: {}, needs: {}, views: {}, checks: [] };
@@ -406,6 +406,20 @@ const latest = mergeRows(incL, { query: "q", full: "q", base: [{ a: "1", b: "x",
 check("Latest seen: one row per key, the newest time, and what fell out of the window is gone",
   latest.length === 1 && latest[0].a === "1" && Date.now() - Date.parse(latest[0].seen) < 3 * 60e3,
   latest.map((r) => `${r.a}${r.b}`).join(","));
+
+// ---------------- the journey draws itself after the data ----------------
+const convs = model.flowMap?.conversations ?? [];
+if (convs.length) {
+  const j = buildJourney(convs, model.sites);
+  const bytesIn = convs.reduce((a, c) => a + c.bytes, 0), bytesOut = j.routes.reduce((a, r) => a + r.bytes, 0);
+  check("Every conversation lands on one path of the journey, and the bytes are kept",
+    Math.abs(bytesIn - bytesOut) < 1 && j.routes.every((r) => j.nodes.some((n) => n.id === r.from) && j.nodes.some((n) => n.id === r.via) && j.nodes.some((n) => n.id === r.to)),
+    `${j.routes.length} paths · ${Math.round(bytesOut / 1e9)} GB of ${Math.round(bytesIn / 1e9)} GB`);
+  const trivial = { routes: [{ bytes: 97 }, { bytes: 3 }] }, crossing = { routes: [30, 25, 20, 15, 10].map((b) => ({ bytes: b })) };
+  check("Ranked paths when nothing crosses, the flow diagram when it does",
+    asRoutes(trivial) && !asRoutes(crossing) && asRoutes({ routes: [{ bytes: 90 }, { bytes: 4 }, { bytes: 3 }, { bytes: 3 }] }) && !asRoutes(j) === (j.routes.length > 3 && j.routes[0].bytes < 0.8 * bytesOut),
+    `this estate: ${j.routes.length} paths, heaviest ${Math.round((100 * j.routes[0].bytes) / bytesOut)}% → ${asRoutes(j) ? "paths" : "flow"}`);
+}
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 

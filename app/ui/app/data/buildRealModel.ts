@@ -672,11 +672,17 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     for (const p of L("problems7d")) {
       const { ids, names } = entitiesOf(p);
       const hit = new Set<Device>();
-      ids.forEach((id) => { const d = byEntity.get(id) ?? byInterface.get(id)?.device; if (d) hit.add(d); });
+      let onCircuit = false;
+      ids.forEach((id) => {
+        const d = byEntity.get(id) ?? byInterface.get(id)?.device;
+        if (d) hit.add(d);
+        (devicesByMonitor.get(id) ?? []).forEach((x) => hit.add(x));
+        if (circuitByMonitor.get(id)) onCircuit = true;
+      });
       names.forEach((n) => { const d = byDeviceName.get(String(n).toLowerCase()); if (d) hit.add(d); });
       // above DETAIL_MAX_DEVICES the ports are not read, so an interface problem names a port the model
       // does not hold: it still is a network problem
-      if (!hit.size && !ids.some((id) => id.startsWith("EXT_NETWORK"))) continue;
+      if (!hit.size && !onCircuit && !ids.some((id) => id.startsWith("EXT_NETWORK"))) continue;
       const id = String(p["event.id"]);
       const closed = String(p["event.status"] ?? "") === "CLOSED";
       if (!ids7.has(id) && (at(p["event.start"]) >= dayAgo || (closed && at(p["event.end"]) >= dayAgo))) {

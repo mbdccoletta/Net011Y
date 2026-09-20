@@ -3,9 +3,10 @@
 // support and Assist to argue them. The sources in use are named on the page, never assumed.
 import React, { useMemo, useState } from "react";
 import type { Conversation, NetworkModel } from "../model/types";
-import { buildJourney } from "../model/journey";
+import { asRoutes, buildJourney } from "../model/journey";
 import { environmentFindings } from "../model/traffic";
-import { JourneyChart, type JourneyPick } from "../components/JourneyChart";
+import { JourneyChart, JOURNEY_LEGEND, type JourneyPick } from "../components/JourneyChart";
+import { RouteStrip } from "../components/RouteStrip";
 import { PathQualityTile } from "../components/Traffic";
 import { Tile, TONE } from "../components/Visual";
 import { PageEmpty } from "../components/PageEmpty";
@@ -23,6 +24,16 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
   const [site, setSite] = useState("");
   const [pick, setPick] = useState<JourneyPick>(null);
   const [ref, width] = useElementWidth<HTMLDivElement>(900);
+  // a device that is alerting now, to outline it wherever the journey draws it
+  const alerting = useMemo(() => {
+    const m = new Map<string, string>();
+    model.devices.forEach((d) => {
+      if (!(d.problems ?? []).some((p) => !p.muted)) return;
+      m.set(`via:${d.ip}`, d.verdict === "Critical" ? "var(--lm-bad-fill)" : "var(--lm-warn-fill)");
+    });
+    return m;
+  }, [model.devices]);
+
   const journey = useMemo(() => (f ? buildJourney(f.conversations, model.sites, { site: site || undefined }) : null), [f, site, model.sites]);
   const findings = useMemo(() => environmentFindings(model).filter((x) => !site || x.site === site), [model, site]);
   const siteOptions = useMemo(() => {
@@ -40,7 +51,9 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
   }
 
   // path quality alone (OneAgent flows, no NetFlow) still makes a page
-  const J = journey ?? { nodes: [], links: [], keyOf: () => ["", "", ""] as [string, string, string], scope: [] as Conversation[] };
+  const J = journey ?? { nodes: [], links: [], routes: [], keyOf: () => ["", "", ""] as [string, string, string], scope: [] as Conversation[] };
+  // the drawing follows the data: ranked paths when nothing crosses, the flow diagram when it does
+  const strip = asRoutes(J);
   const nodeOf = (id: string) => J.nodes.find((n) => n.id === id);
   // what a click selects: the conversations on that band or through that node, heaviest first
   const selected: Conversation[] = !pick ? [] : J.scope.filter((c) => {
@@ -72,14 +85,20 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
         </label>
       </div>
 
-      {f && <Tile tone={TONE.cyan} title="Traffic journey · last hour" right="from · through · to — band width is bytes">
+      {f && <Tile tone={TONE.cyan} title="Traffic journey · last hour" right={strip ? "every path, heaviest first" : "from · through · to — band width is bytes"}>
         <div className="tr-chart" ref={ref}>
-          {J.nodes.length
-            ? <JourneyChart nodes={J.nodes} links={J.links} width={width} pick={pick} onPick={setPick} />
-            : <p className="tr-none">No traffic through {nameOf(site)} in the last hour.</p>}
+          {!J.nodes.length ? <p className="tr-none">No traffic through {nameOf(site)} in the last hour.</p>
+            : strip ? <RouteStrip nodes={J.nodes} routes={J.routes} pick={pick} onPick={setPick} alerting={alerting} />
+            : <JourneyChart nodes={J.nodes} links={J.links} width={width} pick={pick} onPick={setPick} alerting={alerting} />}
         </div>
+        {!strip && J.nodes.length > 0 && (
+          <div className="jr-legend" aria-label="What the colours mean">
+            {JOURNEY_LEGEND.map((l) => <span key={l.kind}><i className={`jr-key jr-key--${l.kind}`} />{l.label}</span>)}
+            {alerting.size > 0 && <span><i className="jr-key jr-key--alert" />Alerting now</span>}
+          </div>
+        )}
         <p className="tr-note">
-          Click a band or a box to list what it carries.
+          {strip ? "Click a path to list what it carries." : "Click a band or a box to list what it carries."}
         </p>
       </Tile>}
 

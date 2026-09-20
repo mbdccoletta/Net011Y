@@ -7,16 +7,28 @@ import { fmtBytes, fmtInt } from "../utils/format";
 
 export type JourneyPick = { kind: "node"; id: string } | { kind: "link"; from: string; to: string } | null;
 
+/**
+ * Traffic is one colour and only its weight changes, so a band never turns into another colour halfway
+ * along; what a box is stays on its stripe; and green, amber and red are left to status, where a box
+ * outlined in the status colour means that device is alerting now.
+ */
 const TONE: Record<JourneyNode["kind"], string> = {
   site: "var(--lm-accent)", internet: "var(--lm-cyan)", private: "var(--lm-neutral)",
-  device: "var(--lm-ink-3)", app: "var(--lm-good-fill)",
+  device: "var(--lm-ink)", app: "var(--lm-violet)",
 };
+export const JOURNEY_LEGEND: { kind: JourneyNode["kind"]; label: string }[] = [
+  { kind: "site", label: "Site" }, { kind: "internet", label: "Internet" }, { kind: "private", label: "Private, no site" },
+  { kind: "device", label: "Device that saw it" }, { kind: "app", label: "Application" },
+];
+
 const BOX_MIN = 36, GAP = 12, PAD_Y = 8;
 
 interface Placed extends JourneyNode { x: number; y: number; h: number; inY: number; outY: number }
 
-export function JourneyChart({ nodes, links, width, pick, onPick }: {
+export function JourneyChart({ nodes, links, width, pick, onPick, alerting }: {
   nodes: JourneyNode[]; links: JourneyLink[]; width: number; pick: JourneyPick; onPick: (p: JourneyPick) => void;
+  /** node ids whose device has an open alert, outlined in the status colour */
+  alerting?: Map<string, string>;
 }) {
   const W = Math.max(640, width);
   const boxW = Math.min(190, Math.round(W * 0.22));
@@ -24,7 +36,8 @@ export function JourneyChart({ nodes, links, width, pick, onPick }: {
   const layout = useMemo(() => {
     const cols = [0, 1, 2].map((c) => nodes.filter((n) => n.col === c).sort((a, b) => b.bytes - a.bytes));
     const tallest = Math.max(...cols.map((c) => c.length));
-    const H = Math.max(360, tallest * (BOX_MIN + GAP) + 140);
+    // a small journey stays small: a drawing of four boxes does not need a screen
+    const H = Math.max(150, tallest * (BOX_MIN + GAP) + 40);
     // one scale for every band: the busiest column fills the height left once the gaps are paid
     const maxBytes = Math.max(1, ...cols.map((c) => c.reduce((a, n) => a + n.bytes, 0)));
     const k = (H - PAD_Y * 2 - GAP * (tallest - 1) - tallest * 4) / maxBytes;
@@ -57,6 +70,8 @@ export function JourneyChart({ nodes, links, width, pick, onPick }: {
     const bands = links.map((l) => ({ l, a: placed.get(l.from)!, b: placed.get(l.to)!, w: l.bytes * k, ...offsets.get(l)! }));
     return { H: height, placed, bands };
   }, [nodes, links, W, boxW]); // eslint-disable-line react-hooks/exhaustive-deps
+  const totalBytes = Math.max(1, nodes.filter((n) => n.col === 1).reduce((a, n) => a + n.bytes, 0));
+  const share = (b: number) => `${b / totalBytes >= 0.1 ? Math.round((100 * b) / totalBytes) : ((100 * b) / totalBytes).toFixed(1)}%`;
 
   const isPicked = (from: string, to: string) => !!pick && (pick.kind === "link" ? pick.from === from && pick.to === to : pick.id === from || pick.id === to);
   const dim = !!pick;
@@ -68,13 +83,13 @@ export function JourneyChart({ nodes, links, width, pick, onPick }: {
   return (
     <svg className="jr" width={W} height={layout.H} viewBox={`0 0 ${W} ${layout.H}`} role="img" aria-label="Traffic journey: where the last hour of traffic came from, which device saw it and where it went">
       {layout.bands.map(({ l, a, b, w, y0, y1 }) => {
-        const tone = TONE[a.col === 0 ? a.kind : b.kind];
+        const tone = "var(--lm-cyan)";
         const on = isPicked(l.from, l.to);
         const title = `${a.label} → ${b.label}: ${fmtBytes(l.bytes)} · ${fmtInt(l.count)} flows`;
         const select = () => onPick(on && pick?.kind === "link" ? null : { kind: "link", from: l.from, to: l.to });
         return (
           <path key={`${l.from}>${l.to}`} className="jr-band" d={band(a.x + boxW, y0, b.x, y1, Math.max(1, w))} fill={tone}
-            opacity={on ? 0.7 : dim ? 0.12 : 0.35} onClick={select}>
+            opacity={on ? 0.75 : dim ? 0.12 : 0.22 + 0.45 * Math.min(1, l.bytes / totalBytes)} onClick={select}>
             <title>{title}</title>
           </path>
         );
@@ -87,8 +102,13 @@ export function JourneyChart({ nodes, links, width, pick, onPick }: {
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick(on ? null : { kind: "node", id: n.id }); } }}>
             <rect width={boxW} height={n.h} rx={4} style={{ ["--t" as string]: TONE[n.kind] }} />
             <rect width={3} height={n.h} rx={1} fill={TONE[n.kind]} />
+            {alerting?.get(n.id) && (
+              <rect width={boxW} height={n.h} rx={4} fill="none" stroke={alerting.get(n.id)} strokeWidth={1.6}>
+                <title>{`${n.label} is alerting`}</title>
+              </rect>
+            )}
             <text x={10} y={16} className="jr-label">{clip(n.label, boxW)}</text>
-            <text x={10} y={30} className="jr-sub">{clip(`${fmtBytes(n.bytes)}${n.sub ? ` · ${n.sub}` : ""}`, boxW)}</text>
+            <text x={10} y={30} className="jr-sub">{clip(`${fmtBytes(n.bytes)} · ${share(n.bytes)}${n.sub ? ` · ${n.sub}` : ""}`, boxW)}</text>
           </g>
         );
       })}
