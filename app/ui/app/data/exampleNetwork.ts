@@ -478,10 +478,15 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
     // one branch in ten, so every region shows up
     const branches = devices.filter((d) => !sites[d.site]?.dc && d.role === "edge").filter((_, i) => i % 10 === 0).slice(0, 30);
     const rows: Record<string, Record<string, unknown>[]> = {
+      // both directions, as an exporter that sees the return path reports them: the answer of a web or
+      // database server is heavier than the request, and a file copy is heavier on the way out
       flowNets: branches.flatMap((d, i) => [
         { exp: core.ip, s24: net24(d.ip), d24: "10.0.50.0", proto: "tcp", dport: "443", bytes: 9e8 + i * 3e7, flows: 4200 + i * 40 },
+        { exp: core.ip, s24: "10.0.50.0", d24: net24(d.ip), proto: "tcp", dport: "443", bytes: (9e8 + i * 3e7) * 4.1, flows: 4100 + i * 38 },
         { exp: core.ip, s24: net24(d.ip), d24: "10.0.60.0", proto: "tcp", dport: "1433", bytes: 2e8 + i * 1e7, flows: 900 + i * 10 },
+        { exp: core.ip, s24: "10.0.60.0", d24: net24(d.ip), proto: "tcp", dport: "1433", bytes: (2e8 + i * 1e7) * 2.6, flows: 880 + i * 9 },
         { exp: core.ip, s24: net24(d.ip), d24: "10.1.0.0", proto: "tcp", dport: "445", bytes: 6e7 + i * 2e6, flows: 300 + i * 4 },
+        { exp: core.ip, s24: "10.1.0.0", d24: net24(d.ip), proto: "tcp", dport: "445", bytes: (6e7 + i * 2e6) * 0.35, flows: 260 + i * 3 },
       ]),
       // the same five-minute series the exporters send, for the bandwidth over the hour
       flowTs: [core, devices.find((d) => d.site === "CPS1" && d.role === "core")].filter(Boolean).map((d, k) => {

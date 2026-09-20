@@ -25,6 +25,15 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
   const [site, setSite] = useState("");
   const [pick, setPick] = useState<JourneyPick>(null);
   const [ref, width] = useElementWidth<HTMLDivElement>(900);
+  // the same conversation the other way round, when the exporter reported it: same exporter, same
+  // application, the two ends swapped. Without it the table shows one direction and says nothing of the
+  // other, which on a WAN link is half the story.
+  const reverse = useMemo(() => {
+    const m = new Map<string, number>();
+    (f?.conversations ?? []).forEach((c) => m.set(`${c.via}|${c.s24}|${c.d24}|${c.proto}|${c.port}`, (m.get(`${c.via}|${c.s24}|${c.d24}|${c.proto}|${c.port}`) ?? 0) + c.bytes));
+    return (c: Conversation) => m.get(`${c.via}|${c.d24}|${c.s24}|${c.proto}|${c.port}`) ?? null;
+  }, [f]);
+
   // a device that is alerting now, to outline it wherever the journey draws it
   const alerting = useMemo(() => {
     const m = new Map<string, string>();
@@ -115,13 +124,15 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
           right={`${fmtBytes(listed.reduce((a, c) => a + c.bytes, 0))} · ${fmtInt(listed.length)} groups${pick ? "" : " · heaviest first"}`}>
           {pick && <div className="tr-picked"><button type="button" className="tf-link" onClick={() => setPick(null)}>Show every conversation</button></div>}
           <div className="tr-table" role="table">
-                <div className="tr-row tr-head" role="row"><span>From</span><span>Through</span><span>To</span><span>Application</span><span>Volume</span><span>Flows</span></div>
+                <div className="tr-row tr-head" role="row"><span>From</span><span>Through</span><span>To</span><span>Application</span><span>Volume</span><span>Back</span><span>Flows</span></div>
                 {listed.slice(0, 12).map((c, i) => (
                   <div key={i} className="tr-row" role="row">
                     <span>{c.fromKind === "site" ? <button type="button" className="tf-link" onClick={() => onSite(c.fromSite!)}>{nameOf(c.fromSite)}</button> : endLabel(c.fromKind, c.fromLabel, c.fromSite, c.s24)}</span>
                     <span>{c.viaName}</span>
                     <span>{c.toKind === "site" ? <button type="button" className="tf-link" onClick={() => onSite(c.toSite!)}>{nameOf(c.toSite)}</button> : endLabel(c.toKind, c.toLabel, c.toSite, c.d24)}</span>
-                    <span>{c.app}</span><span>{fmtBytes(c.bytes)}</span><span>{fmtInt(c.count)}</span>
+                    <span>{c.app}</span><span>{fmtBytes(c.bytes)}</span>
+                    <span title={reverse(c) == null ? "the exporter reported no flow the other way" : "the same two ends, the other way round"}>{reverse(c) == null ? "—" : fmtBytes(reverse(c)!)}</span>
+                    <span>{fmtInt(c.count)}</span>
                   </div>
                 ))}
           </div>

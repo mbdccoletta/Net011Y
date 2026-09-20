@@ -15,7 +15,10 @@ export interface Reason {
 }
 
 /** One side of a site's conversations: another site, the Internet, or a private range no site claims. */
-export interface FlowPeer { kind: "site" | "private" | "internet"; name: string; site?: string; bytes: number; flows: number }
+export interface FlowPeer {
+  /** bytes this site sent to the peer, and received from it, when the flows say which way they went */
+  sent?: number;
+  received?: number; kind: "site" | "private" | "internet"; name: string; site?: string; bytes: number; flows: number }
 export interface FlowApp { proto: string; port: string; name: string | null; bytes: number; flows: number }
 /** One conversation group, whichever source saw it, with both ends already placed. */
 export interface Conversation {
@@ -72,8 +75,12 @@ export interface FlowMap {
    * opens with. From the same query that watches the exporters, so it costs nothing more.
    */
   rate?: { start: number; stepMs: number; exporters: { ip: string; device: string | null; bytes: (number | null)[] }[] };
-  /** traffic between two sites, both ends attributed */
-  pairs: { a: string; b: string; bytes: number; flows: number }[];
+  /**
+   * Traffic between two sites, both ends attributed. `aToB` and `bToA` split the same bytes by the
+   * direction the flows carried; a pair with traffic in one direction only usually means the return
+   * path is not exported, which is a fact about the exporters, not about the network.
+   */
+  pairs: { a: string; b: string; bytes: number; flows: number; aToB: number; bToA: number }[];
   sites: Record<string, SiteTraffic>;
   /** bytes seen by exporters that belong to no known device */
   unattributed: number;

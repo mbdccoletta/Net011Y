@@ -2,7 +2,7 @@
 // with corner brackets, KPI tiles, filter chips, the page bar and the visual/table toggle.
 import React from "react";
 import type { NetworkModel, Verdict } from "../model/types";
-import { fmtBps, hhmm } from "../utils/format";
+import { fmtBps, fmtBytes, hhmm } from "../utils/format";
 import { MAP_COLORS } from "./LiveMap";
 
 export const TONE = {
@@ -114,7 +114,7 @@ export function Gauge({ value, label, warn, crit, size = 110, verdict }: { value
  * above the line, what goes out below it, on one scale so the two sides can be compared by eye. Both
  * series come from the interface counters, so this needs nothing but SNMP.
  */
-export function InOut({ inn, out, w = 104, h = 30 }: { inn: number[]; out: number[]; w?: number; h?: number }) {
+export function InOut({ inn, out, w = 104, h = 30, stepMs = 300e3, volume = false }: { inn: number[]; out: number[]; w?: number; h?: number; stepMs?: number; volume?: boolean }) {
   const n = Math.max(inn.length, out.length);
   if (n < 2) return <span className="np-muted">—</span>;
   const peak = Math.max(1, ...inn, ...out);
@@ -125,13 +125,18 @@ export function InOut({ inn, out, w = 104, h = 30 }: { inn: number[]; out: numbe
   const area = (vals: number[], f: (v: number) => number) =>
     `M${x(0).toFixed(1)},${mid} ${vals.map((v, i) => `L${x(i).toFixed(1)},${f(v ?? 0).toFixed(1)}`).join("")} L${x(vals.length - 1).toFixed(1)},${mid}Z`;
   const lastIn = inn[inn.length - 1] ?? 0, lastOut = out[out.length - 1] ?? 0;
+  // bits per second over a bucket is bytes again once multiplied by its seconds: the volume each way
+  const vol = (xs: number[]) => xs.reduce((a, v) => a + ((v ?? 0) * stepMs) / 8000, 0);
+  const hours = Math.round((n * stepMs) / 3600e3);
+  const title = `in ${fmtBps(lastIn)} · out ${fmtBps(lastOut)} · peak ${fmtBps(peak)} · ${fmtBytes(vol(inn))} in and ${fmtBytes(vol(out))} out over ${hours ? `${hours} h` : `${n} buckets`}`;
   return (
-    <span className="vz-inout" title={`in ${fmtBps(lastIn)} · out ${fmtBps(lastOut)} · peak ${fmtBps(peak)} over ${n} buckets`}>
+    <span className="vz-inout" title={title}>
       <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label={`in ${fmtBps(lastIn)}, out ${fmtBps(lastOut)}`}>
         <path d={area(inn, up)} className="vz-inout__in" />
         <path d={area(out, down)} className="vz-inout__out" />
         <line x1={0} x2={w} y1={mid} y2={mid} className="vz-inout__axis" />
       </svg>
+      {volume && <em className="vz-inout__vol">{fmtBytes(vol(inn))}<i>in</i>{fmtBytes(vol(out))}<i>out</i></em>}
     </span>
   );
 }

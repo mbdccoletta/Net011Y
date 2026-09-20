@@ -1,6 +1,6 @@
 {
   "name": "network-pulse",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "NetO11y: sites, devices and WAN links on one map, with the alerts Dynatrace already raises on them",
   "private": true,
   "scripts": {

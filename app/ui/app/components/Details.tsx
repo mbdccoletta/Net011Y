@@ -136,7 +136,7 @@ export function DeviceDetails({ model, device, onDevice }: { model: NetworkModel
           {ifs.length ? (
             <div className="np-scroll-x">
               <table className="np-simple-table" style={{ width: "100%", fontSize: 14, borderCollapse: "collapse" }}>
-                <thead><tr>{["Interface", "Oper / admin", "Speed", "Max utilization", "In / out · last 2 h", "Errors"].map((c) => <th key={c} style={{ textAlign: "left", padding: "6px 8px", color: "var(--np-muted)", fontSize: 12 }}>{c}</th>)}</tr></thead>
+                <thead><tr>{["Interface", "Oper / admin", "Speed", "Max utilization", "In / out · last 2 h · volume", "Errors"].map((c) => <th key={c} style={{ textAlign: "left", padding: "6px 8px", color: "var(--np-muted)", fontSize: 12 }}>{c}</th>)}</tr></thead>
                 <tbody>
                   {ifs.map((i) => (
                     <tr key={i.name} style={{ borderTop: "1px solid var(--np-line)" }}>
@@ -151,7 +151,7 @@ export function DeviceDetails({ model, device, onDevice }: { model: NetworkModel
                       <td className="np-mono" style={{ padding: "6px 8px", color: i.flag === "saturated" ? "var(--np-crit)" : i.flag ? "var(--np-warn)" : undefined }}>
                         {i.util != null ? `${fmtNum(i.util, 1)}%` : "—"}{i.flag === "inconsistent" ? " · above speed" : ""}
                       </td>
-                      <td className="np-mono np-small" style={{ padding: "6px 8px" }}>{i.in.length ? <InOut inn={i.in} out={i.out} /> : "—"}</td>
+                      <td className="np-mono np-small" style={{ padding: "6px 8px" }}>{i.in.length ? <InOut inn={i.in} out={i.out} volume /> : "—"}</td>
                       <td className="np-mono" style={{ padding: "6px 8px" }}>{fmtInt(i.errors + i.crc)}</td>
                     </tr>
                   ))}

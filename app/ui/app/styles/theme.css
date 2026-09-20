@@ -684,7 +684,7 @@
 .tr-chart { overflow-x: auto; }
 .tr-note, .tr-none { margin: 8px 0 0; font-size: 12px; color: var(--lm-ink-3); }
 .tr-table { display: grid; font-size: 12px; overflow-x: auto; }
-.tr-row { display: grid; grid-template-columns: minmax(120px, 1.4fr) minmax(110px, 1.2fr) minmax(120px, 1.4fr) minmax(80px, 0.8fr) minmax(70px, 0.6fr) minmax(70px, 0.6fr); gap: 10px; padding: 5px 0; border-bottom: 1px solid color-mix(in srgb, var(--lm-ink-3) 18%, transparent); min-width: 640px; }
+.tr-row { display: grid; grid-template-columns: minmax(120px, 1.4fr) minmax(110px, 1.2fr) minmax(120px, 1.4fr) minmax(80px, 0.8fr) minmax(70px, 0.6fr) minmax(70px, 0.6fr) minmax(60px, 0.5fr); gap: 10px; padding: 5px 0; border-bottom: 1px solid color-mix(in srgb, var(--lm-ink-3) 18%, transparent); min-width: 700px; }
 .tr-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lm-ink); }
 .tr-row > span:nth-child(n+5) { text-align: right; font-variant-numeric: tabular-nums; }
 .tr-head > span { font: 500 11px var(--lm-mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--lm-ink-3); }
@@ -877,3 +877,7 @@
 .vz-inout__in { fill: color-mix(in srgb, var(--lm-cyan) 55%, transparent); stroke: var(--lm-cyan); stroke-width: 1; }
 .vz-inout__out { fill: color-mix(in srgb, var(--lm-accent) 45%, transparent); stroke: var(--lm-accent); stroke-width: 1; }
 .vz-inout__axis { stroke: color-mix(in srgb, var(--lm-ink-hi) 30%, transparent); stroke-width: 1; }
+.tf-dir { display: block; font: 500 11px var(--lm-mono); color: var(--lm-ink-3); }
+.vz-inout { gap: 8px; }
+.vz-inout__vol { display: inline-flex; flex-direction: column; font-style: normal; font: 500 11px var(--lm-mono); color: var(--lm-ink-3); line-height: 1.35; }
+.vz-inout__vol i { font-style: normal; margin-left: 4px; color: color-mix(in srgb, var(--lm-ink-3) 75%, transparent); }

@@ -65,20 +65,24 @@ export function buildFlowMap(L: (k: string) => Rec[], devices: Device[], address
 
   const sites: Record<string, SiteTraffic> = {};
   const peers = new Map<string, Map<string, FlowPeer>>();
-  const addPeer = (site: string, p: Omit<FlowPeer, "bytes" | "flows">, bytes: number, flows: number) => {
+  const addPeer = (site: string, p: Omit<FlowPeer, "bytes" | "flows">, bytes: number, flows: number, sent?: boolean) => {
     const m = peers.get(site) ?? new Map<string, FlowPeer>();
-    const cur = m.get(p.name) ?? { ...p, bytes: 0, flows: 0 };
+    const cur = m.get(p.name) ?? { ...p, bytes: 0, flows: 0, sent: 0, received: 0 };
     cur.bytes += bytes; cur.flows += flows;
+    if (sent === true) cur.sent = (cur.sent ?? 0) + bytes;
+    if (sent === false) cur.received = (cur.received ?? 0) + bytes;
     m.set(p.name, cur); peers.set(site, m);
   };
-  const pairs = new Map<string, { a: string; b: string; bytes: number; flows: number }>();
+  const pairs = new Map<string, { a: string; b: string; bytes: number; flows: number; aToB: number; bToA: number }>();
   let unattributed = 0;
   for (const c of conversations) {
     // between two sites: the route the map draws, whichever device saw it
     if (c.fromSite && c.toSite && c.fromSite !== c.toSite) {
       const [a, b] = [c.fromSite, c.toSite].sort();
-      const p = pairs.get(`${a}|${b}`) ?? { a, b, bytes: 0, flows: 0 };
-      p.bytes += c.bytes; p.flows += c.count; pairs.set(`${a}|${b}`, p);
+      const p = pairs.get(`${a}|${b}`) ?? { a, b, bytes: 0, flows: 0, aToB: 0, bToA: 0 };
+      p.bytes += c.bytes; p.flows += c.count;
+      if (c.fromSite === a) p.aToB += c.bytes; else p.bToA += c.bytes;
+      pairs.set(`${a}|${b}`, p);
     }
     const here = c.viaSite;
     if (!here) { unattributed += c.bytes; continue; }
@@ -86,8 +90,9 @@ export function buildFlowMap(L: (k: string) => Rec[], devices: Device[], address
     t.bytes += c.bytes; t.flows += c.count;
     if (!t.exporters.includes(c.viaName)) t.exporters.push(c.viaName);
     const farSite = [c.fromSite, c.toSite].find((s) => s && s !== here);
-    if (farSite) { t.toSites += c.bytes; addPeer(here, { kind: "site", name: farSite, site: farSite }, c.bytes, c.count); continue; }
-    if (c.fromKind === "internet" || c.toKind === "internet") { t.internet += c.bytes; addPeer(here, { kind: "internet", name: "Internet" }, c.bytes, c.count); continue; }
+    // "sent" is what left this site: the conversation started here
+    if (farSite) { t.toSites += c.bytes; addPeer(here, { kind: "site", name: farSite, site: farSite }, c.bytes, c.count, c.fromSite === here); continue; }
+    if (c.fromKind === "internet" || c.toKind === "internet") { t.internet += c.bytes; addPeer(here, { kind: "internet", name: "Internet" }, c.bytes, c.count, c.toKind === "internet"); continue; }
     if (c.fromSite === here && c.toSite === here) { t.local += c.bytes; continue; }
     // a private range no site claims: named as it is, never guessed
     const unk = c.toKind === "private" ? c.toLabel : c.fromLabel;

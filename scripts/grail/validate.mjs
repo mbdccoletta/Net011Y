@@ -1,5 +1,6 @@
 // Feeds the generated Grail results through the app's own model code and reports what every view gets.
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, mergeRows, buildJourney, asRoutes } from "./out/app-model.mjs";
 
 const R = JSON.parse(readFileSync("out/results.json", "utf8"));
@@ -426,6 +427,12 @@ if (convs.length) {
     asRoutes(trivial) && !asRoutes(crossing) && asRoutes({ routes: [{ bytes: 90 }, { bytes: 4 }, { bytes: 3 }, { bytes: 3 }] }) && !asRoutes(j) === (j.routes.length > 3 && j.routes[0].bytes < 0.8 * bytesOut),
     `this estate: ${j.routes.length} paths, heaviest ${Math.round((100 * j.routes[0].bytes) / bytesOut)}% → ${asRoutes(j) ? "paths" : "flow"}`);
 }
+
+// ---------------- a hook after a conditional return breaks the page at runtime ----------------
+const badHooks = hooksAfterReturn();
+check("No component calls a hook after an early return",
+  badHooks.length === 0,
+  badHooks.map((b) => `${b.file}:${b.line} ${b.fn} · ${b.hook}`).join(" · ") || "none");
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 
