@@ -417,6 +417,8 @@ export interface NetworkModel {
   users?: Users;
   /** Alerts Dynatrace raised that name no network entity (for example a metric event bound to the environment) */
   unmappedAlerts?: DeviceProblem[];
+  /** the window the per-hour SNMP answers (Device.availTs) cover: start of the first bucket, and its length */
+  availWindow?: { start: number; stepMs: number };
   /**
    * What alerting produced on the network devices over the last days, open or closed: none at all on polled
    * devices means no alert template or custom alert watches them. Absent when it was not read.

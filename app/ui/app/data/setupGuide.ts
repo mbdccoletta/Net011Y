@@ -17,6 +17,8 @@ export interface SetupGuide {
   prerequisites: string[];
   steps: string[];
   snippets?: SetupSnippet[];
+  /** the native app where this data is configured, opened from the guide */
+  opens?: { app: "infra" | "synthetic"; label: string };
   /** the data is a log the network's own bucket can hold: the guide shows how, and what it saves */
   networkBucket?: boolean;
   /** DQL to confirm the data arrives */
@@ -216,6 +218,7 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
       "Tag each circuit monitor with sla_ms: latency above that number is the one judgement the app makes by itself.",
     ],
     verify: "fetch dt.davis.problems, from:now()-24h\n| filter event.status == \"ACTIVE\"\n| summarize problems = count(), by:{event.name, event.category}",
+    opens: { app: "infra", label: "Open Infrastructure & Operations" },
     docs: [DOCS.infraops, DOCS.tagsSynthetic],
   },
   syslog: {

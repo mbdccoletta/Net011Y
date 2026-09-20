@@ -2,7 +2,7 @@
   "environmentUrl": "https://eob14444.apps.dynatrace.com",
   "app": {
     "name": "NetO11y",
-    "version": "0.1.11",
+    "version": "0.1.12",
     "description": "Sites, devices and WAN links on one map, with the alerts open on them",
     "icon": "./assets/icon.svg",
     "id": "my.net.o11y",

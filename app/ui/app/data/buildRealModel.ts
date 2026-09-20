@@ -347,9 +347,14 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   }
   const snmpSilentSince = new Map<string, string>();
   const availDone = new Set<string>();
+  let availWindow: NetworkModel["availWindow"];
   for (const row of LF("uptime")) {
     const d = devFor(row);
     if (!d || availDone.has(d.name)) continue;
+    if (!availWindow) {
+      const start = Date.parse(String(row.timeframe?.start ?? "").replace(/(\.\d{3})\d*Z$/, "$1Z")), stepMs = Number(row.interval) / 1e6;
+      if (Number.isFinite(start) && Number.isFinite(stepMs)) availWindow = { start, stepMs };
+    }
     availDone.add(d.name);
     const pts: (number | null)[] = (row.c ?? []).slice(0, 24);
     d.availTs = pts.map((v) => (v ? 1 : 0));
@@ -914,7 +919,7 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     users,
     sites, siteVerdicts,
     devices: devList.sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || b.impact - a.impact || a.name.localeCompare(b.name)),
-    circuits, links, peers, traps, unmappedAlerts, alerting,
+    circuits, links, peers, traps, unmappedAlerts, alerting, availWindow,
     extensions: [...new Set(["ifTraffic", "ifSummary", "cpu", "memory", "uptime"].flatMap((k) => LF(k).map((row) => String(row.family ?? ""))).filter(Boolean))],
     flows: {
       exporters,

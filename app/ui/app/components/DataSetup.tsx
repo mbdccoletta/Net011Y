@@ -7,7 +7,7 @@ import { Select, TextInput } from "@dynatrace/strato-components/forms";
 import { ExternalLink, Heading, List, Paragraph, Strong, Text } from "@dynatrace/strato-components/typography";
 import type { Need, NeedKey, NeedStatus } from "../data/requirements";
 import { APP_PERMISSIONS, DATA_GROUPS, NETWORK_BUCKET_MATCHER, NETWORK_BUCKET_STEPS, PAGE_NEEDS, SETUP } from "../data/setupGuide";
-import { openNotebook } from "../utils/drilldown";
+import { openNative, openNotebook } from "../utils/drilldown";
 import { useDropThreshold, setDropThreshold } from "../hooks/useDropThreshold";
 import { DEFAULT_DROP_PCT } from "../model/suspicion";
 import { parseBuckets, setLogBuckets, useLogBuckets } from "../hooks/useLogBucket";
@@ -345,7 +345,10 @@ export function SendDataSection({ needs, source, focus }: Pick<Props, "needs" | 
                           <div>
                             <Text textStyle="base-emphasized">Check that it arrives</Text>
                             <CodeSnippet language="dql" showCopyAction>{guide.verify}</CodeSnippet>
-                            <div className="ds-actions"><Button onClick={() => openNotebook(guide.verify)}>Run in Notebooks</Button></div>
+                            <div className="ds-actions">
+                              <Button onClick={() => openNotebook(guide.verify)}>Run in Notebooks</Button>
+                              {guide.opens && <Button variant="emphasized" onClick={() => openNative(guide.opens!.app)}>{guide.opens.label}</Button>}
+                            </div>
                           </div>
                         )}
                         <div className="ds-links">

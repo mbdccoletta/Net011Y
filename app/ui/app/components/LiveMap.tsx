@@ -6,6 +6,7 @@ import { MinusIcon, PlusIcon, ZoomToFitIcon } from "@dynatrace/strato-icons";
 import type { Verdict } from "../model/types";
 import { LAND_BITS, LAND_COLS, LAND_ROWS, LAND_STEP } from "../data/landMask";
 import { prefersReducedMotion } from "../utils/format";
+import { clusterPoints, worstOf, type Cluster } from "../model/mapClusters";
 
 export interface MapSite {
   code: string;
@@ -113,11 +114,8 @@ interface View { cx: number; cy: number; k: number }
  * about always stays a site of its own; zooming in (or clicking a group) opens the groups up.
  */
 const CLUSTER_AT = 600;
-const CELL = 38;
 /** zoomed in this far, sites are drawn one by one whatever their number */
 const CLUSTER_MAX_K = 120;
-interface Cluster { id: string; x: number; y: number; r: number; codes: string[]; n: number; crit: number; warn: number; healthy: number; other: number; focused: boolean }
-const worstOf = (c: Cluster): Verdict => (c.crit ? "Critical" : c.warn ? "Warning" : c.healthy ? "Healthy" : "Not monitored");
 
 const hash = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0) / 4294967295; };
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -276,59 +274,13 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
       if (!props.current.schematic) ctx.drawImage(landLayer.current.canvas, 0, 0, w, h);
 
       // groups of sites that fall close together on screen (only in a large estate, and not when zoomed in far)
-      const clusterOf = new Map<string, Cluster>();
-      const groups: Cluster[] = [];
+      let clusterOf = new Map<string, Cluster>();
+      let groups: Cluster[] = [];
       if (S.length > CLUSTER_AT && v.k < CLUSTER_MAX_K) {
-        const cells = new Map<string, MapSite[]>();
-        for (const s of S) {
-          if (s.dc) continue;
-          const vd = shown(s.code);
-          if (F && F.has(s.code) && (vd === "Critical" || vd === "Warning")) continue;
-          const key = `${Math.floor(sx(s.lon) / CELL)}|${Math.floor(sy(s.lat) / CELL)}`;
-          const l = cells.get(key); if (l) l.push(s); else cells.set(key, [s]);
-        }
-        cells.forEach((list, key) => {
-          if (list.length < 2) return;
-          const cl: Cluster = { id: `cluster:${key}`, x: 0, y: 0, r: 0, codes: [], n: list.length, crit: 0, warn: 0, healthy: 0, other: 0, focused: false };
-          list.forEach((s) => {
-            cl.x += sx(s.lon); cl.y += sy(s.lat); cl.codes.push(s.code);
-            const vd = shown(s.code);
-            if (vd === "Critical") cl.crit++; else if (vd === "Warning") cl.warn++; else if (vd === "Healthy") cl.healthy++; else cl.other++;
-            if (inFocus(s.code)) cl.focused = true;
-            clusterOf.set(s.code, cl);
-          });
-          cl.x /= list.length; cl.y /= list.length;
-          cl.r = 7 + Math.min(13, Math.log2(list.length) * 2.4);
-          groups.push(cl);
-        });
-        // groups from neighbouring cells can overlap: the larger one takes in any group its circle touches
-        const merge = () => {
-          groups.sort((p, q) => q.n - p.n);
-          for (let i = 0; i < groups.length; i++) {
-            const g = groups[i];
-            for (let j = i + 1; j < groups.length; j++) {
-              const o = groups[j];
-              if (Math.hypot(g.x - o.x, g.y - o.y) > g.r + o.r + 3) continue;
-              const n = g.n + o.n;
-              g.x = (g.x * g.n + o.x * o.n) / n; g.y = (g.y * g.n + o.y * o.n) / n;
-              g.n = n; g.crit += o.crit; g.warn += o.warn; g.healthy += o.healthy; g.other += o.other; g.focused = g.focused || o.focused;
-              g.codes.push(...o.codes); o.codes.forEach((c) => clusterOf.set(c, g));
-              g.r = 7 + Math.min(13, Math.log2(n) * 2.4);
-              groups.splice(j, 1); j = i; // the grown circle may now touch groups already passed
-            }
-          }
-        };
-        // a data center is the anchor of the map: a group that would sit on it moves aside, along the line
-        // from the data center (its position is only the average of its sites anyway)
-        const dcs = S.filter((s) => s.dc).map((s) => ({ x: sx(s.lon), y: sy(s.lat) }));
-        const clearDcs = () => groups.forEach((g) => dcs.forEach((d) => {
-          const dx = g.x - d.x, dy = g.y - d.y, dist = Math.hypot(dx, dy), min = g.r + 18;
-          if (dist >= min) return;
-          const ux = dist ? dx / dist : 0, uy = dist ? dy / dist : -1;
-          g.x = d.x + ux * min; g.y = d.y + uy * min;
-        }));
-        // moving aside can push two groups together, and joining them can land on a data center again
-        merge(); clearDcs(); merge(); clearDcs();
+        const points = S.filter((s) => !s.dc && !(F && F.has(s.code) && ["Critical", "Warning"].includes(shown(s.code))))
+          .map((s) => ({ code: s.code, x: sx(s.lon), y: sy(s.lat), verdict: shown(s.code) }));
+        const out = clusterPoints(points, { focused: inFocus, dcs: S.filter((s) => s.dc).map((s) => ({ x: sx(s.lon), y: sy(s.lat) })) });
+        groups = out.groups; clusterOf = out.of;
       }
       clusters.current = groups;
       const posOf = (code: string) => { const cl = clusterOf.get(code); if (cl) return { x: cl.x, y: cl.y, id: cl.id }; const s = B.get(code); return s ? { x: sx(s.lon), y: sy(s.lat), id: code } : null; };

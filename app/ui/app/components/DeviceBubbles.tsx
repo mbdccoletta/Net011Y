@@ -31,19 +31,42 @@ const ease = (t: number) => 1 - Math.pow(1 - t, 3);
 const BATCH_AT = 300;
 
 interface Dot { d: Device; x: number; y: number; r: number; problem: boolean }
-/** Dot positions on the sunflower spiral, computed once per layout rather than on every frame. */
+/**
+ * Dot positions, computed once per layout rather than on every frame: the quiet devices fill the bubble on
+ * a sunflower spiral, and the ones with a problem sit on rings along the edge, in the order the estate
+ * ranks them. In a bubble of four thousand access points that is the difference between a red smudge in
+ * the middle and a hundred devices anyone can point at.
+ */
 function placeDots(g: BubbleGroup): { dots: Dot[]; few: boolean; dotR: number } {
   const nDots = g.devices.length;
   // few devices: bigger dots that fill the bubble; many: small dots in a dense sunflower
   const few = nDots <= 12;
   const dotR = few ? Math.max(3, Math.min(11, ((g.r - 10) / Math.sqrt(nDots)) * 0.55)) : Math.max(1.3, Math.min(4.2, ((g.r - 8) / Math.sqrt(nDots)) * 0.75));
   const spread = few ? g.r - 8 - dotR : g.r - 7;
-  const dots = g.devices.map((d, i) => {
-    const idx = nDots - 1 - i;
-    const a = idx * 2.39996 + (few ? -Math.PI / 2 : 0), rad = nDots === 1 ? 0 : Math.sqrt((idx + 0.5) / nDots) * spread;
+  const bad = g.devices.filter((d) => isBad(d.verdict));
+  const onRing = !few && bad.length > 0 && bad.length < nDots;
+  const quiet = onRing ? g.devices.filter((d) => !isBad(d.verdict)) : g.devices;
+  const dots: Dot[] = quiet.map((d, i) => {
+    const n = quiet.length, idx = n - 1 - i;
+    const a = idx * 2.39996 + (few ? -Math.PI / 2 : 0), rad = n === 1 ? 0 : Math.sqrt((idx + 0.5) / n) * (onRing ? spread * 0.88 : spread);
     const problem = isBad(d.verdict);
     return { d, x: g.cx + Math.cos(a) * rad, y: g.cy + Math.sin(a) * rad, r: problem ? dotR * 1.12 : dotR, problem };
   });
+  if (onRing) {
+    const r = dotR * 1.12, step = r * 2.5;
+    let left = bad.length, ring = 0, placed = 0;
+    while (left > 0 && ring < 6) {
+      const rad = spread - ring * step;
+      const fit = Math.max(1, Math.floor((2 * Math.PI * rad) / step));
+      const take = Math.min(left, fit);
+      for (let i = 0; i < take; i++) {
+        const a = -Math.PI / 2 + (i / take) * Math.PI * 2 + ring * 0.3;
+        const d = bad[placed + i];
+        dots.push({ d, x: g.cx + Math.cos(a) * rad, y: g.cy + Math.sin(a) * rad, r, problem: true });
+      }
+      placed += take; left -= take; ring++;
+    }
+  }
   return { dots, few, dotR };
 }
 /** Many circles as one path: each dot is two arcs. */

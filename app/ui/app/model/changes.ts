@@ -36,12 +36,14 @@ export function changesOf(model: NetworkModel, now = Date.now()): Change[] {
     if (d.unreachableSince && recent(d.unreachableSince)) {
       out.push({ t: d.unreachableSince, kind: "unreachable", title: `${d.name} stopped answering`, detail: siteName(d.site), device: d.name, site: d.site });
     } else if (d.availTs?.length) {
-      // hourly SNMP answers: the last hour it answered again after a silent one
+      // the SNMP answers per bucket: the last bucket it answered again after a silent one, placed with the
+      // window the query covered (not guessed from the clock)
       const a = d.availTs;
+      const win = model.availWindow ?? { start: Math.floor(now / 3600e3) * 3600e3 - (a.length - 1) * 3600e3, stepMs: 3600e3 };
       for (let j = a.length - 1; j > 0; j--) {
         if (a[j] && !a[j - 1]) {
-          const t = new Date(Math.floor(now / 3600e3) * 3600e3 - (a.length - 1 - j) * 3600e3).toISOString();
-          if (recent(t)) out.push({ t, kind: "answering", title: `${d.name} answering again`, detail: `${siteName(d.site)} · within that hour`, device: d.name, site: d.site });
+          const t = new Date(win.start + j * win.stepMs).toISOString();
+          if (recent(t)) out.push({ t, kind: "answering", title: `${d.name} answering again`, detail: `${siteName(d.site)} · within ${Math.round((model.availWindow?.stepMs ?? 3600e3) / 60e3)} min of it`, device: d.name, site: d.site });
           break;
         }
       }
@@ -54,7 +56,10 @@ export function changesOf(model: NetworkModel, now = Date.now()): Change[] {
     const dev = p.device ? byName.get(p.device) : undefined;
     const where = dev ? `${dev.name} · ${siteName(dev.site)}` : "network";
     const silent = dev ? silentAt.get(dev.name) : undefined;
-    if (silent && recent(p.start) && Math.abs(ms(silent.t) - ms(p.start)) <= 15 * 60e3) {
+    // the silence is known to the bucket the SNMP answers are counted in, the alert to the minute: an alert
+    // that opened from that bucket on is the same event
+    const tol = (model.availWindow?.stepMs ?? 3600e3) + 15 * 60e3;
+    if (silent && recent(p.start) && ms(p.start) >= ms(silent.t) - 15 * 60e3 && ms(p.start) <= ms(silent.t) + tol) {
       if (!silent.detail.includes(p.name)) silent.detail += ` · alert: ${p.name}`;
     } else if (recent(p.start)) out.push({ t: p.start, kind: "alert-open", title: p.name, detail: where, device: dev?.name, site: dev?.site });
     if (p.end && recent(p.end)) out.push({ t: p.end, kind: "alert-closed", title: p.name, detail: where, device: dev?.name, site: dev?.site });

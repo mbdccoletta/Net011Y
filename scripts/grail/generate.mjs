@@ -406,7 +406,29 @@ problem({ "event.id": evid("maint"), display_id: "P-2609006", "event.name": "Dev
   "event.category": "AVAILABILITY", "maintenance.is_under_maintenance": true, "event.severity": 2,
   "root_cause.smartscape_entity": { id: maintDevice.id, type: "EXT_NETWORK_DEVICE", name: maintDevice.name }, "smartscape.affected_entity.ids": [maintDevice.id] });
 
+// 9. the outage also silences the devices behind it, and the templates raise that on each of them
+const silenced = devices.filter((d) => siteDark(d, NOW)).slice(0, 6);
+silenced.forEach((d, i) => problem({ "event.id": evid(`silent-${i}`), display_id: `P-26090${10 + i}`, "event.name": "Network devices unreachable",
+  "event.start": iso(NOW - 47 * 60e3), "event.category": "AVAILABILITY", "smartscape.affected_entity.ids": [d.id] }));
+
 results.problems = problems;
+// a week of problems on the network, open and closed: what says whether anything watches these devices
+const closedDev = devices.find((d) => d.role === "SWT" && !unreachable(d, NOW));
+results.problems7d = [
+  ...problems.map((p) => ({ "event.id": p["event.id"], "event.name": p["event.name"], "event.start": p["event.start"], "event.end": null, "event.status": "ACTIVE",
+    "smartscape.affected_entity.ids": p["smartscape.affected_entity.ids"] ?? null, "smartscape.affected_entities": p["smartscape.affected_entities"] ?? null,
+    "dt.smartscape_source.id": p["dt.smartscape_source.id"] ?? null, affected_entity_ids: p.affected_entity_ids ?? null, affected_entity_names: p.affected_entity_names ?? null })),
+  ...(closedDev ? [{ "event.id": evid("closed-flap"), "event.name": "Interface flapping", "event.start": iso(NOW - 5 * B1H), "event.end": iso(NOW - 3 * B1H), "event.status": "CLOSED",
+    "smartscape.affected_entity.ids": [closedDev.id], "smartscape.affected_entities": null, "dt.smartscape_source.id": closedDev.id, affected_entity_ids: null, affected_entity_names: null }] : []),
+];
+// a device that restarted two hours ago: sysUpTime steps down, which is how the app finds restarts
+const rebooted = devices.find((d) => d.role === "SWT" && d !== closedDev && !unreachable(d, NOW));
+const REB_STEP = 15 * 60e3, REB_N = 96, rebootAt = REB_N - 8;
+results["reboots:network_device"] = rebooted ? [{
+  "dt.smartscape.ext_network_device": rebooted.id, "device.address": rebooted.ip, family: "network_device",
+  ...tf(REB_STEP, REB_N),
+  d: Array.from({ length: REB_N }, (_, k) => (k === rebootAt ? -90000 : 90000)),
+}] : [];
 // the documented topology: Smartscape "calls" between each branch edge router and its hub core
 results.netEdges = devices.filter((d) => d.role === "RTR" && d.site.hub && hubCore(d.site.hub)).slice(0, 10).map((d) => ({
   source_id: d.id, source_type: "EXT_NETWORK_DEVICE", target_id: hubCore(d.site.hub).id, target_type: "EXT_NETWORK_DEVICE" }));

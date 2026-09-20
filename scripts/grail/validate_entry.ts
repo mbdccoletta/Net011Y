@@ -9,3 +9,6 @@ export * as Prompts from "../../app/ui/app/utils/prompts";
 export { INSTRUCTION, INSTRUCTION_LIMIT } from "../../app/ui/app/utils/assist";
 export { nextSteps, coverage } from "../../app/ui/app/model/nextSteps";
 export { pageCoverage } from "../../app/ui/app/model/coverage";
+export { changesOf, CHANGE_LABEL } from "../../app/ui/app/model/changes";
+export { clusterPoints, worstOf, CELL } from "../../app/ui/app/model/mapClusters";
+export { mergeRows } from "../../app/ui/app/data/logCache";

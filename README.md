@@ -83,7 +83,7 @@ app reads an estate that size — per-device summaries instead of every port.
 cd scripts/grail
 node build.mjs                 # bundles the app's model and queries for the scripts
 node generate.mjs              # Grail-shaped fixtures for a 62-site network
-node validate.mjs              # 49 scenario checks against the app's own model
+node validate.mjs              # 62 scenario checks against the app's own model
 node scorecard.mjs proxy       # what the app delivers in the environment the dev server serves
 node scorecard.mjs dtctl:<ctx> # the same through a dtctl context
 DT_CONTEXT=<dtctl-context> node live_check.mjs

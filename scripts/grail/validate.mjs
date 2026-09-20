@@ -1,6 +1,6 @@
 // Feeds the generated Grail results through the app's own model code and reports what every view gets.
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, mergeRows } from "./out/app-model.mjs";
 
 const R = JSON.parse(readFileSync("out/results.json", "utf8"));
 const report = { schema: {}, needs: {}, views: {}, checks: [] };
@@ -335,6 +335,77 @@ check("With nothing specific, devices are grouped by network and typed by what t
   bd("core-sw-01.acme.com")?.site === "Network 10.9.0.0/16" && bd("edge-a.acme.com")?.site === "Network 10.9.0.0/16" && bd("fw1.acme.com")?.site === "Network 172.20.0.0/16"
   && bd("core-sw-01.acme.com")?.role === "switch" && bd("edge-a.acme.com")?.role === "edge" && bd("fw1.acme.com")?.role === "firewall" && !bare.sites.CORE,
   bare.devices.map((d) => `${d.name}: ${d.site} · ${d.role}`).join(" | "));
+
+// ---------------- a week of alerting, and what changed in the last 24 h ----------------
+const al = model.alerting;
+check("A week of Davis problems says whether anything watches the network devices",
+  al && al.problems >= 2 && al.devices >= 1 && al.kinds.length >= 2 && al.recent.some((r) => r.end),
+  al ? `${al.problems} problems on ${al.devices} devices · ${al.kinds.length} kinds · ${al.recent.filter((r) => r.end).length} closed in 24 h` : "not read");
+check("No alerting read at all leaves the app without the week (rather than claiming zero)",
+  buildRealModel({ devices: R.devices }, "x").alerting === undefined);
+
+const changes = changesOf(model);
+const kinds = (k) => changes.filter((c) => c.kind === k);
+const members = (c) => c.members?.length ?? 1;
+const total = (k) => kinds(k).reduce((a, c) => a + members(c), 0);
+check("A restart is found from sysUpTime stepping down, at the bucket it stepped",
+  kinds("restart").length === 1 && Math.abs(Date.parse(kinds("restart")[0].t) - (Date.now() - 2 * 3600e3)) < 40 * 60e3,
+  kinds("restart").map((c) => `${c.title} at ${c.t}`).join(" · ") || "none");
+check("The outage reaches the changes as devices that stopped answering and circuits that went down",
+  total("unreachable") >= 3 && total("circuit-down") >= 1,
+  `${total("unreachable")} unreachable · ${total("circuit-down")} circuits · ${total("alert-open")} alerts opened · ${total("alert-closed")} closed`);
+check("A burst of the same change is one row that holds its members",
+  changes.some((c) => c.members && c.members.length > 3) && changes.every((c) => !c.members || c.members.every((m) => m.kind === c.kind)),
+  changes.filter((c) => c.members).map((c) => `${c.title} (${c.members.length})`).join(" · ") || "no burst");
+check("An alert that opened with the silence it reports is named on that row, not repeated",
+  kinds("unreachable").flatMap((c) => c.members ?? [c]).some((m) => /alert:/.test(m.detail))
+  && !kinds("alert-open").flatMap((c) => c.members ?? [c]).some((m) => m.device && kinds("unreachable").flatMap((u) => u.members ?? [u]).some((s) => s.device === m.device)),
+  kinds("unreachable").flatMap((c) => c.members ?? [c]).filter((m) => /alert:/.test(m.detail)).length + " folded");
+check("Changes are newest first and never older than 24 h",
+  changes.every((c, i) => i === 0 || Date.parse(changes[i - 1].t) >= Date.parse(c.t)) && changes.every((c) => Date.now() - Date.parse(c.t) <= 24 * 3600e3 + 60e3),
+  `${changes.length} rows · oldest ${changes[changes.length - 1]?.t ?? "-"}`);
+
+// ---------------- the map groups sites without losing any ----------------
+const pts = Object.values(model.sites).filter((s) => !s.dc).map((s, i) => ({ code: s.code, x: (i % 40) * 9, y: Math.floor(i / 40) * 9, verdict: model.siteVerdicts?.[s.code] ?? "Healthy" }));
+const dcAt = [{ x: 15, y: 15 }];
+const { groups, of } = clusterPoints(pts, { dcs: dcAt });
+const inGroups = groups.reduce((a, g) => a + g.n, 0);
+check("Every site of a group is counted once, and the counts add up",
+  groups.length > 0 && inGroups === new Set(groups.flatMap((g) => g.codes)).size && groups.every((g) => g.n === g.codes.length && g.crit + g.warn + g.healthy + g.other === g.n)
+  && groups.every((g) => g.codes.every((c) => of.get(c) === g)),
+  `${groups.length} groups · ${inGroups} of ${pts.length} sites`);
+check("Groups do not overlap each other, and leave the data centers clear",
+  groups.every((g, i) => groups.every((o, j) => i === j || Math.hypot(g.x - o.x, g.y - o.y) > g.r + o.r)) && groups.every((g) => dcAt.every((d) => Math.hypot(g.x - d.x, g.y - d.y) >= g.r + 17)),
+  `smallest gap ${Math.round(Math.min(...groups.flatMap((g, i) => groups.map((o, j) => (i === j ? Infinity : Math.hypot(g.x - o.x, g.y - o.y) - g.r - o.r)))))} px`);
+check("A group carries the worst status of its sites",
+  groups.every((g) => worstOf(g) === (g.crit ? "Critical" : g.warn ? "Warning" : g.healthy ? "Healthy" : "Not monitored")) && CELL > 0);
+
+// ---------------- the kept part of a log query plus the new part is the whole answer ----------------
+const step = 900e3, win = 6 * 3600e3, n = win / step + 1;
+const t0 = Math.floor(Date.now() / step) * step - (n - 1) * step;
+const iso2 = (t) => new Date(t).toISOString();
+const series = (from, count, vals) => [{ ip: "10.0.0.1", kind: "syslog", loglevel: "ERROR", n: vals, timeframe: { start: iso2(from), end: iso2(from + count * step) }, interval: String(step * 1e6) }];
+const whole = Array.from({ length: n }, (_, i) => (i % 5 === 0 ? null : i));
+const cut = n - 6; // the last 90 minutes arrive in the new part
+const incS = { kind: "series", windowMs: win, stepMs: step, fields: ["n"], keys: ["ip", "kind", "loglevel"] };
+const merged = mergeRows(incS, { query: "q", full: "q", base: series(t0, n, whole.slice(0, cut).concat(Array(n - cut).fill(null))), from: t0 + cut * step },
+  series(t0 + cut * step, n - cut, whole.slice(cut)));
+check("A series read in two parts is the series read whole, nulls included",
+  JSON.stringify(merged[0]?.n) === JSON.stringify(whole) && merged[0]?.timeframe.start === iso2(t0),
+  `${merged[0]?.n?.length ?? 0} buckets · ${whole.filter((v) => v === null).length} empty`);
+const incN = { kind: "newest", windowMs: 3600e3, time: "timestamp", limit: 4 };
+const rec = (t, what) => ({ timestamp: iso2(Date.now() - t * 60e3), what });
+const kept = [rec(50, "a"), rec(40, "b"), rec(30, "c")], fresh = [rec(5, "e"), rec(15, "d")];
+const newest = mergeRows(incN, { query: "q", full: "q", base: kept, from: Date.now() - 20 * 60e3 }, fresh);
+check("Newest records: the new part rules from the cut, the kept part answers before it",
+  newest.map((r) => r.what).join("") === "edcb" && newest.length === 4,
+  newest.map((r) => r.what).join(""));
+const incL = { kind: "latest", windowMs: 30 * 60e3, time: "seen", keys: ["a", "b"] };
+const latest = mergeRows(incL, { query: "q", full: "q", base: [{ a: "1", b: "x", seen: iso2(Date.now() - 25 * 60e3) }, { a: "2", b: "y", seen: iso2(Date.now() - 40 * 60e3) }], from: Date.now() - 20 * 60e3 },
+  [{ a: "1", b: "x", seen: iso2(Date.now() - 2 * 60e3) }]);
+check("Latest seen: one row per key, the newest time, and what fell out of the window is gone",
+  latest.length === 1 && latest[0].a === "1" && Date.now() - Date.parse(latest[0].seen) < 3 * 60e3,
+  latest.map((r) => `${r.a}${r.b}`).join(","));
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 

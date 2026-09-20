@@ -504,6 +504,7 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
     flowMap: traffic,
     users,
     unmappedAlerts: outsideAlerts,
+    availWindow: { start: Math.floor(t0 / 3600e3) * 3600e3 - 23 * 3600e3, stepMs: 3600e3 },
     alerting: { days: 7, problems: problems.size + closedToday.length, devices: devices.filter((d) => d.problems?.length).length, kinds: [...new Set([...problems.values()].map((p) => p.name))].sort(), recent },
     meta: { tenant: "example", generatedAt: new Date(t0).toISOString().slice(0, 16) + "Z", thresholds: T },
     sites, siteVerdicts,
