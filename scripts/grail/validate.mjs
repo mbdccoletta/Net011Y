@@ -348,9 +348,15 @@ const changes = changesOf(model);
 const kinds = (k) => changes.filter((c) => c.kind === k);
 const members = (c) => c.members?.length ?? 1;
 const total = (k) => kinds(k).reduce((a, c) => a + members(c), 0);
+// the expected moment comes from the fixture itself, not from the clock: a suite that fails because the
+// fixture aged teaches the team to ignore it
+const rebootRow = (R["reboots:network_device"] ?? [])[0];
+const rebootAt = rebootRow
+  ? Date.parse(String(rebootRow.timeframe.start).replace(/(\.\d{3})\d*Z$/, "$1Z")) + (rebootRow.d.findIndex((v) => v < 0) + 1) * (Number(rebootRow.interval) / 1e6)
+  : NaN;
 check("A restart is found from sysUpTime stepping down, at the bucket it stepped",
-  kinds("restart").length === 1 && Math.abs(Date.parse(kinds("restart")[0].t) - (Date.now() - 2 * 3600e3)) < 40 * 60e3,
-  kinds("restart").map((c) => `${c.title} at ${c.t}`).join(" · ") || "none");
+  kinds("restart").length === 1 && Math.abs(Date.parse(kinds("restart")[0].t) - rebootAt) < 60e3,
+  kinds("restart").map((c) => `${c.title} at ${c.t}`).join(" · ") + (Number.isFinite(rebootAt) ? ` · fixture says ${new Date(rebootAt).toISOString()}` : " · no fixture"));
 check("The outage reaches the changes as devices that stopped answering and circuits that went down",
   total("unreachable") >= 3 && total("circuit-down") >= 1,
   `${total("unreachable")} unreachable · ${total("circuit-down")} circuits · ${total("alert-open")} alerts opened · ${total("alert-closed")} closed`);

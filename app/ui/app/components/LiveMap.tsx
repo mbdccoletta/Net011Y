@@ -26,6 +26,9 @@ export interface MapLink {
   verdict: Verdict;
   /** Current traffic on the link in bits per second (in + out); 0 when nothing flows, null when not measured */
   bps?: number | null;
+  /** the same split by direction, when the interface counters say which way it went: b → a and a → b */
+  bpsIn?: number | null;
+  bpsOut?: number | null;
 }
 
 export interface Insets { top: number; right: number; bottom: number; left: number }
@@ -288,7 +291,7 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
       // routes: one per pair of ends, a group counting as one end; width, packet count and packet speed follow
       // the traffic volume (log scale across routes)
       const RANK: Record<Verdict, number> = { Critical: 3, Warning: 2, Healthy: 1, "Not monitored": 0 };
-      const routes = new Map<string, { id: string; x0: number; y0: number; x1: number; y1: number; verdict: Verdict; focused: boolean; bps: number | null; n: number }>();
+      const routes = new Map<string, { id: string; x0: number; y0: number; x1: number; y1: number; verdict: Verdict; focused: boolean; bps: number | null; bpsIn: number | null; bpsOut: number | null; n: number }>();
       L.forEach((l) => {
         const a = posOf(l.a), b = posOf(l.b);
         if (!a || !b || a.id === b.id) return;
@@ -296,18 +299,20 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
         const focused = inFocus(l.a) && inFocus(l.b);
         const key = clusterOf.size ? `${a.id}|${b.id}` : l.id;
         const r = routes.get(key);
-        if (!r) routes.set(key, { id: l.id, x0: a.x, y0: a.y, x1: b.x, y1: b.y, verdict, focused, bps: l.bps ?? null, n: 1 });
+        if (!r) routes.set(key, { id: l.id, x0: a.x, y0: a.y, x1: b.x, y1: b.y, verdict, focused, bps: l.bps ?? null, bpsIn: l.bpsIn ?? null, bpsOut: l.bpsOut ?? null, n: 1 });
         else {
           r.n++; r.focused = r.focused || focused;
           if (RANK[verdict] > RANK[r.verdict]) r.verdict = verdict;
           if (l.bps != null) r.bps = (r.bps ?? 0) + l.bps;
+          if (l.bpsIn != null) r.bpsIn = (r.bpsIn ?? 0) + l.bpsIn;
+          if (l.bpsOut != null) r.bpsOut = (r.bpsOut ?? 0) + l.bpsOut;
         }
       });
       ctx.lineCap = "round";
       const vols = [...routes.values()].map((r) => r.bps ?? 0).filter((x) => x > 0);
       const vMin = vols.length ? Math.log10(Math.min(...vols)) : 0, vMax = vols.length ? Math.log10(Math.max(...vols)) : 1;
       const volume = (bps: number | null) => (bps == null ? null : bps <= 0 ? 0 : vMax > vMin ? 0.15 + 0.85 * ((Math.log10(bps) - vMin) / (vMax - vMin)) : 1);
-      routes.forEach(({ id, x0, y0, x1, y1, verdict, focused, bps, n }) => {
+      routes.forEach(({ id, x0, y0, x1, y1, verdict, focused, bps, bpsIn, bpsOut, n }) => {
         const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
         const cxp = (x0 + x1) / 2 - (dy / len) * len * 0.18, cyp = (y0 + y1) / 2 + (dx / len) * len * 0.18 - len * 0.08;
         const bad = verdict === "Critical" || verdict === "Warning";
@@ -320,18 +325,35 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
         ctx.setLineDash(verdict === "Critical" && !reduce ? [4, 4] : []);
         ctx.lineDashOffset = verdict === "Critical" ? -(now / 70) % 8 : 0;
         ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(cxp, cyp, x1, y1); ctx.stroke();
-        // packets travelling to the data center: more, faster and bigger packets on busier links, none when nothing flows
+        // packets on the route: towards the data center and back, each stream as many, as fast and as big
+        // as that direction carries. Without the interface counters there is one stream, on the volume.
         if (!reduce && vol !== 0 && (focused || !F)) {
           const phase = hash(id), vv = vol ?? 0.3;
-          const count = Math.max(1, Math.round(1 + vv * 5));
-          const period = 3400 - vv * 2400;
-          for (let p = 0; p < count; p++) {
-            const t = ((now / period) + phase + p / count) % 1, u = 1 - t;
-            const px = u * u * x0 + 2 * u * t * cxp + t * t * x1, py = u * u * y0 + 2 * u * t * cyp + t * t * y1;
-            ctx.globalAlpha = focused ? 0.95 : Math.max(0.45, P.dim);
-            ctx.fillStyle = bad ? COL[verdict] : P.route;
-            ctx.beginPath(); ctx.arc(px, py, (bad ? 1.5 : 1.1) + vv * 1.2, 0, Math.PI * 2); ctx.fill();
-          }
+          const split = bpsIn != null || bpsOut != null;
+          const share = (v: number | null) => (split ? Math.max(0.12, Math.min(1, (v ?? 0) / Math.max(1, (bpsIn ?? 0) + (bpsOut ?? 0)))) : 1);
+          const streams: { back: boolean; s: number }[] = split
+            ? [{ back: false, s: share(bpsOut) }, { back: true, s: share(bpsIn) }]
+            : [{ back: false, s: 1 }];
+          streams.forEach(({ back, s: sh }, si) => {
+            if (split && sh <= 0.12 && (back ? bpsIn : bpsOut) === 0) return;
+            const count = Math.max(1, Math.round((1 + vv * 5) * sh));
+            const period = 3400 - vv * 2400;
+            // the two streams run on their own side of the curve, so they read as two directions
+            const off = split ? (back ? 1 : -1) * (2.2 + vv * 1.6) : 0;
+            for (let p = 0; p < count; p++) {
+              const t0 = ((now / period) + phase + si * 0.37 + p / count) % 1;
+              const t = back ? 1 - t0 : t0, u = 1 - t;
+              const px = u * u * x0 + 2 * u * t * cxp + t * t * x1, py = u * u * y0 + 2 * u * t * cyp + t * t * y1;
+              // the normal of the curve at t, to park the stream beside the line
+              const dxdt = 2 * u * (cxp - x0) + 2 * t * (x1 - cxp), dydt = 2 * u * (cyp - y0) + 2 * t * (y1 - cyp);
+              const len2 = Math.hypot(dxdt, dydt) || 1;
+              ctx.globalAlpha = focused ? 0.95 : Math.max(0.45, P.dim);
+              ctx.fillStyle = bad ? COL[verdict] : P.route;
+              ctx.beginPath();
+              ctx.arc(px + (-dydt / len2) * off, py + (dxdt / len2) * off, ((bad ? 1.5 : 1.1) + vv * 1.2) * (split ? 0.6 + sh * 0.6 : 1), 0, Math.PI * 2);
+              ctx.fill();
+            }
+          });
         }
       });
       ctx.setLineDash([]);

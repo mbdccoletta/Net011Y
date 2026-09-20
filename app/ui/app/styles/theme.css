@@ -871,3 +871,9 @@
 .tf-rate__read { color: var(--lm-ink-hi); }
 .tf-rate__axis { display: flex; justify-content: space-between; align-items: baseline; font: 500 11px var(--lm-mono); color: var(--lm-ink-3); }
 .tr-picked { margin-bottom: 6px; font-size: 12px; }
+
+/* Traffic on a port: in above the line, out below it (the MRTG reading) */
+.vz-inout { display: inline-flex; align-items: center; }
+.vz-inout__in { fill: color-mix(in srgb, var(--lm-cyan) 55%, transparent); stroke: var(--lm-cyan); stroke-width: 1; }
+.vz-inout__out { fill: color-mix(in srgb, var(--lm-accent) 45%, transparent); stroke: var(--lm-accent); stroke-width: 1; }
+.vz-inout__axis { stroke: color-mix(in srgb, var(--lm-ink-hi) 30%, transparent); stroke-width: 1; }

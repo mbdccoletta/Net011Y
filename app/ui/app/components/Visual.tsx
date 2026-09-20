@@ -2,7 +2,7 @@
 // with corner brackets, KPI tiles, filter chips, the page bar and the visual/table toggle.
 import React from "react";
 import type { NetworkModel, Verdict } from "../model/types";
-import { hhmm } from "../utils/format";
+import { fmtBps, hhmm } from "../utils/format";
 import { MAP_COLORS } from "./LiveMap";
 
 export const TONE = {
@@ -109,6 +109,33 @@ export function Gauge({ value, label, warn, crit, size = 110, verdict }: { value
  * a grid line at the half, the band under the curve, the run of the series and a lit head on the last
  * reading with the value beside it. The tone comes from that last reading, never from a verdict.
  */
+/**
+ * Traffic on a port, in and out, drawn the way a network engineer reads it since MRTG: what comes in
+ * above the line, what goes out below it, on one scale so the two sides can be compared by eye. Both
+ * series come from the interface counters, so this needs nothing but SNMP.
+ */
+export function InOut({ inn, out, w = 104, h = 30 }: { inn: number[]; out: number[]; w?: number; h?: number }) {
+  const n = Math.max(inn.length, out.length);
+  if (n < 2) return <span className="np-muted">—</span>;
+  const peak = Math.max(1, ...inn, ...out);
+  const mid = h / 2;
+  const x = (i: number) => 1 + (i / (n - 1)) * (w - 2);
+  const up = (v: number) => mid - (v / peak) * (mid - 2);
+  const down = (v: number) => mid + (v / peak) * (mid - 2);
+  const area = (vals: number[], f: (v: number) => number) =>
+    `M${x(0).toFixed(1)},${mid} ${vals.map((v, i) => `L${x(i).toFixed(1)},${f(v ?? 0).toFixed(1)}`).join("")} L${x(vals.length - 1).toFixed(1)},${mid}Z`;
+  const lastIn = inn[inn.length - 1] ?? 0, lastOut = out[out.length - 1] ?? 0;
+  return (
+    <span className="vz-inout" title={`in ${fmtBps(lastIn)} · out ${fmtBps(lastOut)} · peak ${fmtBps(peak)} over ${n} buckets`}>
+      <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} role="img" aria-label={`in ${fmtBps(lastIn)}, out ${fmtBps(lastOut)}`}>
+        <path d={area(inn, up)} className="vz-inout__in" />
+        <path d={area(out, down)} className="vz-inout__out" />
+        <line x1={0} x2={w} y1={mid} y2={mid} className="vz-inout__axis" />
+      </svg>
+    </span>
+  );
+}
+
 export function Spark({ values, max = 100, unit = "%", w = 84, h = 26 }: { values: number[]; max?: number; unit?: string; w?: number; h?: number }) {
   if (values.length < 2) return <span className="np-muted">—</span>;
   const last = values[values.length - 1];

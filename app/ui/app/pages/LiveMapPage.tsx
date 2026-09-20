@@ -92,17 +92,24 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   const mapLinks = useMemo<MapLink[]>(() => {
     const placed = new Set(mapSites.map((s) => s.code));
     // traffic of a site's WAN: latest in + out of the edge routers' uplinks (bits per second)
-    // the site's own devices (SiteInfo), not a scan of the whole estate for every site
-    const trafficOf = (i: SiteInfo): number | null => {
+    // the site's own devices (SiteInfo), not a scan of the whole estate for every site. The uplink counters
+    // know which way the traffic went: what came in from the WAN, and what left towards it.
+    const trafficOf = (i: SiteInfo): { total: number; in: number; out: number } | null => {
       const edges = i.devices.filter((d) => d.role === "edge");
       const ifs = edges.flatMap((d) => (d.unreachableSince ? [] : d.interfaces.filter((f) => f.uplink)));
       const measured = ifs.filter((f) => f.in.length || f.out.length);
-      if (!measured.length) return edges.some((d) => d.unreachableSince) ? 0 : null;
-      return measured.reduce((a, f) => a + (f.oper.startsWith("up") ? (f.in[f.in.length - 1] ?? 0) + (f.out[f.out.length - 1] ?? 0) : 0), 0);
+      if (!measured.length) return edges.some((d) => d.unreachableSince) ? { total: 0, in: 0, out: 0 } : null;
+      const last = (xs: number[]) => xs[xs.length - 1] ?? 0;
+      const up = measured.filter((f) => f.oper.startsWith("up"));
+      const inn = up.reduce((a, f) => a + last(f.in), 0), out = up.reduce((a, f) => a + last(f.out), 0);
+      return { total: inn + out, in: inn, out };
     };
     const hubLinks = infos.filter((i) => i.site.hub && placed.has(i.code) && placed.has(i.site.hub)).map((i) => ({
       id: `wan:${i.code}`, a: i.code, b: i.site.hub!, verdict: i.site.wanVerdict ?? (i.causeLayer === "Carrier" ? i.verdict : "Healthy"),
-      bps: i.circuits.length && i.circuits.every((c) => c.status === "down") ? 0 : trafficOf(i),
+      ...(() => {
+        const t = i.circuits.length && i.circuits.every((c) => c.status === "down") ? { total: 0, in: 0, out: 0 } : trafficOf(i);
+        return { bps: t?.total ?? null, bpsIn: t?.in ?? null, bpsOut: t?.out ?? null };
+      })(),
     }));
     // links the devices themselves report (CDP/LLDP): a cable between two sites is real communication,
     // measured on the port it leaves from
