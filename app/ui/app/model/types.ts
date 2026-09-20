@@ -67,6 +67,11 @@ export interface SiteTraffic {
 export interface FlowMap {
   windowMs: number;
   exporters: { ip: string; device: string | null; site: string | null; flows5m: number | null; usual5m: number | null; falling: boolean }[];
+  /**
+   * Bytes per five minutes over the last hour, per exporter: the bandwidth over time every flow tool
+   * opens with. From the same query that watches the exporters, so it costs nothing more.
+   */
+  rate?: { start: number; stepMs: number; exporters: { ip: string; device: string | null; bytes: (number | null)[] }[] };
   /** traffic between two sites, both ends attributed */
   pairs: { a: string; b: string; bytes: number; flows: number }[];
   sites: Record<string, SiteTraffic>;

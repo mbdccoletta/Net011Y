@@ -115,6 +115,19 @@ export function buildFlowMap(L: (k: string) => Rec[], devices: Device[], address
   }
 
   // exporters: flows in the last complete five minutes against the hour before
+  // bytes per bucket, for the bandwidth over time; the window comes from the answer, not from the clock
+  const tsRows = L("flowTs");
+  const first = tsRows[0];
+  const start = first ? Date.parse(String((first.timeframe as { start?: string } | undefined)?.start ?? "").replace(/(\.\d{3})\d*Z$/, "$1Z")) : NaN;
+  const stepMs = first ? Number(first.interval) / 1e6 : NaN;
+  const rate = Number.isFinite(start) && Number.isFinite(stepMs) ? {
+    start, stepMs,
+    exporters: tsRows.map((r) => ({
+      ip: String(r.exp ?? ""), device: devByIp.get(String(r.exp ?? ""))?.name ?? null,
+      bytes: (Array.isArray(r.bytes) ? r.bytes : []).map((v: unknown) => (v == null ? null : Number(v))) as (number | null)[],
+    })).filter((e) => e.bytes.some((v) => v != null)),
+  } : undefined;
+
   const exporters = L("flowTs").map((r) => {
     const xs = (Array.isArray(r.flows) ? r.flows : []).map((v: unknown) => (v == null ? null : Number(v))) as (number | null)[];
     const last = xs.length - 2;
@@ -126,7 +139,7 @@ export function buildFlowMap(L: (k: string) => Rec[], devices: Device[], address
   });
 
   return {
-    windowMs: 3600000, exporters, pairs: [...pairs.values()].sort((x, y) => y.bytes - x.bytes), sites, unattributed,
+    windowMs: 3600000, exporters, rate, pairs: [...pairs.values()].sort((x, y) => y.bytes - x.bytes), sites, unattributed,
     subnetsKnown: addressing.known, subnetsTagged: addressing.tagged,
     sources: { netflow: { exporters: new Set(conversations.map((c) => c.via)).size, bytes: conversations.reduce((a, c) => a + c.bytes, 0) } },
     conversations,

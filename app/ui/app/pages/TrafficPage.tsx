@@ -8,6 +8,7 @@ import { environmentFindings } from "../model/traffic";
 import { JourneyChart, JOURNEY_LEGEND, type JourneyPick } from "../components/JourneyChart";
 import { RouteStrip } from "../components/RouteStrip";
 import { PathQualityTile } from "../components/Traffic";
+import { TrafficRate } from "../components/TrafficRate";
 import { Tile, TONE } from "../components/Visual";
 import { PageEmpty } from "../components/PageEmpty";
 import { AssistPanel } from "../components/AssistPanel";
@@ -65,6 +66,9 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
     kind === "site" ? nameOf(code) : kind === "internet" ? `Internet · ${net}/24` : label;
   const s = f?.sources ?? {};
 
+  // the table lists every conversation, heaviest first; a click on the drawing filters it
+  const listed = pick ? selected : [...J.scope].sort((a, b) => b.bytes - a.bytes);
+
   return (
     <div className="lm vz vz-body tr">
       <div className="tr-bar">
@@ -85,7 +89,11 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
         </label>
       </div>
 
-      {f && <Tile tone={TONE.cyan} title="Traffic journey · last hour" right={strip ? "every path, heaviest first" : "from · through · to — band width is bytes"}>
+      {f?.rate && <Tile tone={TONE.cyan} title="Bandwidth · last hour" right="bits per second, five-minute buckets, per exporter">
+        <TrafficRate rate={f.rate} />
+      </Tile>}
+
+      {f && <Tile tone={TONE.cyan} title="Who talks to whom · last hour" right={strip ? "every path, heaviest first" : "from · through · to — band width is bytes"}>
         <div className="tr-chart" ref={ref}>
           {!J.nodes.length ? <p className="tr-none">No traffic through {nameOf(site)} in the last hour.</p>
             : strip ? <RouteStrip nodes={J.nodes} routes={J.routes} pick={pick} onPick={setPick} alerting={alerting} />
@@ -102,12 +110,13 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
         </p>
       </Tile>}
 
-      {pick && (
-        <Tile title={pick.kind === "node" ? nodeOf(pick.id)?.label ?? "Selection" : `${nodeOf(pick.from)?.label ?? "?"} → ${nodeOf(pick.to)?.label ?? "?"}`}
-          right={`${fmtBytes(selected.reduce((a, c) => a + c.bytes, 0))} · ${fmtInt(selected.length)} groups`}>
+      {f && J.scope.length > 0 && (
+        <Tile title={pick ? (pick.kind === "node" ? nodeOf(pick.id)?.label ?? "Selection" : `${nodeOf(pick.from)?.label ?? "?"} → ${nodeOf(pick.to)?.label ?? "?"}`) : "Top conversations · last hour"}
+          right={`${fmtBytes(listed.reduce((a, c) => a + c.bytes, 0))} · ${fmtInt(listed.length)} groups${pick ? "" : " · heaviest first"}`}>
+          {pick && <div className="tr-picked"><button type="button" className="tf-link" onClick={() => setPick(null)}>Show every conversation</button></div>}
           <div className="tr-table" role="table">
                 <div className="tr-row tr-head" role="row"><span>From</span><span>Through</span><span>To</span><span>Application</span><span>Volume</span><span>Flows</span></div>
-                {selected.slice(0, 12).map((c, i) => (
+                {listed.slice(0, 12).map((c, i) => (
                   <div key={i} className="tr-row" role="row">
                     <span>{c.fromKind === "site" ? <button type="button" className="tf-link" onClick={() => onSite(c.fromSite!)}>{nameOf(c.fromSite)}</button> : endLabel(c.fromKind, c.fromLabel, c.fromSite, c.s24)}</span>
                     <span>{c.viaName}</span>

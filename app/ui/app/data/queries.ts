@@ -161,9 +161,9 @@ export const QUERIES: Record<string, NetQuery> = {
     maxResultRecords: 2000,
   },
   flowTs: {
-    query: 'fetch logs, from:now()-70m | filter otel.scope.name == "otelcol/netflowreceiver" | makeTimeseries flows=count(), by:{exp=flow.sampler_address}, interval:5m',
+    query: 'fetch logs, from:now()-70m | filter otel.scope.name == "otelcol/netflowreceiver" | makeTimeseries flows=count(), bytes=sum(toLong(flow.io.bytes)), by:{exp=flow.sampler_address}, interval:5m',
     maxResultRecords: 500,
-    incremental: { kind: "series", windowMs: 70 * 60e3, stepMs: 5 * 60e3, fields: ["flows"], keys: ["exp"] },
+    incremental: { kind: "series", windowMs: 70 * 60e3, stepMs: 5 * 60e3, fields: ["flows", "bytes"], keys: ["exp"] },
   },
   // who talks to whom: the last hour of NetFlow by exporter and /24 at each end, heaviest first
   flowNets: {

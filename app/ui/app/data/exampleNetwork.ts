@@ -483,6 +483,18 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
         { exp: core.ip, s24: net24(d.ip), d24: "10.0.60.0", proto: "tcp", dport: "1433", bytes: 2e8 + i * 1e7, flows: 900 + i * 10 },
         { exp: core.ip, s24: net24(d.ip), d24: "10.1.0.0", proto: "tcp", dport: "445", bytes: 6e7 + i * 2e6, flows: 300 + i * 4 },
       ]),
+      // the same five-minute series the exporters send, for the bandwidth over the hour
+      flowTs: [core, devices.find((d) => d.site === "CPS1" && d.role === "core")].filter(Boolean).map((d, k) => {
+        const step = 5 * 60e3, n = 15, from = Math.floor((t0 - (n - 1) * step) / step) * step;
+        const base = k === 0 ? 5.2e9 : 1.1e9;
+        return {
+          exp: d!.ip,
+          flows: Array.from({ length: n }, (_, i) => Math.round((3800 - k * 2400) * uni(0.9, 1.1) * (i === n - 1 ? 0.4 : 1))),
+          bytes: Array.from({ length: n }, (_, i) => Math.round(base * uni(0.82, 1.15) * (i > 9 ? 1.18 : 1) * (i === n - 1 ? 0.4 : 1))),
+          timeframe: { start: new Date(from).toISOString(), end: new Date(from + n * step).toISOString() },
+          interval: String(step * 1e6),
+        };
+      }),
     };
     const addressing = buildAddressing(DCS.map((dc, k) => ({ site: dc.code, cidr: `10.${k}.0.0/16` })), devices.map((d) => ({ site: d.site, ips: [d.ip] })));
     return buildFlowMap((k) => (rows[k] ?? []) as Record<string, any>[], devices, addressing, sites);
