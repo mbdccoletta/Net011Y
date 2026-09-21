@@ -423,6 +423,9 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     if (dname) addIface(dname, sid, node.name, num(node.speed), [], []);
   }
 
+  // a device whose Smartscape node carries no interface_count still has the ports the app read
+  devices.forEach((d) => { if (d.interfaces.length > d.ifCount) d.ifCount = d.interfaces.length; });
+
   // ---------- VLANs: the extension's VLAN table, then the VLAN interfaces a device carries ----------
   for (const row of L("vlans")) {
     const d = devFor(row);
@@ -608,15 +611,20 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     const d = devFor(row);
     if (!d) continue;
     const cur = d.ifStats ?? { maxUtil: null, interfaces: 0, errors: 0, discards: 0 };
-    const util = num(row.maxUtil);
-    d.ifStats = { ...cur, maxUtil: util == null ? cur.maxUtil : Math.max(cur.maxUtil ?? 0, util), interfaces: Math.max(cur.interfaces, num(row.interfaces) ?? 0) };
+    // a port whose counters exceed the speed it reports (a wrapped counter, or an ifSpeed the device gets
+    // wrong) is marked "above speed" in its own row, and the same reading must not become the device's
+    // utilisation: the summary would claim 213 % while the port table calls it inconsistent
+    const raw = num(row.maxUtil);
+    const util = raw != null && raw > 100 ? null : raw;
+    const over = raw != null && raw > 100 ? (cur.overSpeed ?? 0) + 1 : cur.overSpeed;
+    d.ifStats = { ...cur, maxUtil: util == null ? cur.maxUtil : Math.max(cur.maxUtil ?? 0, util), interfaces: Math.max(cur.interfaces, num(row.interfaces) ?? 0), ...(over ? { overSpeed: over } : {}) };
   }
   const errDone = new Set<string>();
   for (const row of LF("errSummary")) {
     const d = devFor(row);
     if (!d || errDone.has(d.name)) continue;
     errDone.add(d.name);
-    d.ifStats = { maxUtil: d.ifStats?.maxUtil ?? null, interfaces: d.ifStats?.interfaces ?? 0, errors: num(row.errors) ?? 0, discards: num(row.discards) ?? 0 };
+    d.ifStats = { maxUtil: d.ifStats?.maxUtil ?? null, interfaces: d.ifStats?.interfaces ?? 0, errors: num(row.errors) ?? 0, discards: num(row.discards) ?? 0, ...(d.ifStats?.overSpeed ? { overSpeed: d.ifStats.overSpeed } : {}) };
   }
 
   // ---------- open Davis problems per device and per WAN circuit ----------

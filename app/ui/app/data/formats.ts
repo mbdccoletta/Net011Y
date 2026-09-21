@@ -93,9 +93,13 @@ const BUILD: Record<Measure, (f: Family) => string | null> = {
     return `timeseries {${parts.map(([n, m]) => `${n} = sum(${mk(f, m)})`).join(", ")}}, by:{${port(f)}}, from:now()-2h, interval:5m`
       + ` | fieldsAdd ${parts.map(([n]) => `${n} = arraySum(${n})`).join(", ")} | fieldsRemove timeframe, interval | ${tag(f)}`;
   },
-  // busiest port and port count per device: the only interface data read in a large estate
+  // Busiest port and port count per device: the only interface data read in a large estate, so it has to
+  // measure the same thing the per-port series measures. The counters are deltas per poll: the bucket's
+  // bytes are their sum, and bits per second is that sum over the bucket. Taking the largest single delta
+  // instead (what this query did until 0.1.17) divides one poll by the whole bucket and understates the
+  // utilisation by as many polls as the bucket holds — five-fold at a one-minute poll.
   ifSummary: (f) => f.ifIn && f.ifOut
-    ? `timeseries {i = max(${mk(f, f.ifIn)}), o = max(${mk(f, f.ifOut)})${f.ifSpeedMetric ? `, s = avg(${mk(f, f.ifSpeedMetric)})` : ""}}, by:{${port(f)}}, from:now()-2h, interval:5m`
+    ? `timeseries {i = sum(${mk(f, f.ifIn)}), o = sum(${mk(f, f.ifOut)})${f.ifSpeedMetric ? `, s = avg(${mk(f, f.ifSpeedMetric)})` : ""}}, by:{${port(f)}}, from:now()-2h, interval:5m`
       + ` | fieldsAdd peak = arrayMax(arrayConcat(i, o)), speed = ${f.ifSpeedMetric ? "arrayAvg(s)" : f.ifDims.includes("if.speed") ? "toDouble(if.speed)" : "0.0"}`
       + ` | fieldsAdd util = if(speed > 0, peak * 8 / 300 / (speed * 1000000) * 100, else: 0.0)`
       + ` | summarize maxUtil = round(max(util), decimals: 2), interfaces = count(), by:{${dev(f)}} | ${tag(f)}` : null,

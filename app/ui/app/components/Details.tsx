@@ -121,7 +121,7 @@ export function DeviceDetails({ model, device, onDevice }: { model: NetworkModel
           <dt>Interfaces</dt>
           <dd>{ports.loading ? "loading the ports of this device…"
             : all.length ? `${all.filter((i) => i.oper.startsWith("up")).length} up of ${all.length}${ports.fromModel ? "" : " · fetched for this device"}`
-            : device.ifStats ? `${device.ifStats.interfaces} ports · max ${fmtNum(device.ifStats.maxUtil ?? 0)}% utilization` : "—"}</dd>
+            : device.ifStats ? `${device.ifStats.interfaces} ports · ${device.ifStats.maxUtil == null ? "utilization not readable" : `max ${fmtNum(device.ifStats.maxUtil)}% utilization`}${device.ifStats.overSpeed ? ` · ${device.ifStats.overSpeed} above their own speed` : ""}` : "—"}</dd>
         </dl>
       )}
 

@@ -428,6 +428,16 @@ if (convs.length) {
     `this estate: ${j.routes.length} paths, heaviest ${Math.round((100 * j.routes[0].bytes) / bytesOut)}% → ${asRoutes(j) ? "paths" : "flow"}`);
 }
 
+// the per-device summary is the only interface data a large estate reads: it has to measure what the
+// per-port series measures, or a saturated link reads as a quiet one
+const bothKnown = model.devices.filter((d) => d.ifStats?.maxUtil != null && d.interfaces.some((i) => i.util != null && i.util <= 100));
+check("The device summary and its own ports agree on utilisation",
+  bothKnown.length > 0 && bothKnown.every((d) => {
+    const ports = Math.max(...d.interfaces.filter((i) => i.util != null && i.util <= 100).map((i) => i.util));
+    return Math.abs(ports - d.ifStats.maxUtil) <= Math.max(1, ports * 0.05);
+  }),
+  bothKnown.slice(0, 3).map((d) => `${d.name}: summary ${d.ifStats.maxUtil}% vs ports ${Math.max(...d.interfaces.filter((i) => i.util != null && i.util <= 100).map((i) => i.util))}%`).join(" · ") || "no device with both");
+
 // ---------------- a hook after a conditional return breaks the page at runtime ----------------
 const badHooks = hooksAfterReturn();
 check("No component calls a hook after an early return",

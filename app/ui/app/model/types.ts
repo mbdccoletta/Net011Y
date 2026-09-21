@@ -217,7 +217,8 @@ export interface Device {
   /** Per-device interface summary, used when the estate is too large to fetch every port */
   /** when sysUpTime last stepped down in the last 24 h: the device restarted */
   rebootedAt?: string;
-  ifStats?: { maxUtil: number | null; interfaces: number; errors: number; discards: number };
+  /** what the per-device summaries say; overSpeed counts ports whose counters exceed their own speed */
+  ifStats?: { maxUtil: number | null; interfaces: number; errors: number; discards: number; overSpeed?: number };
   reasons: Reason[];
   verdict: Verdict;
   impact: number;

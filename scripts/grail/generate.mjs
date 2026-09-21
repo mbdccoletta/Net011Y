@@ -186,6 +186,26 @@ for (const d of devices) {
 // the app reads every extension family through one query per measure (formats.ts): answer the same way
 const FAM = { trCisco: "cisco", trJuniper: "juniper", trGeneric: "generic", errCisco: "cisco", errJuniper: "juniper", errGeneric: "generic" };
 results.ifTraffic = ["trCisco", "trJuniper", "trGeneric"].flatMap((k) => results[k].map((r) => ({ ...r, family: FAM[k] })));
+// the per-device summary, exactly as Grail computes it from the same series: the bucket's bytes are the
+// sum of the deltas in it, and its utilisation is that sum over the bucket
+const byDevFam = new Map();
+results.ifTraffic.filter((r) => r["dt.smartscape.ext_network_device"]).forEach((r) => {
+  const k = `${r["dt.smartscape.ext_network_device"]}|${r.family}`;
+  const l = byDevFam.get(k); if (l) l.push(r); else byDevFam.set(k, [r]);
+});
+results.ifSummary = [...byDevFam].map(([k, rs]) => {
+  // the families carry the speed either as a dimension or as their own metric, and a device that went
+  // quiet reports nulls: the app reads the last value it actually has, and so does this
+  const lastOf = (xs) => { const v = (xs ?? []).filter((x) => x != null).map(Number); return v.length ? v[v.length - 1] : 0; };
+  const speedOf = (r) => Number(r["if.speed"] ?? lastOf(r.s));
+  const utils = rs.map((r) => {
+    const vals = [...(r.i ?? []), ...(r.o ?? [])].filter((x) => x != null).map(Number);
+    const sp = speedOf(r);
+    return vals.length && sp > 0 ? (Math.max(...vals) * 8) / 300 / (sp * 1e6) * 100 : 0;
+  });
+  const [id, family] = k.split("|");
+  return { "dt.smartscape.ext_network_device": id, maxUtil: Math.round(Math.max(0, ...utils) * 100) / 100, interfaces: S(rs.length), family };
+});
 results.ifErrors = ["errCisco", "errJuniper", "errGeneric"].flatMap((k) => results[k].map((r) => ({ ...r, family: FAM[k] })));
 Object.keys(FAM).forEach((k) => delete results[k]);
 results.cpu = results.cpu.map((r) => ({ ...r, family: "network_device" }));
