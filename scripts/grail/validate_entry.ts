@@ -2,7 +2,7 @@ export { buildRealModel } from "../../app/ui/app/data/buildRealModel";
 export { evaluateNeeds, VIEW_NEEDS } from "../../app/ui/app/data/requirements";
 export { allSites } from "../../app/ui/app/model/site";
 export { buildCauses } from "../../app/ui/app/model/causes";
-export { isBad } from "../../app/ui/app/model/verdict";
+export { isBad, appVerdict } from "../../app/ui/app/model/verdict";
 export { suspicionFor, outsideCounts, trafficDrop, DEFAULT_DROP_PCT, appRise } from "../../app/ui/app/model/suspicion";
 export { environmentFindings, portUsers, busyPortFindings, pathFindings } from "../../app/ui/app/model/traffic";
 export * as Prompts from "../../app/ui/app/utils/prompts";

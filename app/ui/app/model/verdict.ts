@@ -82,6 +82,10 @@ export function appVerdict(a: AppExperience): [Verdict, Reason[]] {
   // No thresholds here either: the only statement the data makes by itself is that the site stopped
   // sending sessions. Slowness and errors are numbers the screens show; alerting on them is Davis's job.
   if (!a.sessions) {
+    // a site that used to send sessions and stopped is a statement; one that never sent any is simply
+    // not measured, and colouring it red would invent a fault where there is only missing data
+    // not through fold(), which reads anything short of a warning as healthy
+    if (!a.baselineSessions) return ["Not monitored", [{ level: "Not monitored", text: "No sessions reported for this site" }]];
     return fold([{ level: "Critical", text: "No sessions from the site in the last hour" }]);
   }
   return ["Healthy", []];

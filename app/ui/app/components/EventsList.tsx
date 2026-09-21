@@ -1,7 +1,7 @@
 import React from "react";
 import { Button } from "@dynatrace/strato-components/buttons";
 import type { Device, NetEvent } from "../model/types";
-import { hhmm } from "../utils/format";
+import { fmtInt, hhmm } from "../utils/format";
 
 interface Props {
   devices: Device[];
@@ -15,7 +15,20 @@ export function EventsList({ devices, limit = 80, onDevice }: Props) {
     .flatMap((d) => d.events.map((e) => ({ e, device: d.name })))
     .sort((a, b) => b.e.t.localeCompare(a.e.t))
     .slice(0, limit);
-  if (!events.length) return <p className="np-muted">No syslog messages or traps in the last 3 hours.</p>;
+  if (!events.length) {
+    // "nothing arrived" and "this device's lines are not among the ones read" are different statements,
+    // and saying the first when the second is true contradicts the counters drawn right above: the text
+    // comes from the newest lines of the whole environment, the counts from a per-device series.
+    const sys = devices.reduce((a, d) => a + d.syslog.ERROR + d.syslog.WARN + d.syslog.INFO, 0);
+    const traps = devices.reduce((a, d) => a + d.traps, 0);
+    return (
+      <p className="np-muted">
+        {sys + traps > 0
+          ? `No lines from ${devices.length === 1 ? "this device" : "these devices"} among the newest read for the environment (last 3 hours). ${devices.length === 1 ? "Its" : "Their"} counters report ${fmtInt(sys)} syslog message${sys === 1 ? "" : "s"} and ${fmtInt(traps)} trap${traps === 1 ? "" : "s"} in the last 6 hours.`
+          : "No syslog messages or traps in the last 3 hours."}
+      </p>
+    );
+  }
   return (
     <ul className="np-events">
       {events.map(({ e, device }, k) => {

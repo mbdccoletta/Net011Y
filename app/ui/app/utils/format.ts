@@ -43,3 +43,7 @@ export function onActivate(fn: () => void) {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); }
   };
 }
+
+/** A percent sign hugs its number, a word unit is spaced from it; either way the unit is always drawn,
+ * because a bare "0.4" on the path was read as seconds where it meant milliseconds. */
+export const unitOf = (u?: string) => (!u ? "" : u === "%" ? u : ` ${u}`);

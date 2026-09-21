@@ -54,7 +54,9 @@ function Marker({ verdict }: { verdict: Verdict }) {
 }
 
 function causeMeta(c: Cause) {
+  // the row truncates the title first, so the hover has to carry it
   return [
+    c.title,
     c.subtitle,
     c.impact.offline ? `${c.impact.offline} offline` : null,
     c.since ? `since ${clock(parseTs(c.since))}` : null,

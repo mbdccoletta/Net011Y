@@ -6,7 +6,7 @@ import { ExternalLinkIcon } from "@dynatrace/strato-icons";
 import type { Circuit, Device, E2EPath, Iface, NetworkModel } from "../model/types";
 import { ownsPath, ROLE_LABEL, type SiteInfo } from "../model/site";
 import { isBad, ORDER, T } from "../model/verdict";
-import { fmtInt, fmtNum, hhmm } from "../utils/format";
+import { fmtInt, fmtNum, hhmm, unitOf } from "../utils/format";
 import { deviceContext, isolationContext, siteContext } from "../utils/assist";
 import { deviceQuestions, isolationQuestions, siteQuestions } from "../utils/prompts";
 import { NativeDrill } from "./NativeDrill";
@@ -64,8 +64,12 @@ function Trail({ path, selected, onSelect }: { path: E2EPath; selected: number |
         })}
         {path.hops.map((h, i) => {
           const cause = i === path.summary.firstBad, cons = false;
-          const v = h.headline.value == null || h.headline.value === "—" ? "—" : `${typeof h.headline.value === "number" ? fmtNum(h.headline.value, 1) : h.headline.value}${h.headline.unit === "%" || h.headline.unit === "s" ? h.headline.unit : ""}`;
-          const tone = verdictTone(h.verdict);
+          // the unit belongs to the number: "0.4" on its own was read as seconds, a hundred times the
+          // round trip it actually is. Long readings drop a size so "0.4 ms" still fits the circle.
+          const none = h.headline.value == null || h.headline.value === "—";
+          const v = none ? "—" : `${typeof h.headline.value === "number" ? fmtNum(h.headline.value, 1) : h.headline.value}${unitOf(h.headline.unit)}`;
+          const tip = `${h.layer} · ${h.title}: ${none ? `no ${h.headline.label.toLowerCase()} measured` : `${v} ${h.headline.label}`} · ${h.verdict}${cause ? " · probable cause" : ""}`;
+          const tone = none && !isBad(h.verdict) ? "var(--lm-neutral)" : verdictTone(h.verdict);
           return (
             <g key={`${h.layer}-${i}`} className="vz-trail__hop" role="button" tabIndex={0} aria-pressed={selected === i}
               aria-label={`${h.layer}: ${h.verdict}${cause ? ", probable cause" : cons ? ", consequence" : ""}`}
@@ -73,7 +77,8 @@ function Trail({ path, selected, onSelect }: { path: E2EPath; selected: number |
               {selected === i && <circle cx={x(i)} cy={Y} r={(cause ? R + 6 : R) + 6} fill="none" stroke="var(--lm-ink-hi)" strokeWidth={1.5} />}
               <circle cx={x(i)} cy={Y} r={cause ? R + 6 : R} fill="none"
                 stroke={tone} strokeWidth={cause ? 3 : 2.5} strokeDasharray={cons ? "4 3" : undefined} filter={cause ? "url(#vz-glow)" : undefined} />
-              <text x={x(i)} y={Y + 5} textAnchor="middle" className="vz-trail__val">{v}</text>
+              <title>{tip}</title>
+              <text x={x(i)} y={Y + 5} textAnchor="middle" className="vz-trail__val" style={v.length > 5 ? { fontSize: 13 } : undefined}>{v}</text>
               <text x={x(i)} y={Y + 48} textAnchor="middle" className="vz-svg-label" fill={cause ? "var(--lm-bad)" : undefined}>{h.layer.toUpperCase()}</text>
               {(cause || cons) && <text x={x(i)} y={Y + 63} textAnchor="middle" className="vz-svg-cap" fill={cause ? "var(--lm-bad)" : "var(--lm-warn)"}>{cause ? "probable cause" : "consequence"}</text>}
             </g>

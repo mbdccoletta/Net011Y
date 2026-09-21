@@ -18,7 +18,8 @@ export function DevicesTable({ model, devices, showSite, compact, onSelect }: { 
   const columns = useMemo<DataTableColumnDef<Device>[]>(() => compact ? [
     { id: "status", header: "Status", accessor: "verdict", width: 130, cell: ({ rowData }) => <Status verdict={rowData.verdict} /> },
     { id: "name", header: "Device", accessor: "name", width: "1fr", cell: ({ rowData }) => <span className="np-mono">{rowData.name}</span> },
-    { id: "reason", header: "Main reason", accessor: (d: Device) => d.reasons[0]?.text ?? "Within expected range", width: "1.2fr" },
+    { id: "reason", header: "Main reason", accessor: (d: Device) => d.reasons[0]?.text ?? "Within expected range", width: "1.2fr",
+      cell: ({ rowData }) => <span title={rowData.reasons[0]?.text ?? "Within expected range"}>{rowData.reasons[0]?.text ?? "Within expected range"}</span> },
   ] : [
     { id: "status", header: "Status", accessor: "verdict", width: 140, cell: ({ rowData }) => <Status verdict={rowData.verdict} /> },
     { id: "name", header: "Device", accessor: "name", width: "1fr", cell: ({ rowData }) => <span className="np-mono">{rowData.name}</span> },
@@ -29,7 +30,7 @@ export function DevicesTable({ model, devices, showSite, compact, onSelect }: { 
     { id: "rtt", header: "ICMP RTT", accessor: (d: Device) => d.icmp?.rttMs ?? -1, width: 100, alignment: "right", cell: ({ rowData }) => <span className="np-mono">{rowData.icmp?.rttMs != null ? `${fmtNum(rowData.icmp.rttMs)} ms` : "—"}</span> },
     { id: "loss", header: "Loss", accessor: (d: Device) => d.icmp?.loss ?? -1, width: 80, alignment: "right", cell: ({ rowData }) => <span className="np-mono">{rowData.icmp?.loss != null ? `${fmtNum(rowData.icmp.loss)}%` : "—"}</span> },
     { id: "reason", header: "Main reason", accessor: (d: Device) => d.reasons[0]?.text ?? "Within expected range", width: "2fr",
-      cell: ({ rowData }) => <span>{rowData.reasons[0]?.text ?? "Within expected range"} <Incident id={rowData.incident} /></span> },
+      cell: ({ rowData }) => <span title={rowData.reasons[0]?.text ?? "Within expected range"}>{rowData.reasons[0]?.text ?? "Within expected range"} <Incident id={rowData.incident} /></span> },
   ], [model, showSite, compact]);
   return (
     <DataTable data={data} columns={columns} sortable fullWidth interactiveRows

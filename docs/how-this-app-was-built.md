@@ -202,6 +202,8 @@ own model code then runs over it, and the checks assert what the app promises:
 - a log query read in two parts equals the query read whole, nulls included;
 - what changed in the last day is what the fixtures say changed, at the moment they say it;
 - the map's grouping loses no site, and nothing overlaps;
+- what was never measured is not judged: a site that never reported a session reads as not monitored,
+  one that stopped reporting reads as a fault;
 - no component calls a hook after an early return.
 
 Alongside it: a script that runs the same catalogue against a live environment and asserts invariants that

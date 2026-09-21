@@ -1,7 +1,7 @@
 // Feeds the generated Grail results through the app's own model code and reports what every view gets.
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, mergeRows, buildJourney, asRoutes, nextSteps, coverage } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, mergeRows, buildJourney, asRoutes, nextSteps, coverage } from "./out/app-model.mjs";
 
 const R = JSON.parse(readFileSync("out/results.json", "utf8"));
 const report = { schema: {}, needs: {}, views: {}, checks: [] };
@@ -451,6 +451,15 @@ check("The bucket recommendation carries this environment's own numbers",
 check("The share of the app in use is not moved by a cost step",
   coverage(nextSteps(model, needs, { all: true, cost: { logGb: 138, networkShare: 0.0002 } }).filter((s) => s.id !== "bucket"))
   === coverage(nextSteps(model, needs, { all: true }).filter((s) => s.id !== "bucket")));
+
+// ---------------- nothing measured is not the same as nothing wrong ----------------
+// A site the environment never reported a session for was drawn red with a dash where the number goes,
+// which reads as an outage at a site that is simply not covered by end-user monitoring.
+const app = (extra) => ({ name: "x", sessions: 0, p90Ms: null, errPct: null, consequenceOf: null, transactions: [], ...extra });
+const never = appVerdict(app({}));
+const stopped = appVerdict(app({ baselineSessions: 400 }));
+check("A site that never reported sessions is not judged, one that stopped is",
+  never[0] === "Not monitored" && stopped[0] === "Critical", `${never[0]} · ${stopped[0]}`);
 
 // ---------------- a hook after a conditional return breaks the page at runtime ----------------
 const badHooks = hooksAfterReturn();

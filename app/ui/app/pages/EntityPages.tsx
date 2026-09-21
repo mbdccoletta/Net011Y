@@ -153,7 +153,7 @@ export function DevicesPage({ model, filters, onFilters, selected, onSelect }: P
     { id: "rtt", header: "ICMP RTT", accessor: (d) => d.icmp?.rttMs ?? -1, width: 100, alignment: "right",
       cell: ({ rowData }) => <span className="np-mono">{rowData.icmp?.rttMs != null ? `${fmtNum(rowData.icmp.rttMs)} ms` : "—"}</span> },
     { id: "reason", header: "Main reason", accessor: (d) => d.reasons[0]?.text ?? "", width: "2fr",
-      cell: ({ rowData }) => <span>{rowData.reasons[0]?.text ?? <span className="np-muted">Within expected range</span>} <Incident id={rowData.incident} /></span> },
+      cell: ({ rowData }) => <span title={rowData.reasons[0]?.text ?? "Within expected range"}>{rowData.reasons[0]?.text ?? <span className="np-muted">Within expected range</span>} <Incident id={rowData.incident} /></span> },
   ], [model]);
 
   const active = selected?.startsWith("device:") ? data.findIndex((d) => d.name === selected.slice(7)) : -1;

@@ -37,12 +37,12 @@ export function SiteTrafficTile({ model, code, onSite }: { model: NetworkModel; 
       </div>
       <div className="tf-cols">
         <div>
-          <div className="tf-sub">Talks to</div>
+          <div className="tf-sub">Talks to<small>total · sent ↑ · received ↓</small></div>
           {t.peers.slice(0, 5).map((p) => (
             <div key={p.name} className="tf-row">
               {p.kind === "site" && p.site
-                ? <button type="button" className="tf-name tf-link" onClick={() => onSite(p.site!)}>{nameOf(p.site)}</button>
-                : <span className="tf-name" title={p.kind === "private" ? "private range no site claims" : undefined}>{p.name}</span>}
+                ? <button type="button" className="tf-name tf-link" title={nameOf(p.site)} onClick={() => onSite(p.site!)}>{nameOf(p.site)}</button>
+                : <span className="tf-name" title={p.kind === "private" ? `${p.name} · private range no site claims` : p.name}>{p.name}</span>}
               <span className="tf-val" title={p.sent != null || p.received != null ? `${fmtBytes(p.sent ?? 0)} sent · ${fmtBytes(p.received ?? 0)} received` : undefined}>
                 {fmtBytes(p.bytes)}
                 {(p.sent ?? 0) > 0 && (p.received ?? 0) > 0 && <small className="tf-dir">{fmtBytes(p.sent!)}↑ {fmtBytes(p.received!)}↓</small>}
@@ -54,7 +54,7 @@ export function SiteTrafficTile({ model, code, onSite }: { model: NetworkModel; 
           <div className="tf-sub">Applications</div>
           {t.apps.slice(0, 5).map((a) => (
             <div key={`${a.proto}/${a.port}`} className="tf-row">
-              <span className="tf-name" title={`${a.proto}/${a.port}`}>{a.name ?? `${a.proto}/${a.port}`}</span>
+              <span className="tf-name" title={a.name ? `${a.name} · ${a.proto}/${a.port}` : `${a.proto}/${a.port}`}>{a.name ?? `${a.proto}/${a.port}`}</span>
               <span className="tf-val">{fmtBytes(a.bytes)}</span>
             </div>
           ))}

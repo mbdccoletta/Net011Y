@@ -54,7 +54,7 @@ export function ChangesPanel({ model, onDevice, onSite }: { model: NetworkModel;
             <li key={id}>
               {newDay && <span className="lm-chg__day">{dayOf(c.t) === today ? "Today" : "Yesterday"}</span>}
               <button type="button" className={`lm-chg__row${c.members ? " is-group" : ""}${isOpen ? " is-open" : ""}`} style={{ "--c": TONE[c.kind] } as React.CSSProperties}
-                aria-expanded={c.members ? isOpen : undefined} title={CHANGE_LABEL[c.kind]}
+                aria-expanded={c.members ? isOpen : undefined} title={`${CHANGE_LABEL[c.kind]} · ${c.title}${c.detail ? ` · ${c.detail}` : ""}`}
                 onClick={() => (c.members ? setOpen(isOpen ? null : id) : go(c))}>
                 <time dateTime={c.t}>{hhmm(c.t)}</time>
                 <i aria-hidden="true">{GLYPH[c.kind]}</i>
@@ -65,7 +65,7 @@ export function ChangesPanel({ model, onDevice, onSite }: { model: NetworkModel;
                 <ul className="lm-chg__members">
                   {c.members.slice(0, 60).map((m) => (
                     <li key={`${m.device ?? m.site}|${m.t}`}>
-                      <button type="button" onClick={() => go(m)}><time dateTime={m.t}>{hhmm(m.t)}</time><span>{m.device ?? m.title}</span><small>{m.detail}</small></button>
+                      <button type="button" title={`${m.device ?? m.title}${m.detail ? ` · ${m.detail}` : ""}`} onClick={() => go(m)}><time dateTime={m.t}>{hhmm(m.t)}</time><span>{m.device ?? m.title}</span><small>{m.detail}</small></button>
                     </li>
                   ))}
                   {c.members.length > 60 && <li className="lm-chg__more">and {fmtInt(c.members.length - 60)} more</li>}

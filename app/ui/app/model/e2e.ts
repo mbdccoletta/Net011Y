@@ -33,7 +33,7 @@ export function deviceHop(devices: Device[], layer: string, title: string, site:
   let head: Hop["headline"];
   if (alerts) head = { value: alerts, unit: "", label: alerts > 1 ? "open alerts" : "open alert" };
   else if (st.unreachable) head = { value: st.unreachable, unit: "", label: "no response" };
-  else if (st.rttMax != null) head = { value: st.rttMax, unit: "ms", label: "max ICMP RTT" };
+  else if (st.rttMax != null) head = { value: st.rttMax, unit: "ms", label: "max ICMP round trip" };
   else if (st.cpuMax != null) head = { value: Math.round(st.cpuMax), unit: "%", label: "max CPU" };
   else if (st.availMin != null) head = { value: st.availMin, unit: "%", label: "min SNMP availability" };
   else if (st.utilMax != null) head = { value: st.utilMax, unit: "%", label: "max uplink" };
