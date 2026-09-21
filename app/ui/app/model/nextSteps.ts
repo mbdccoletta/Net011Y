@@ -19,7 +19,14 @@ export interface Step {
   progress?: number;
 }
 
-export function nextSteps(model: NetworkModel | null, needs: Record<NeedKey, Need>, { all = false }: { all?: boolean } = {}): Step[] {
+/** Dynatrace list price for a queried GiB of logs, events and sessions; a contract price may differ. */
+const PRICE_PER_GIB = 0.0035;
+
+export function nextSteps(
+  model: NetworkModel | null,
+  needs: Record<NeedKey, Need>,
+  { all = false, cost, bucketsSet = false }: { all?: boolean; cost?: { logGb: number; networkShare: number | null } | null; bucketsSet?: boolean } = {},
+): Step[] {
   if (!model || model.demo) return [];
   const steps: Step[] = [];
   const add = (s: Step) => steps.push(s);
@@ -92,13 +99,31 @@ export function nextSteps(model: NetworkModel | null, needs: Record<NeedKey, Nee
     title: "Send NetFlow / IPFIX through the OpenTelemetry Collector",
     unlocks: "the traffic journey, who talks to whom between sites, and who fills a busy port" });
 
+  // Cost, not coverage: the app shows the same either way. It earns a place here because a log query
+  // reads every record of its buckets in its window, so on a busy environment the network's few records
+  // are read at the price of all the others, every time somebody opens the app.
+  const share = cost?.networkShare ?? null;
+  if (cost && share != null && cost.logGb >= 0.5) {
+    const after = cost.logGb * share;
+    const usd = (gb: number) => (gb / 1.073741824) * PRICE_PER_GIB;
+    const pct = share >= 0.01 ? `${Math.round(share * 100)}%` : share >= 0.0001 ? `${(share * 100).toFixed(2)}%` : "< 0.01%";
+    const money = usd(cost.logGb - after) * 30;
+    add({ id: "bucket", need: "syslog", impact: 45, done: bucketsSet || share >= 0.5,
+      title: "Keep the network's logs in a bucket of their own",
+      unlocks: bucketsSet
+        ? "log queries read only the buckets named in Settings"
+        : share >= 0.5
+          ? `${pct} of what the log queries read is already the network's own records, so a bucket of its own would save little`
+          : `this load read ${cost.logGb.toFixed(1)} GB of logs, and the network's records are ${pct} of what those queries read: a log query reads every record of its buckets in its window. Routed to a bucket of their own, the same load reads about ${after < 0.01 ? "< 0.01" : after.toFixed(2)} GB${money >= 1 ? ` — around $${Math.round(money)} a month at list price, opened once a day` : ""}, and nothing the app shows changes` });
+  }
+
   add({ id: "demand", need: "sessions", impact: 20, done: !!u,
     title: "Count user sessions or service requests",
     unlocks: "whether a network fault reached the people using the applications" });
 
   // with no device yet, the steps that build on devices (sites, circuits, neighbours, syslog, traps, ranges)
   // wait for the first one: listing them now would only bury the one that matters
-  const onDevices = new Set(["alerting", "sites", "wan", "cidr", "neighbors", "syslog", "traps"]);
+  const onDevices = new Set(["alerting", "sites", "wan", "cidr", "neighbors", "syslog", "traps", "bucket"]);
   return steps.filter((s) => all || devs.length > 0 || !onDevices.has(s.id)).sort((a, b) => Number(a.done) - Number(b.done) || b.impact - a.impact);
 }
 

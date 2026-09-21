@@ -1,7 +1,7 @@
 // Feeds the generated Grail results through the app's own model code and reports what every view gets.
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, mergeRows, buildJourney, asRoutes } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, mergeRows, buildJourney, asRoutes, nextSteps, coverage } from "./out/app-model.mjs";
 
 const R = JSON.parse(readFileSync("out/results.json", "utf8"));
 const report = { schema: {}, needs: {}, views: {}, checks: [] };
@@ -437,6 +437,20 @@ check("The device summary and its own ports agree on utilisation",
     return Math.abs(ports - d.ifStats.maxUtil) <= Math.max(1, ports * 0.05);
   }),
   bothKnown.slice(0, 3).map((d) => `${d.name}: summary ${d.ifStats.maxUtil}% vs ports ${Math.max(...d.interfaces.filter((i) => i.util != null && i.util <= 100).map((i) => i.util))}%`).join(" · ") || "no device with both");
+
+// the bucket is a cost step, not a coverage one: it appears with the environment's own numbers, says
+// nothing to do when the logs are already the network's, and disappears once the buckets are named
+const bucketStep = (opts) => nextSteps(model, needs, opts).find((s) => s.id === "bucket");
+const busyBucket = bucketStep({ cost: { logGb: 138, networkShare: 0.0002 } });
+check("The bucket recommendation carries this environment's own numbers",
+  busyBucket && !busyBucket.done && /138.0 GB/.test(busyBucket.unlocks) && /0.02%/.test(busyBucket.unlocks)
+  && bucketStep({ cost: { logGb: 0.3, networkShare: 0.01 } }) === undefined
+  && bucketStep({ cost: { logGb: 138, networkShare: 0.0002 }, bucketsSet: true })?.done === true
+  && bucketStep({ cost: { logGb: 20, networkShare: 0.8 } })?.done === true,
+  busyBucket ? busyBucket.unlocks.slice(0, 120) : "missing");
+check("The share of the app in use is not moved by a cost step",
+  coverage(nextSteps(model, needs, { all: true, cost: { logGb: 138, networkShare: 0.0002 } }).filter((s) => s.id !== "bucket"))
+  === coverage(nextSteps(model, needs, { all: true }).filter((s) => s.id !== "bucket")));
 
 // ---------------- a hook after a conditional return breaks the page at runtime ----------------
 const badHooks = hooksAfterReturn();

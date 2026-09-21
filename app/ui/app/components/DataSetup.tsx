@@ -84,7 +84,10 @@ function LoadMeter({ cost, buckets, onHow }: { cost: LoadCost; buckets: string[]
         <div className="cs-save">
           <div className="cs-save__head">
             <span className="cs-save__pct">−{savedText(1 - share!)}</span>
-            <span>of the log reads, with the network&apos;s logs in a bucket of their own</span>
+            <span>of the log reads, with the network&apos;s logs in a bucket of their own{(() => {
+              const saved = (cost.logGb - bucketGb!) * 30;
+              return saved / 1.073741824 * PRICE_PER_GIB >= 1 ? ` · about ${usdText(saved)} a month at this rate` : "";
+            })()}</span>
           </div>
           <Text textStyle="small">
             Network records are {pctText(share!)} of the log records these queries read: a log query reads every record of its bucket in its

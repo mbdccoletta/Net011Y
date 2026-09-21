@@ -15,6 +15,7 @@ import { useNetwork } from "./data/useNetwork";
 import { useUrlState, type Page } from "./hooks/useUrlState";
 import { allSites } from "./model/site";
 import { EntityDetails } from "./components/EntityDetails";
+import { useLogBuckets } from "./hooks/useLogBucket";
 import { SearchPalette } from "./components/SearchPalette";
 import type { Filters } from "./pages/EntityPages";
 import { DevicesVisual, LinksVisual, SitesVisual } from "./pages/VisualPages";
@@ -66,8 +67,11 @@ export function App() {
   const infos = useMemo(() => (model ? allSites(model) : []), [model]);
   const needs = useMemo(() => evaluateNeeds(net.counts, model, url.source, net.absent), [JSON.stringify(net.counts), model, url.source, JSON.stringify(net.absent)]); // eslint-disable-line react-hooks/exhaustive-deps
   // what to do next to get more from the app, measured on this environment
-  const steps = useMemo(() => nextSteps(model, needs), [model, needs]);
-  const inUse = useMemo(() => coverage(nextSteps(model, needs, { all: true })), [model, needs]);
+  const buckets = useLogBuckets();
+  const stepOpts = { cost: net.cost, bucketsSet: buckets.length > 0 };
+  const steps = useMemo(() => nextSteps(model, needs, stepOpts), [model, needs, net.cost, buckets.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the share of the app in use is about coverage, not cost: the bucket step is left out of it
+  const inUse = useMemo(() => coverage(nextSteps(model, needs, { all: true }).filter((s) => s.id !== "bucket")), [model, needs]);
   // how much of each page this environment can fill: shown on the tabs, before a page is opened
   const pageCov = useMemo(() => pageCoverage(model), [model]);
   const tab = (p: Page, text: string) => {
