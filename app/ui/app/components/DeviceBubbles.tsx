@@ -240,7 +240,6 @@ export function DeviceBubbles({ groups, width: W, height: H, visible, selected, 
                 ))}
                 {dots.filter((dot) => !batch || dot.problem || dot.d.name === selected).map(({ d, x, y, r, problem }) => {
                   const on = visible(d), sel = selected === d.name;
-                  const detailed = r * k >= 7;
                   return (
                     <g key={d.name}>
                       {problem && on && few && (
@@ -252,7 +251,10 @@ export function DeviceBubbles({ groups, width: W, height: H, visible, selected, 
                         className="vz-dot" onClick={(e) => { e.stopPropagation(); if (on && !drag.current?.moved) onPick(d.name); }}>
                         <title>{`${d.name} · ${d.verdict}${d.reasons[0] ? ` · ${d.reasons[0].text}` : ""}`}</title>
                       </circle>
-                      {on && (sel || (detailed && problem && focus === g.role)) && k > 1.01 && (
+                      {/* Only the selected device writes its name. Labelling every alerting dot piled
+                          sixteen names on top of each other the moment the group was zoomed into, and
+                          none of them could be read; each dot still names itself on hover. */}
+                      {on && sel && k > 1.01 && (
                         <text x={x + r + 2 / k} y={y + 3 / k} className="vz-dot-label" style={{ fontSize: 12 / k, strokeWidth: 3 / k }}>{`${d.site} · ${shortDevice(d.name)}`}</text>
                       )}
                     </g>

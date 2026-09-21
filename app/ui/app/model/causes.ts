@@ -52,7 +52,6 @@ export interface Cause {
   evidence: Evidence[];
   timeline: Moment[];
   /** When each site became affected; missing means before the observed window */
-  affectedAt: Record<string, string>;
 }
 
 const earliest = (ts: (string | null | undefined)[]) => ts.filter((t): t is string => !!t).sort()[0] ?? null;
@@ -274,7 +273,7 @@ function toCause(model: NetworkModel, byCode: Map<string, SiteInfo>, scope: Scop
     incident: scope.incident,
     sites, elements, devices: scope.devices.slice(0, 40),
     impact: { sites: sites.length, offline, devices: scopedDevices.filter((d) => isBad(d.verdict)).length, sessionsLost, sessionsSlowed, regions },
-    evidence: orderedEvidence, timeline, affectedAt,
+    evidence: orderedEvidence, timeline,
   };
 }
 

@@ -1,6 +1,5 @@
 // Home: the network breathing on a map. Probable causes on the left, the reasoning behind the
-// selected one on the right, and a replay of how it spread along the bottom. Every action
-// drills down into the native Dynatrace apps.
+// selected one on the right. Every action drills down into the native Dynatrace apps.
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Device, Iface, NetworkModel, Verdict } from "../model/types";
 import type { SiteInfo } from "../model/site";
@@ -8,7 +7,7 @@ import { ChangesPanel } from "../components/Changes";
 import { isBad, worst } from "../model/verdict";
 import { buildCauses, type Cause } from "../model/causes";
 import { LiveMap, MAP_COLORS, type Insets, type MapLink, type MapSite } from "../components/LiveMap";
-import { fmtInt, hhmm, prefersReducedMotion } from "../utils/format";
+import { fmtInt, hhmm } from "../utils/format";
 import { logsQuery, openLogs } from "../utils/drilldown";
 import { NativeDrill } from "../components/NativeDrill";
 import { SiteTree } from "../components/SiteTree";
@@ -23,7 +22,7 @@ import { suspicionFor, trafficDrop } from "../model/suspicion";
 import { useDropThreshold } from "../hooks/useDropThreshold";
 import { VIEW_NEEDS, type Need, type NeedKey } from "../data/requirements";
 import { CauseChain, EvidenceBadges, NetworkStatus } from "../components/CauseVisuals";
-import { ExternalLinkIcon, PauseIcon, PlayIcon } from "@dynatrace/strato-icons";
+import { ExternalLinkIcon } from "@dynatrace/strato-icons";
 
 interface Props {
   needs: Record<NeedKey, Need>;
@@ -167,48 +166,9 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
     return () => ro.disconnect();
   }, []);
 
-  // replay
-  const end = parseTs(model.meta.generatedAt);
-  const moments = useMemo(() => (cause ? cause.timeline : causes.map((c) => ({ t: c.since ?? "", label: c.title, level: c.verdict, sites: c.sites.map((s) => s.code) })).filter((m) => m.t)), [cause, causes]);
-  const start = useMemo(() => {
-    const first = moments.map((m) => parseTs(m.t)).filter((v) => !Number.isNaN(v)).sort((a, b) => a - b)[0];
-    return first ? Math.min(first - 10 * 60000, end - 30 * 60000) : end - 2 * 3600000;
-  }, [moments, end]);
-  const [cursor, setCursor] = useState(1);
-  const [playing, setPlaying] = useState(false);
-  useEffect(() => { setCursor(1); setPlaying(false); }, [cause?.id]);
-  useEffect(() => {
-    if (!playing) return;
-    const stepMs = prefersReducedMotion() ? 500 : 50;
-    const id = window.setInterval(() => setCursor((c) => {
-      const next = c + stepMs / 8000;
-      if (next >= 1) { setPlaying(false); return 1; }
-      return next;
-    }), stepMs);
-    return () => window.clearInterval(id);
-  }, [playing]);
-  const at = start + cursor * (end - start);
-  const affectedAt = useMemo(() => {
-    const m = new Map<string, number>();
-    (cause ? [cause] : causes).forEach((c) => {
-      c.sites.forEach((s) => {
-        const ts = c.affectedAt[s.code] ?? c.since;
-        if (ts) m.set(s.code, parseTs(ts));
-      });
-    });
-    return m;
-  }, [cause, causes]);
-  const hitAt = useMemo(() => (cursor >= 1 ? () => true : (code: string) => { const ts = affectedAt.get(code); return ts == null || ts <= at; }), [cursor, at, affectedAt]);
-  const hitCount = cause ? cause.sites.filter((s) => hitAt(s.code)).length : null;
-  // there is only something to replay when the environment reported when things went wrong: with no
-  // timed alert the bar would be an empty timeline, so it is not shown at all and the map takes the space
-  const replayable = useMemo(
-    () => affectedAt.size > 0 && moments.some((m) => !Number.isNaN(parseTs(m.t))),
-    [affectedAt, moments],
-  );
   const insets = useMemo<Insets>(
-    () => (wide ? { top: 24, left: 336, right: 376, bottom: replayable ? 104 : 28 } : { top: 16, left: 16, right: 16, bottom: 16 }),
-    [wide, replayable],
+    () => (wide ? { top: 24, left: 336, right: 376, bottom: 28 } : { top: 16, left: 16, right: 16, bottom: 16 }),
+    [wide],
   );
 
   const dropPct = useDropThreshold();
@@ -280,7 +240,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
       <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.map} needs={needs} compact next={next} /></div>
       <div ref={stage} className={`lm-stage${wide ? " is-wide" : ""}`}>
         {mapSites.length ? (
-          <LiveMap sites={mapSites} links={mapLinks} focus={focus} hitAt={hitAt} insets={insets} onSite={onSite} schematic={schematic} />
+          <LiveMap sites={mapSites} links={mapLinks} focus={focus} insets={insets} onSite={onSite} schematic={schematic} />
         ) : (
           // no coordinates: the steps live in Settings › Data, so this points there instead of repeating them
           <div className="lm-map lm-map--empty">
@@ -361,33 +321,6 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
             context={() => (cause ? causeContext(model, cause) : networkContext(model, infos, causes))} />
         </aside>
 
-        {replayable && (
-        <div className="lm-panel lm-time" role="group" aria-label="Replay">
-          <button type="button" className="lm-play" onClick={() => { if (cursor >= 1) setCursor(0); setPlaying((p) => !p); }} aria-label={playing ? "Pause replay" : "Replay how it spread"}
-            title={playing ? "Pause" : `Replay: play the last ${Math.max(1, Math.round((end - start) / 3600e3))} h forward and watch the sites go dark in the order they did, from the moments Dynatrace recorded`}>
-            {playing ? <PauseIcon /> : <PlayIcon />}
-          </button>
-          <div className="lm-track">
-            <div className="lm-track__fill" style={{ width: `${cursor * 100}%` }} />
-            {moments.map((m, k) => {
-              const pos = (parseTs(m.t) - start) / (end - start);
-              if (!(pos >= 0 && pos <= 1)) return null;
-              const prev = k ? (parseTs(moments[k - 1].t) - start) / (end - start) : -1;
-              return (
-                <span key={`${m.t}-${m.label}`} className="lm-tick" style={{ left: `${pos * 100}%`, background: MAP_COLORS[m.level] }} title={`${clock(parseTs(m.t))} · ${m.label}`}>
-                  {pos - prev > 0.07 && <em>{clock(parseTs(m.t))}</em>}
-                </span>
-              );
-            })}
-            <input type="range" min={0} max={1000} value={Math.round(cursor * 1000)} aria-label="Replay time"
-              onChange={(e) => { setPlaying(false); setCursor(Number(e.target.value) / 1000); }} />
-          </div>
-          <span className="lm-clock">
-            {clock(at)}
-            {hitCount != null && cursor < 1 && <small>{hitCount} of {cause!.impact.sites} sites hit</small>}
-          </span>
-        </div>
-        )}
       </div>
     </div>
   );

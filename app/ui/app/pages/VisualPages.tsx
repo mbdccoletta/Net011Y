@@ -255,19 +255,6 @@ export function DevicesVisual(p: VisualProps) {
               <div className="vz-fluid" ref={bubbleRef}>
                 <DeviceBubbles groups={layout.placed} width={W} height={layout.h} visible={visible} selected={device?.name ?? null} onPick={setPicked} />
               </div>
-              {/* The worst device of each role, not the worst six of the estate: ranked over everything, an
-                  edge router always wins on sites behind it, so all six came from the same bubble and the
-                  row read as a caption for that one circle. */}
-              <div className="vz-top" role="list" aria-label="The device that matters most in each role">
-                {groups.map((g) => g.devices.filter((d) => isBad(d.verdict) && visible(d))
-                  .sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || sitesBehindIn(behind, b, model) - sitesBehindIn(behind, a, model))[0])
-                  .filter(Boolean).map((d) => (
-                  <button key={d.name} type="button" role="listitem" className={`vz-chip${device?.name === d.name ? " is-on" : ""}`} style={{ "--c": verdictTone(d.verdict) } as React.CSSProperties}
-                    title={`${ROLE_LABEL[d.role] ?? d.role}: ${d.name} at ${model.sites[d.site]?.name ?? d.site} · ${d.verdict}`} onClick={() => setPicked(d.name)}>
-                    <i aria-hidden="true" />{(ROLE_LABEL[d.role] ?? d.role)}<small>{shortDevice(d.name)} · {model.sites[d.site]?.name.split(" · ")[0] ?? d.site}</small>
-                  </button>
-                ))}
-              </div>
             </Tile>
             {device && <DeviceInstrument model={model} infos={infos} device={device} onDetails={() => onSelect(`device:${device.name}`)} />}
           </div>

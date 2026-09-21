@@ -39,7 +39,6 @@ interface Props {
   /** Site codes of the selected cause; null shows the whole network */
   focus: Set<string> | null;
   /** Replay: false while a site is not yet affected at the cursor time */
-  hitAt: (code: string) => boolean;
   insets: Insets;
   onSite: (code: string) => void;
   /** sites placed by the app rather than by coordinates: no continents behind them */
@@ -123,7 +122,7 @@ const CLUSTER_MAX_K = 120;
 const hash = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0) / 4294967295; };
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic = false }: Props) {
+export function LiveMap({ sites, links, focus, insets, onSite, schematic = false }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const landLayer = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null);
@@ -150,9 +149,9 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
   }, []);
 
   const byCode = useMemo(() => new Map(sites.map((s) => [s.code, s])), [sites]);
-  const props = useRef({ sites, links, focus, hitAt, insets, byCode, schematic });
-  props.current = { sites, links, focus, hitAt, insets, byCode, schematic };
-  useEffect(() => { dirty.current = true; }, [sites, links, focus, hitAt, insets, schematic]);
+  const props = useRef({ sites, links, focus, insets, byCode, schematic });
+  props.current = { sites, links, focus, insets, byCode, schematic };
+  useEffect(() => { dirty.current = true; }, [sites, links, focus, insets, schematic]);
 
   const fitTo = useCallback((codes: Set<string> | null, animate: boolean, withHubs = true, tight = false) => {
     const { w, h } = size.current;
@@ -220,7 +219,7 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
       if (reduce && !dirty.current) return;
       dirty.current = false;
 
-      const { sites: S, links: L, focus: F, hitAt: hit, insets: ins, byCode: B } = props.current;
+      const { sites: S, links: L, focus: F, insets: ins, byCode: B } = props.current;
       const P = palette.current ?? (wrap.current ? (palette.current = readPalette(wrap.current)) : null);
       if (!P) return;
       const COL = P.status;
@@ -234,7 +233,7 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
       const sx = (lon: number) => ox + (lon - v.cx) * v.k;
       const sy = (lat: number) => oy + (projY(lat) - v.cy) * v.k;
 
-      const shown = (code: string): Verdict => { const s = B.get(code); return !s ? "Not monitored" : hit(code) ? s.verdict : "Healthy"; };
+      const shown = (code: string): Verdict => B.get(code)?.verdict ?? "Not monitored";
       const inFocus = (code: string) => !F || F.has(code) || !!B.get(code)?.dc;
 
       // land dot matrix, cached per view
@@ -263,7 +262,7 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
       }
       // hotspot glow behind the affected sites of the focus
       if (F) {
-        const hot = S.filter((s) => F.has(s.code) && hit(s.code));
+        const hot = S.filter((s) => F.has(s.code));
         if (hot.length) {
           const gx = hot.reduce((a, s) => a + sx(s.lon), 0) / hot.length, gy = hot.reduce((a, s) => a + sy(s.lat), 0) / hot.length;
           const spread = Math.max(50, Math.min(180, Math.max(...hot.map((s) => Math.hypot(sx(s.lon) - gx, sy(s.lat) - gy))) + 50));
@@ -295,7 +294,7 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
       L.forEach((l) => {
         const a = posOf(l.a), b = posOf(l.b);
         if (!a || !b || a.id === b.id) return;
-        const verdict: Verdict = hit(l.a) && hit(l.b) ? l.verdict : "Healthy";
+        const verdict: Verdict = l.verdict;
         const focused = inFocus(l.a) && inFocus(l.b);
         const key = clusterOf.size ? `${a.id}|${b.id}` : l.id;
         const r = routes.get(key);

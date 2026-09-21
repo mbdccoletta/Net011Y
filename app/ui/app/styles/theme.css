@@ -267,24 +267,14 @@
 .lm-assist__answer, .lm-assist__answer :is(p, li, strong, em, h1, h2, h3, h4, span) { color: var(--lm-ink) !important; }
 .lm-assist__error { color: var(--lm-warn); }
 
-.lm-time { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 10px 16px; }
-.lm-play { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--lm-accent); background: var(--lm-accent-dim); color: var(--lm-ink-hi) !important; box-shadow: 0 0 14px color-mix(in srgb, var(--lm-accent) 40%, transparent); cursor: pointer; display: grid; place-items: center; }
-.lm-track { position: relative; height: 36px; }
-.lm-track::before { content: ""; position: absolute; left: 0; right: 0; top: 13px; height: 2px; background: var(--lm-line); }
-.lm-track__fill { position: absolute; left: 0; top: 13px; height: 2px; background: linear-gradient(90deg, transparent, var(--lm-accent)); }
-.lm-track input { position: absolute; inset: 0 0 auto 0; width: 100%; height: 28px; margin: 0; opacity: 0; cursor: pointer; }
-.lm-tick { position: absolute; top: 7px; width: 3px; height: 14px; border-radius: 2px; transform: translateX(-50%); pointer-events: none; }
-.lm-tick em { position: absolute; top: 17px; left: 50%; transform: translateX(-50%); font-style: normal; font-family: var(--np-mono); font-size: 12px; color: var(--lm-muted); white-space: nowrap; }
-.lm-clock { display: grid; justify-items: end; font-family: var(--np-mono); font-size: 14px; }
-.lm-clock small { font-size: 12px; color: var(--lm-muted); }
 
 @media (min-width: 700px) {
   /* Stacked stage — what you get once the details pane takes its half. The map used to keep its whole
      440 px and push both panels into whatever strip was left at the bottom of the window, where the cause
      text was cut mid-sentence. The stage now fills the height it has and splits it: map above, the two
      panels below with their own scroll. */
-  .lm-stage:not(.is-wide) { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(200px, 1fr) minmax(280px, 52%) auto; height: 100%; min-height: 560px; }
-  .lm-stage:not(.is-wide) .lm-map, .lm-stage:not(.is-wide) .lm-time { grid-column: 1 / -1; }
+  .lm-stage:not(.is-wide) { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(200px, 1fr) minmax(280px, 52%); height: 100%; min-height: 560px; }
+  .lm-stage:not(.is-wide) .lm-map { grid-column: 1 / -1; }
   .lm-stage:not(.is-wide) .lm-map { height: auto; }
   .lm-stage:not(.is-wide) .lm-left { margin-right: 0; }
   .lm-stage:not(.is-wide) .lm-right { margin-left: 0; }
@@ -293,13 +283,10 @@
 .lm-stage.is-wide { display: block; height: 100%; min-height: 320px; padding: 0; }
 .lm-stage.is-wide .lm-map { position: absolute; inset: 0; height: auto; }
 .lm-stage.is-wide .lm-panel { position: absolute; margin: 0; z-index: 2; background: var(--lm-tint); }
-.lm-stage.is-wide .lm-left { top: 16px; left: 16px; width: 304px; max-height: calc(100% - 120px); overflow-y: auto; }
-.lm-stage.is-wide .lm-right { top: 16px; right: 16px; width: 344px; max-height: calc(100% - 120px); overflow-y: auto; }
-.lm-stage.is-wide .lm-time { left: 16px; right: 16px; bottom: 16px; }
+.lm-stage.is-wide .lm-left { top: 16px; left: 16px; width: 304px; max-height: calc(100% - 44px); overflow-y: auto; }
+.lm-stage.is-wide .lm-right { top: 16px; right: 16px; width: 344px; max-height: calc(100% - 44px); overflow-y: auto; }
 @media (max-width: 520px) {
   .lm-legend { margin-left: 0; }
-  .lm-time { grid-template-columns: auto minmax(0, 1fr); }
-  .lm-clock { grid-column: 1 / -1; justify-items: start; }
 }
 @media (prefers-reduced-motion: reduce) { .lm-live, .lm-chain__link { animation: none; } .lm-cause { transition: none; } }
 
@@ -381,8 +368,6 @@
   font: 600 12px var(--lm-mono); }
 .vz-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
 .vz-chip b { font-family: var(--lm-mono); color: var(--lm-ink-hi); }
-/* the role leads, the device that carries it follows in the lighter voice */
-.vz-chip small { font-weight: 500; color: var(--lm-ink-3); }
 .vz-dhead__acts { display: flex; gap: 8px; align-items: center; flex: none; }
 /* A filter row grows with the environment: four carriers fit, twenty do not. Past a handful the options
    fold into this menu, which stays one control wide however many there are. */
@@ -418,7 +403,6 @@
 .vz-svg-label { font: 600 12px var(--lm-mono); fill: var(--lm-ink-3); }
 .vz-svg-cap { font: 500 12px var(--lm-mono); fill: var(--lm-ink-3); }
 .vz-dot { cursor: pointer; }
-.vz-top { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--lm-ink-hi) 12%, transparent); }
 .vz-instrument { display: grid; gap: 12px; }
 .vz-inst-top { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .vz-limit { display: block; width: 100%; height: 70px; }
@@ -547,7 +531,7 @@
 .lm-chip.is-on { box-shadow: inset 0 0 0 1px var(--lm-violet); }
 .vz-chip.is-on { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); }
 .lm-btn--primary { background: transparent; border-color: var(--lm-accent); color: var(--lm-ink-hi); box-shadow: inset 0 0 0 1px var(--lm-accent); }
-.dn, .lm-badge, .lm-chain__icon, .lm-play { background: transparent; background-image: none; }
+.dn, .lm-badge, .lm-chain__icon { background: transparent; background-image: none; }
 
 /* Details panels stack their blocks at content height; the map's row template (last row minmax(0, 1fr)) must not apply */
 .lm.vz-details { grid-template-rows: none; grid-auto-rows: max-content; }
@@ -682,7 +666,6 @@
 :root:not([data-theme="dark"]) .lm-btn:hover, :root:not([data-theme="dark"]) .lm-chip:hover, :root:not([data-theme="dark"]) .vz-chip:hover { background: var(--lm-accent-dim); border-color: var(--lm-accent); }
 :root:not([data-theme="dark"]) .lm-btn--primary { background: var(--lm-accent-dim); border-color: var(--lm-accent); color: var(--dt-colors-text-primary-default, #474fcf); }
 /* labels printed on a solid status colour follow the surface, not the ink */
-:root:not([data-theme="dark"]) .lm-tick em { color: var(--dt-colors-background-surface-default, #ffffff); }
 
 /* traffic of a site, from NetFlow */
 .tf-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 16px; align-items: center; }
