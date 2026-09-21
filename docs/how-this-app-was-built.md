@@ -207,12 +207,20 @@ own model code then runs over it, and the checks assert what the app promises:
 - a drawing that says a size means a count delivers it: ten times the devices, ten times the area;
 - no component calls a hook after an early return.
 
+The example network gets its own audit, because it is what a reader sees before any of their own data
+arrives and every screen reads it through the same model: every reference points at something that
+exists, a counter equals the series drawn beside it, nothing is dated in the future, a device that stopped
+answering is dark in every reading it has, and the situations the screens are built to show are still in
+there. Two apparent contradictions are deliberate and are asserted as such: a series comes back shorter
+when the device was dark, exactly as the live builder drops the empty buckets, and a site whose primary
+link is down while its backup carries it is degraded rather than down.
+
 Alongside it: a script that runs the same catalogue against a live environment and asserts invariants that
 must hold whatever it contains; a scorecard that reports what the app can deliver in an environment and
 what is missing; a scale test that pushes twenty thousand devices through the model; and a check that
 reads the sources for the hook-order mistake.
 
-**Three lessons are baked into the suite**, each after the same bug happened more than once:
+**Four lessons are baked into the suite**, each after the same bug happened more than once:
 
 1. *A check anchored to the clock lies.* The restart check compared against "two hours ago" and failed
    every time the fixtures aged, which teaches people to ignore the suite. It reads the moment from the
@@ -221,7 +229,10 @@ reads the sources for the hook-order mistake.
    largest counter delta in a bucket and divided it by the whole bucket, while the per-port series summed
    the deltas of the bucket — a five-fold understatement that nothing caught, because the fixtures had no
    summaries at all. They do now, and the two must agree.
-3. *A hook after a conditional return breaks the page at runtime,* and neither the type checker nor the
+3. *A check that filters an empty list passes on nothing.* Half the example audit read the end-to-end
+   path off the site, where it does not live, and reported a clean result over an empty array. Each group
+   of checks now asserts first that what it is about is actually there.
+4. *A hook after a conditional return breaks the page at runtime,* and neither the type checker nor the
    build sees it. A small script reads the sources and names file, function and line.
 
 ---
@@ -252,6 +263,7 @@ cd scripts/grail
 node build.mjs                         # bundle the app's model and queries for the checks
 node generate.mjs                      # regenerate the fixtures
 node validate.mjs                      # the scenario checks
+node example_check.mjs                 # the bundled example, checked against itself
 node hooks_after_return.mjs            # the hook-order check
 node perf.mjs 20000 10                 # scale test
 ```

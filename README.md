@@ -89,6 +89,7 @@ to run, how it is tested, and the mistakes that shaped it.
 cd scripts/grail
 node build.mjs                 # bundles the app's model and queries for the scripts
 node generate.mjs              # Grail-shaped fixtures for a 62-site network
+node example_check.mjs         # 161 coherence checks on the bundled example, both sizes
 node validate.mjs              # 70 scenario checks against the app's own model
 node scorecard.mjs proxy       # what the app delivers in the environment the dev server serves
 node scorecard.mjs dtctl:<ctx> # the same through a dtctl context

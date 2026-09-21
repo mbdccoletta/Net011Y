@@ -142,10 +142,13 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
   interface DevOpts { cpu?: number; vendor?: string; blind?: boolean; rtt?: number | null; loss?: number; downMin?: number; incident?: string; events?: NetEvent[]; location?: string }
   const addDevice = (name: string, site: string, role: string, ip: string, hw: string, ifs: Iface[], o: DevOpts = {}) => {
     const cpu = o.cpu ?? r1(uni(4, 30));
+    const errTs = Array.from({ length: 24 }, () => (rnd() < 0.15 ? 1 : 0));
     const d: Device = {
       id: `DEMO-${name}`, name, site, role, vendor: o.vendor ?? "cisco", ip, mode: o.blind ? "Discovery" : "Extension",
       desc: `${hw} · simulated device`, location: o.location ?? null, ifCount: ifs.length, cpu: [], cpuNow: null, availPct: null, availTs: null,
-      syslog: { ERROR: int(0, 4), WARN: int(1, 12), INFO: int(30, 140) }, syslogErrTs: Array.from({ length: 24 }, () => (rnd() < 0.15 ? 1 : 0)),
+      // the error counter is the sum of the series it stores, as it is on live data, where both come out
+      // of the same query: drawn apart, the bars and the number contradicted each other on screen
+      syslog: { ERROR: errTs.reduce((a, b) => a + b, 0), WARN: int(1, 12), INFO: int(30, 140) }, syslogErrTs: errTs,
       traps: 0, events: o.events ?? [], interfaces: o.blind ? [] : ifs, reasons: [], verdict: "Healthy", impact: 0, icmp: null,
     };
     const down = o.downMin;
@@ -170,6 +173,7 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
     if (down) {
       d.unreachableSince = ago(down);
       d.syslogErrTs.fill(0, 24 - Math.ceil(down / 60));
+      d.syslog.ERROR = d.syslogErrTs.reduce((a, b) => a + b, 0);
     }
     if (o.incident) d.incident = o.incident;
     devices.push(d);
