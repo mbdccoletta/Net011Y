@@ -439,7 +439,10 @@ export function LiveMap({ sites, links, focus, hitAt, insets, onSite, schematic 
         const text = s.dc || S.length <= 12 ? s.name : s.code;
         const w = ctx.measureText(text).width, h = s.dc ? 14 : 12;
         const box = { x0: x + 8, y0: y - h / 2, x1: x + 12 + w, y1: y + h / 2 };
-        if (taken.some((t) => box.x0 < t.x1 && box.x1 > t.x0 && box.y0 < t.y1 && box.y1 > t.y0)) return;
+        // boxes that merely touch still read as one name — two neighbouring sites ran together into one
+        // long string on screen — so a label needs clear space around it, not just no overlap
+        const gap = { x0: box.x0 - 10, y0: box.y0 - 3, x1: box.x1 + 10, y1: box.y1 + 3 };
+        if (taken.some((t) => gap.x0 < t.x1 && gap.x1 > t.x0 && gap.y0 < t.y1 && gap.y1 > t.y0)) return;
         taken.push(box);
         // every label uses the main ink: the subdued one is the same colour as the dotted continents,
         // so a site name written in it disappears into the map. Rank is carried by weight, not by colour.

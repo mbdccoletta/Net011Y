@@ -35,6 +35,8 @@ const DOCS = {
   networks: "https://docs.dynatrace.com/docs/observe/infrastructure-observability/networks",
   networkDevices: "https://docs.dynatrace.com/docs/observe/infrastructure-observability/networks/network-devices/network-devices-get-started-guide",
 };
+const PAGES: [Page, string][] = [["causes", "Live map"], ["sites", "Sites"], ["devices", "Devices"], ["links", "WAN links"], ["traffic", "Traffic"]];
+
 const hrefOf = (p: Page, source: "live" | "example", scale: "xl" | null = null) => {
   const q = new URLSearchParams();
   if (p !== "causes") q.set("page", p);
@@ -118,11 +120,9 @@ export function App() {
     <AppHeader>
       <AppHeader.Navigation>
         <AppHeader.Logo appName={APP_NAME} href={hrefOf("causes", url.source, url.scale)} onClick={nav("causes")} />
-        <AppHeader.NavigationItem isSelected={page === "causes"} href={hrefOf("causes", url.source, url.scale)} onClick={nav("causes")}>{tab("causes", "Live map")}</AppHeader.NavigationItem>
-        <AppHeader.NavigationItem isSelected={page === "sites"} href={hrefOf("sites", url.source, url.scale)} onClick={nav("sites")}>{tab("sites", "Sites")}</AppHeader.NavigationItem>
-        <AppHeader.NavigationItem isSelected={page === "devices"} href={hrefOf("devices", url.source, url.scale)} onClick={nav("devices")}>{tab("devices", "Devices")}</AppHeader.NavigationItem>
-        <AppHeader.NavigationItem isSelected={page === "links"} href={hrefOf("links", url.source, url.scale)} onClick={nav("links")}>{tab("links", "WAN links")}</AppHeader.NavigationItem>
-        <AppHeader.NavigationItem isSelected={page === "traffic"} href={hrefOf("traffic", url.source, url.scale)} onClick={nav("traffic")}>{tab("traffic", "Traffic")}</AppHeader.NavigationItem>
+        {PAGES.map(([p, label]) => (
+          <AppHeader.NavigationItem key={p} isSelected={page === p} href={hrefOf(p, url.source, url.scale)} onClick={nav(p)}>{tab(p, label)}</AppHeader.NavigationItem>
+        ))}
       </AppHeader.Navigation>
       <AppHeader.ActionItems>
         {url.source === "live" && (
@@ -200,6 +200,12 @@ export function App() {
         <PageLayout.Header>{header}</PageLayout.Header>
 
         <PageLayout.Content>
+          <nav className="np-tabs" aria-label="Pages">
+            {PAGES.map(([p, label]) => (
+              <a key={p} className={`np-tabs__a${page === p ? " is-on" : ""}`} href={hrefOf(p, url.source, url.scale)}
+                onClick={nav(p)} aria-current={page === p ? "page" : undefined}>{label}</a>
+            ))}
+          </nav>
           {page === "causes" ? (
             <LiveMapPage model={model} infos={infos} causeId={url.cause} failed={net.failed} needs={needs} onExample={onExample} onSettings={openSettings} next={nextFor(VIEW_NEEDS.map)} onLive={onLive} onCause={(cause) => setUrl({ cause }, false)}
               onSite={(code) => select(`site:${code}`)} onDevice={(name) => select(`device:${name}`)}

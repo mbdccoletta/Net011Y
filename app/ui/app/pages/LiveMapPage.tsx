@@ -225,6 +225,9 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
     <button key={c.id} type="button" className={`lm-cause${cause?.id === c.id ? " is-on" : ""}`} aria-pressed={cause?.id === c.id}
       style={{ "--lm-tone": MAP_COLORS[c.verdict] } as React.CSSProperties} onClick={() => onCause(c.id)} title={causeMeta(c)}>
       <b><Marker verdict={c.verdict} /><span className="lm-cause__title">{c.title}</span><em>{c.sites.length}</em></b>
+      {/* Davis names a problem after its kind, so seven devices down are seven rows with the same words.
+          Where they differ is the site, which the subtitle already holds. */}
+      {c.subtitle && <span className="lm-cause__sub">{c.subtitle}</span>}
       <span className="lm-cause__bar" aria-hidden="true"><i style={{ width: `${(c.sites.length / maxSites) * 100}%` }} /></span>
     </button>
   );

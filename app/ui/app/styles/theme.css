@@ -178,6 +178,7 @@
 .lm-stats b { font-family: var(--lm-sans); font-size: 24px; font-weight: 600; color: var(--lm-ink-hi); line-height: 1.15; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px color-mix(in srgb, var(--lm-ink-hi) 25%, transparent); }
 .lm-cause b { min-width: 0; }
 .lm-cause__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-cause__sub { display: block; margin: 1px 0 0 22px; font-size: 11px; color: var(--lm-ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lm-cause b em { font-style: normal; font-family: var(--np-mono); font-size: 12px; color: var(--lm-ink); }
 .lm-cause__bar { display: block; height: 3px; margin-left: 17px; border-radius: 2px; background: color-mix(in srgb, var(--lm-ink-hi) 10%, transparent); overflow: hidden; }
 .lm-cause__bar i { display: block; height: 100%; background: var(--lm-tone); box-shadow: 0 0 8px var(--lm-tone); }
@@ -883,3 +884,15 @@
 .vz-inout { gap: 8px; }
 .vz-inout__vol { display: inline-flex; flex-direction: column; font-style: normal; font: 500 11px var(--lm-mono); color: var(--lm-ink-3); line-height: 1.35; }
 .vz-inout__vol i { font-style: normal; margin-left: 4px; color: color-mix(in srgb, var(--lm-ink-3) 75%, transparent); }
+
+/* Page navigation for narrow widths. The platform header keeps its navigation only while there is room
+ * for it and offers no overflow, so below that width this row is the only way to change page. */
+.np-tabs { display: none; }
+@media (max-width: 820px) {
+  .np-tabs { display: flex; gap: 4px; padding: 10px 16px 0; overflow-x: auto; scrollbar-width: none; }
+  .np-tabs::-webkit-scrollbar { display: none; }
+  .np-tabs__a { flex: none; padding: 5px 10px; border-radius: 6px; font-size: 13px; text-decoration: none;
+    color: var(--lm-ink-3); border: 1px solid transparent; white-space: nowrap; }
+  .np-tabs__a:hover { color: var(--lm-ink-hi); background: var(--lm-tint); }
+  .np-tabs__a.is-on { color: var(--lm-ink-hi); border-color: var(--lm-line-2); background: var(--lm-tint); }
+}

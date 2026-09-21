@@ -1,7 +1,7 @@
 // Feeds the generated Grail results through the app's own model code and reports what every view gets.
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, mergeRows, buildJourney, asRoutes, nextSteps, coverage } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, buildJourney, asRoutes, nextSteps, coverage } from "./out/app-model.mjs";
 
 const R = JSON.parse(readFileSync("out/results.json", "utf8"));
 const report = { schema: {}, needs: {}, views: {}, checks: [] };
@@ -451,6 +451,14 @@ check("The bucket recommendation carries this environment's own numbers",
 check("The share of the app in use is not moved by a cost step",
   coverage(nextSteps(model, needs, { all: true, cost: { logGb: 138, networkShare: 0.0002 } }).filter((s) => s.id !== "bucket"))
   === coverage(nextSteps(model, needs, { all: true }).filter((s) => s.id !== "bucket")));
+
+// ---------------- a drawing that says "size = devices" has to mean it ----------------
+// A floor on the radius drew three devices and thirty as the same circle, in an environment where that
+// was every bubble on the page.
+const areaOf = (n, most) => Math.PI * bubbleRadius(n, most) ** 2;
+check("A bubble ten times bigger covers ten times the area",
+  Math.abs(areaOf(300, 300) / areaOf(30, 300) - 10) < 0.01 && bubbleRadius(1, 4000) >= 22,
+  `${(areaOf(300, 300) / areaOf(30, 300)).toFixed(2)}x`);
 
 // ---------------- nothing measured is not the same as nothing wrong ----------------
 // A site the environment never reported a session for was drawn red with a dash where the number goes,

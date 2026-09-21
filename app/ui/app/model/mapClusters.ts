@@ -73,3 +73,8 @@ export function clusterPoints(
   merge(); clearDcs(); merge(); clearDcs();
   return { groups, of };
 }
+
+/** Radius of a bubble holding `n` of `most` devices. Area per device is constant, so a group ten times
+ * bigger draws ten times the area — the caption on the tile says "size = devices" and has to be true.
+ * The floor keeps a single device visible; it only bites when the largest group is very large. */
+export const bubbleRadius = (n: number, most: number) => Math.max(22, Math.min(120, 88 * Math.sqrt(n / Math.max(1, most))));

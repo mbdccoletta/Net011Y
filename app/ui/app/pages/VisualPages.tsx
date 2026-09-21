@@ -6,6 +6,7 @@ import { ExternalLinkIcon } from "@dynatrace/strato-icons";
 import type { Circuit, Device, NetworkModel, Verdict } from "../model/types";
 import { devicesAt, ROLE_LABEL, type SiteInfo } from "../model/site";
 import { isBad, ORDER, T } from "../model/verdict";
+import { bubbleRadius } from "../model/mapClusters";
 import { fmtInt, fmtNum, stripDevice } from "../utils/format";
 import { NativeDrill } from "../components/NativeDrill";
 import { carrierContext, deviceContext, networkContext } from "../utils/assist";
@@ -99,6 +100,14 @@ export function SitesVisual(p: VisualProps) {
           <div className="vz-regions">
             {groups.map((g) => {
               const crit = count(g.sites, (s) => s.verdict === "Critical"), warn = count(g.sites, (s) => s.verdict === "Warning");
+              // "all healthy" over a row of grey cells was the app calling unpolled sites well: nothing
+              // was measured there, and a reader who trusts that sentence stops looking
+              const caption = (ss: typeof g.sites, issues: number) => {
+                if (issues) return `${issues} with issues`;
+                const dark = count(ss, (s) => s.verdict === "Not monitored");
+                if (dark === ss.length) return ss.length === 1 ? "not monitored" : "none monitored";
+                return dark ? `${ss.length - dark} healthy · ${dark} not monitored` : "all healthy";
+              };
               const shown = count(g.sites, visible);
               const tone = crit ? TONE.bad : warn > g.sites.length / 2 ? TONE.warn : TONE.accent;
               return (
@@ -114,7 +123,7 @@ export function SitesVisual(p: VisualProps) {
                       );
                     })}
                   </div>
-                  <div className="vz-cap">{crit + warn ? `${crit + warn} with issues` : "all healthy"}{shown < g.sites.length ? ` · ${shown} shown` : ""}</div>
+                  <div className="vz-cap">{caption(g.sites, crit + warn)}{shown < g.sites.length ? ` · ${shown} shown` : ""}</div>
                 </Tile>
               );
             })}
@@ -190,7 +199,11 @@ export function DevicesVisual(p: VisualProps) {
   const [bubbleRef, bubbleW] = useElementWidth<HTMLDivElement>(640);
   const W = Math.max(480, bubbleW);
   const layout = useMemo(() => {
-    const circles = groups.map((g) => ({ ...g, r: Math.max(34, Math.min(120, 16 + Math.sqrt(g.devices.length) * 3.3)) }));
+    // The tile promises "size = devices", so the radius follows the square root of the count (equal area
+    // per device) against the largest group on the page. The old floor of 34 px flattened everything up
+    // to thirty devices into the same circle: three switches and thirty drew identically.
+    const most = Math.max(1, ...groups.map((g) => g.devices.length));
+    const circles = groups.map((g) => ({ ...g, r: bubbleRadius(g.devices.length, most) }));
     // A cell is as wide as the bubble or its two lines of text, whichever is wider: "WIRELESS CONTROLLER"
     // is wider than its bubble, and a cell sized to the bubble alone let it run into its neighbour.
     const bad = (c: (typeof circles)[number]) => c.devices.filter((d) => isBad(d.verdict)).length;
