@@ -77,6 +77,12 @@ arrives: a retail company with about 400 sites and 2,000 devices, and the same c
 (`?source=example&scale=xl`) with about 4,200 sites, 20,000 devices and four data centers, read the way the
 app reads an estate that size — per-device summaries instead of every port.
 
+## How it was built
+
+[docs/how-this-app-was-built.md](docs/how-this-app-was-built.md) is the note for whoever picks the code up:
+the rules the app is built on, how data gets from Grail to the screen, what changes at scale, what it costs
+to run, how it is tested, and the mistakes that shaped it.
+
 ## Checks
 
 ```bash
