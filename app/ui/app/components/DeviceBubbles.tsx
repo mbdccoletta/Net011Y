@@ -166,6 +166,33 @@ export function DeviceBubbles({ groups, width: W, height: H, visible, selected, 
     });
     return [g.role, [...byKey.entries()].map(([key, dots]) => ({ key, verdict: key.split("|")[0] as Device["verdict"], on: key.endsWith("|1"), dots, d: dotsPath(dots) }))] as const;
   })), [groups, placed, visible, selected]);
+  // Which dots write their name. Zoomed in, a reader wants to read the devices, but labelling every
+  // alerting dot piled sixteen names on top of each other; a name is drawn only where it does not
+  // touch one already drawn, closest to the middle of the group first, and the selection always wins.
+  const labelled = useMemo(() => {
+    const out = new Set<string>();
+    if (selected) out.add(selected);
+    if (k <= 1.2 || !focusGroup) return out;
+    const pl = placed.get(focusGroup.role);
+    if (!pl) return out;
+    const taken: { x0: number; y0: number; x1: number; y1: number }[] = [];
+    const text = (d: Device) => `${d.site} · ${shortDevice(d.name)}`;
+    const box = (dot: Dot, t: string) => ({
+      x0: dot.x + dot.r + 2 / k, y0: dot.y - 7 / k,
+      x1: dot.x + dot.r + (4 + t.length * 6.9) / k, y1: dot.y + 7 / k,
+    });
+    const order = pl.dots.filter((dot) => dot.problem && visible(dot.d))
+      .sort((a, b) => (a.x - focusGroup.cx) ** 2 + (a.y - focusGroup.cy) ** 2 - ((b.x - focusGroup.cx) ** 2 + (b.y - focusGroup.cy) ** 2));
+    for (const dot of order) {
+      if (out.size >= 40) break;
+      const b = box(dot, text(dot.d));
+      if (taken.some((t) => b.x0 < t.x1 && b.x1 > t.x0 && b.y0 < t.y1 && b.y1 > t.y0)) continue;
+      taken.push(b);
+      out.add(dot.d.name);
+    }
+    return out;
+  }, [k, focusGroup, placed, selected, visible]);
+
   // a click on a batched path opens the dot nearest the pointer
   const pickNearest = (dots: Dot[], e: React.MouseEvent) => {
     const w = toSvg(e.clientX, e.clientY), v = viewRef.current;
@@ -251,10 +278,7 @@ export function DeviceBubbles({ groups, width: W, height: H, visible, selected, 
                         className="vz-dot" onClick={(e) => { e.stopPropagation(); if (on && !drag.current?.moved) onPick(d.name); }}>
                         <title>{`${d.name} · ${d.verdict}${d.reasons[0] ? ` · ${d.reasons[0].text}` : ""}`}</title>
                       </circle>
-                      {/* Only the selected device writes its name. Labelling every alerting dot piled
-                          sixteen names on top of each other the moment the group was zoomed into, and
-                          none of them could be read; each dot still names itself on hover. */}
-                      {on && sel && k > 1.01 && (
+                      {on && labelled.has(d.name) && k > 1.01 && (
                         <text x={x + r + 2 / k} y={y + 3 / k} className="vz-dot-label" style={{ fontSize: 12 / k, strokeWidth: 3 / k }}>{`${d.site} · ${shortDevice(d.name)}`}</text>
                       )}
                     </g>
