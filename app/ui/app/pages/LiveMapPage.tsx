@@ -77,7 +77,11 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   // map works in any environment. The reader can switch between the two when both make sense.
   const placedShare = infos.length ? infos.filter((i) => i.site.lat != null && i.site.lon != null).length / infos.length : 0;
   const [layout, setLayout] = useState<"geo" | "schematic" | null>(null);
-  const schematic = (layout ?? (placedShare >= 0.5 ? "geo" : "schematic")) === "schematic";
+  // Geography is the default the moment any site can be placed: a reader opens the map to see where the
+  // network is. Only an environment that gives no coordinates at all starts on the schematic layout, and
+  // when geography would leave sites out, the bar says how many it is drawing.
+  const schematic = (layout ?? (placedShare > 0 ? "geo" : "schematic")) === "schematic";
+  const placedCount = infos.filter((i) => i.site.lat != null && i.site.lon != null).length;
   const mapSites = useMemo<MapSite[]>(() => {
     const base = (i: SiteInfo) => ({ code: i.code, name: i.site.name, verdict: i.verdict, dc: i.site.dc, region: i.site.region, cause: i.cause ? i.cause : siteCause.get(i.code) ?? null });
     if (!schematic) return infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({ ...base(i), lat: i.site.lat!, lon: i.site.lon! }));
@@ -230,6 +234,12 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
           <button type="button" className={!schematic ? "is-on" : ""} aria-pressed={!schematic} disabled={placedShare === 0} onClick={() => setLayout("geo")}>Geographic</button>
           <button type="button" className={schematic ? "is-on" : ""} aria-pressed={schematic} onClick={() => setLayout("schematic")}>Schematic</button>
         </span>
+        {!schematic && placedShare < 1 && (
+          <button type="button" className="lm-pill lm-pill--warn lm-pill--btn" onClick={() => setLayout("schematic")}
+            title="Sites without geo_lat / geo_lon tags, and whose location the app could not recognise, cannot be drawn on a map. The schematic layout holds every site.">
+            {fmtInt(placedCount)} of {fmtInt(infos.length)} sites on the map · see all
+          </button>
+        )}
         <span className="lm-legend" aria-label="Legend">
           <span><Marker verdict="Critical" />Critical</span>
           <span><Marker verdict="Warning" />Warning</span>

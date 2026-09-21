@@ -173,14 +173,18 @@ export function DataSourceSection({ source, scale, onSource }: Pick<Props, "sour
   return (
       <section className="ds-block" aria-labelledby="ds-source">
         <Heading level={5} id="ds-source">Data source</Heading>
-        <Select value={value} onChange={(v) => (v === "example-xl" ? onSource("example", "xl") : v === "example" ? onSource("example", null) : onSource("live", null))}>
-          <Select.Trigger placeholder="Data source" />
-          <Select.Content>
-            <Select.Option value="live" textValue="This environment">This environment</Select.Option>
-            <Select.Option value="example" textValue="Example network">Example network (simulated)</Select.Option>
-            <Select.Option value="example-xl" textValue="Example network, extra large">Example network, extra large · 20,000 devices (simulated)</Select.Option>
-          </Select.Content>
-        </Select>
+        {/* the menu is as wide as the field, and in this column the field was cutting the two example
+            names down to "Example network …" and "Example network,…", which read as the same thing */}
+        <div className="ds-source">
+          <Select value={value} onChange={(v) => (v === "example-xl" ? onSource("example", "xl") : v === "example" ? onSource("example", null) : onSource("live", null))}>
+            <Select.Trigger placeholder="Data source" />
+            <Select.Content>
+              <Select.Option value="live" textValue="This environment">This environment</Select.Option>
+              <Select.Option value="example" textValue="Example network · 410 sites">Example network · 410 sites</Select.Option>
+              <Select.Option value="example-xl" textValue="Example network · 20,000 devices">Example network · 20,000 devices</Select.Option>
+            </Select.Content>
+          </Select>
+        </div>
         <Text textStyle="small">
           This environment reads what your Dynatrace environment already stores. The example network is a fictitious retail company with about 400 sites, so you can explore the app before sending data;
           the extra-large one is the same company at about 4,200 sites and 20,000 devices, read the way the app reads an estate that size (per-device summaries, not every port).
