@@ -12,6 +12,10 @@ export interface BubbleGroup { role: string; devices: Device[]; r: number; cx: n
 
 interface Props {
   groups: BubbleGroup[];
+  /** a click on a slice of a bubble's status ring filters the page by that status */
+  onStatus?: (verdict: Device["verdict"]) => void;
+  /** the status the page is filtered by, so the ring can show which slice is picked */
+  status?: string | null;
   width: number;
   height: number;
   visible: (d: Device) => boolean;
@@ -72,7 +76,7 @@ function placeDots(g: BubbleGroup): { dots: Dot[]; few: boolean; dotR: number } 
 /** Many circles as one path: each dot is two arcs. */
 const dotsPath = (dots: Dot[]) => dots.map(({ x, y, r }) => `M${(x - r).toFixed(2)} ${y.toFixed(2)}a${r.toFixed(2)} ${r.toFixed(2)} 0 1 0 ${(2 * r).toFixed(2)} 0a${r.toFixed(2)} ${r.toFixed(2)} 0 1 0 ${(-2 * r).toFixed(2)} 0`).join("");
 
-export function DeviceBubbles({ groups, width: W, height: H, visible, selected, onPick }: Props) {
+export function DeviceBubbles({ groups, width: W, height: H, visible, selected, onPick, onStatus, status }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const [view, setView] = useState<View>(HOME);
   const [focus, setFocus] = useState<string | null>(null);
@@ -248,11 +252,28 @@ export function DeviceBubbles({ groups, width: W, height: H, visible, selected, 
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); zoomInto(g); } }} />
                 {shares.map(({ v, n }) => {
                   const len = (n / nDots) * 100;
+                  const dash = `${Math.max(0.4, len - gap)} ${100 - Math.max(0.4, len - gap)}`;
+                  const off = -acc;
+                  const on = !!status && status.split(",").includes(v);
+                  // the ring is where a reader already looks to see how the group is doing, so it is also
+                  // where they can say "show me those": a slice filters the page by its own status
                   const seg = (
-                    <circle key={v} cx={g.cx} cy={g.cy} r={g.r + 5 / Math.sqrt(k)} fill="none" pathLength={100} pointerEvents="none"
-                      stroke={verdictTone(v)} strokeWidth={3 / Math.sqrt(k)} strokeLinecap="butt"
-                      strokeDasharray={`${Math.max(0.4, len - gap)} ${100 - Math.max(0.4, len - gap)}`} strokeDashoffset={-acc}
-                      transform={`rotate(-90 ${g.cx} ${g.cy})`} />
+                    <g key={v}>
+                      {onStatus && (
+                        <circle cx={g.cx} cy={g.cy} r={g.r + 5 / Math.sqrt(k)} fill="none" pathLength={100} className="vz-ring-hit"
+                          stroke="transparent" strokeWidth={14 / Math.sqrt(k)} strokeLinecap="butt" pointerEvents="stroke"
+                          strokeDasharray={dash} strokeDashoffset={off} transform={`rotate(-90 ${g.cx} ${g.cy})`}
+                          role="button" tabIndex={0} aria-pressed={on}
+                          aria-label={`${n} ${v.toLowerCase()} of ${nDots} ${ROLE_LABEL[g.role] ?? g.role}, filter the page by it`}
+                          onClick={(e) => { e.stopPropagation(); if (!drag.current?.moved) onStatus(v); }}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onStatus(v); } }}>
+                          <title>{`${fmtInt(n)} ${v.toLowerCase()} · click to show only these`}</title>
+                        </circle>
+                      )}
+                      <circle cx={g.cx} cy={g.cy} r={g.r + 5 / Math.sqrt(k)} fill="none" pathLength={100} pointerEvents="none"
+                        stroke={verdictTone(v)} strokeWidth={(on ? 6 : 3) / Math.sqrt(k)} strokeLinecap="butt" opacity={!status || on ? 1 : 0.35}
+                        strokeDasharray={dash} strokeDashoffset={off} transform={`rotate(-90 ${g.cx} ${g.cy})`} />
+                    </g>
                   );
                   acc += len;
                   return seg;

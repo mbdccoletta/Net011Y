@@ -255,7 +255,8 @@ export function DevicesVisual(p: VisualProps) {
           <div className="vz-split">
             <Tile title={`${fmtInt(model.devices.length)} devices by role`} right="size = devices">
               <div className="vz-fluid" ref={bubbleRef}>
-                <DeviceBubbles groups={layout.placed} width={W} height={layout.h} visible={visible} selected={device?.name ?? null} onPick={setPicked} />
+                <DeviceBubbles groups={layout.placed} width={W} height={layout.h} visible={visible} selected={device?.name ?? null} onPick={setPicked}
+                  status={filters.status} onStatus={(v) => setStatus(v)} />
               </div>
             </Tile>
             {device && <DeviceInstrument model={model} infos={infos} device={device} onDetails={() => onSelect(`device:${device.name}`)} />}

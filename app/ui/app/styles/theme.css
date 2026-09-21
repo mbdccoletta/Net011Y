@@ -408,6 +408,7 @@
 .vz-svg-label { font: 600 12px var(--lm-mono); fill: var(--lm-ink-3); }
 .vz-svg-cap { font: 500 12px var(--lm-mono); fill: var(--lm-ink-3); }
 .vz-dot { cursor: pointer; }
+.vz-ring-hit { cursor: pointer; }
 /* clicking an SVG shape that answers to the keyboard can leave the browser's own focus rectangle
    around it, which on a circle reads as a stray square; the shapes show focus on themselves instead */
 .vz-bubbles :focus, .vz-bubbles :focus-visible, .vz-dot:focus, .vz-bubbles:focus { outline: none; }
