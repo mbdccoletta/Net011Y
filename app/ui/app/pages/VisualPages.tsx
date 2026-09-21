@@ -205,7 +205,7 @@ export function DevicesVisual(p: VisualProps) {
     const most = Math.max(1, ...groups.map((g) => g.devices.length));
     // the biggest bubble grows with the room the tile has, so the drawing fills its area instead of
     // sitting as a band across the top of it
-    const circles = groups.map((g) => ({ ...g, r: bubbleRadius(g.devices.length, most, Math.max(88, Math.min(170, W / 7))) }));
+    const circles = groups.map((g) => ({ ...g, r: bubbleRadius(g.devices.length, most, Math.max(88, Math.min(180, W / 5))) }));
     // A cell is as wide as the bubble or its two lines of text, whichever is wider: "WIRELESS CONTROLLER"
     // is wider than its bubble, and a cell sized to the bubble alone let it run into its neighbour.
     const bad = (c: (typeof circles)[number]) => c.devices.filter((d) => isBad(d.verdict)).length;
