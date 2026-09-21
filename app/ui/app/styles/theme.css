@@ -269,16 +269,16 @@
 
 
 @media (min-width: 700px) {
-  /* Stacked stage — what you get once the details pane takes its half. The map used to keep its whole
-     440 px and push both panels into whatever strip was left at the bottom of the window, where the cause
-     text was cut mid-sentence. The stage now fills the height it has and splits it: map above, the two
-     panels below with their own scroll. */
-  .lm-stage:not(.is-wide) { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(200px, 1fr) minmax(280px, 52%); height: 100%; min-height: 560px; }
-  .lm-stage:not(.is-wide) .lm-map { grid-column: 1 / -1; }
-  .lm-stage:not(.is-wide) .lm-map { height: auto; }
+  /* Stacked stage — what you get once the details pane takes its half. The map keeps a height of its
+     own: the canvas has no size of its own, so a row that sizes to its content leaves nothing to draw on
+     and the map disappears. It gives up some of its 440 px to the panels below, which used to be pushed
+     into whatever strip was left at the bottom of the window with the cause text cut mid-sentence, and
+     they scroll inside themselves rather than running the page off the screen. */
+  .lm-stage:not(.is-wide) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lm-stage:not(.is-wide) .lm-map { grid-column: 1 / -1; height: clamp(260px, 36vh, 440px); }
   .lm-stage:not(.is-wide) .lm-left { margin-right: 0; }
   .lm-stage:not(.is-wide) .lm-right { margin-left: 0; }
-  .lm-stage:not(.is-wide) .lm-left, .lm-stage:not(.is-wide) .lm-right { min-height: 0; overflow-y: auto; }
+  .lm-stage:not(.is-wide) .lm-left, .lm-stage:not(.is-wide) .lm-right { min-height: 0; max-height: min(560px, 54vh); overflow-y: auto; }
 }
 .lm-stage.is-wide { display: block; height: 100%; min-height: 320px; padding: 0; }
 .lm-stage.is-wide .lm-map { position: absolute; inset: 0; height: auto; }
