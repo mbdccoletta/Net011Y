@@ -1,6 +1,6 @@
 // Shared visual vocabulary of the NetO11y pages (UX Delivery Chain look): tinted tiles
 // with corner brackets, KPI tiles, filter chips, the page bar and the visual/table toggle.
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { NetworkModel, Verdict } from "../model/types";
 import { fmtBps, fmtBytes, hhmm } from "../utils/format";
 import { MAP_COLORS } from "./LiveMap";
@@ -48,48 +48,68 @@ const toggle = (value: string | null, key: string) => {
   return next.length ? next.join(",") : null;
 };
 
-/** More than this many options and the row would run off the page, so they fold into a menu. */
-const FOLD_AT = 6;
-
-export function Chips({ label, options, value, onChange }: { label: string; options: ChipOption[]; value: string | null; onChange: (key: string | null) => void }) {
+/**
+ * A filter as a select box: one control whatever the environment holds, several values at a time.
+ * A row of chips read as buttons rather than as a filter, and it grew with the estate — four carriers
+ * fit on the line, twenty pushed it off the page.
+ */
+export function Chips({ label, options, value, onChange, variant = "select" }: {
+  label: string; options: ChipOption[]; value: string | null; onChange: (key: string | null) => void;
+  /** "chips" keeps the pressed buttons, for the three status colours that carry meaning of their own */
+  variant?: "select" | "chips";
+}) {
   const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
   const picked = chosen(value);
-  // Several values at once: a network has four carriers and a reader wants two of them side by side. And
-  // an environment with twenty carriers would have pushed the row off the screen, so past a handful the
-  // options fold into a menu that stays one line wide however many there are.
-  if (options.length > FOLD_AT) {
+  // a click anywhere else closes it, the way a select does
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  if (variant === "chips") {
     return (
-      <div className="vz-chips vz-pick" role="group" aria-label={label}>
+      <div className="vz-chips" role="group" aria-label={label}>
         <span className="vz-chips__label">{label}</span>
-        <button type="button" className={`vz-chip${picked.length ? " is-on" : ""}`} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-          {picked.length ? `${picked.length} of ${options.length}` : `Any ${label.toLowerCase()}`}<b>▾</b>
-        </button>
-        {picked.length > 0 && <button type="button" className="vz-pick__clear" onClick={() => onChange(null)}>Clear</button>}
-        {open && (
-          <div className="vz-pick__menu" role="listbox" aria-multiselectable="true">
-            {options.map((o) => (
-              <button key={o.key} type="button" role="option" aria-selected={picked.includes(o.key)}
-                className={`vz-pick__opt${picked.includes(o.key) ? " is-on" : ""}`} onClick={() => onChange(toggle(value, o.key))}>
-                <i aria-hidden="true">{picked.includes(o.key) ? "✓" : ""}</i>{o.label}{o.count != null && <b>{o.count}</b>}
-              </button>
-            ))}
-          </div>
-        )}
+        {options.map((o) => {
+          const on = picked.includes(o.key);
+          return (
+            <button key={o.key} type="button" className={`vz-chip${on ? " is-on" : ""}`} aria-pressed={on} onClick={() => onChange(toggle(value, o.key))}
+              style={o.tone ? ({ "--c": o.tone } as React.CSSProperties) : undefined}>
+              {o.tone && <i aria-hidden="true" />}{o.label}{o.count != null && <b>{o.count}</b>}
+            </button>
+          );
+        })}
       </div>
     );
   }
+  const summary = !picked.length ? `All ${label.toLowerCase()}s`
+    : picked.length === 1 ? options.find((o) => o.key === picked[0])?.label ?? picked[0]
+      : `${picked.length} of ${options.length}`;
   return (
-    <div className="vz-chips" role="group" aria-label={label}>
-      <span className="vz-chips__label">{label}</span>
-      {options.map((o) => {
-        const on = picked.includes(o.key);
-        return (
-          <button key={o.key} type="button" className={`vz-chip${on ? " is-on" : ""}`} aria-pressed={on} onClick={() => onChange(toggle(value, o.key))}
-            style={o.tone ? ({ "--c": o.tone } as React.CSSProperties) : undefined}>
-            {o.tone && <i aria-hidden="true" />}{o.label}{o.count != null && <b>{o.count}</b>}
+    <div className="vz-pick" ref={box}>
+      <span className="vz-pick__label">{label}</span>
+      <button type="button" className={`vz-pick__box${picked.length ? " is-on" : ""}`} aria-haspopup="listbox" aria-expanded={open}
+        aria-label={`${label}: ${summary}`} onClick={() => setOpen((v) => !v)}>
+        <span>{summary}</span><i aria-hidden="true">▾</i>
+      </button>
+      {open && (
+        <div className="vz-pick__menu" role="listbox" aria-multiselectable="true">
+          <button type="button" role="option" aria-selected={!picked.length} className={`vz-pick__opt${picked.length ? "" : " is-on"}`}
+            onClick={() => { onChange(null); setOpen(false); }}>
+            <i aria-hidden="true">{picked.length ? "" : "✓"}</i>All {label.toLowerCase()}s
           </button>
-        );
-      })}
+          {options.map((o) => (
+            <button key={o.key} type="button" role="option" aria-selected={picked.includes(o.key)}
+              className={`vz-pick__opt${picked.includes(o.key) ? " is-on" : ""}`} onClick={() => onChange(toggle(value, o.key))}>
+              <i aria-hidden="true">{picked.includes(o.key) ? "✓" : ""}</i>{o.label}{o.count != null && <b>{o.count}</b>}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -435,7 +435,7 @@ export function LinksVisual(p: VisualProps) {
           </Tile>
           <div className="vz-split vz-split--even">
             <Tile tone={TONE.accent} title="Drill down">
-              <Chips label="Status" options={STATUS_CHIPS.slice(0, 3)} value={filters.status} onChange={(status) => onFilters({ status })} />
+              <Chips label="Status" variant="chips" options={STATUS_CHIPS.slice(0, 3)} value={filters.status} onChange={(status) => onFilters({ status })} />
               <NativeDrill demo={model.demo}
                 circuits={circuits.filter((c) => c.status === "down" && (!focusCarrier || c.carrier === focusCarrier))}
                 devices={circuits.filter((c) => c.status === "down" && (!focusCarrier || c.carrier === focusCarrier)).map((c) => devicesAt(model, c.site).find((d) => d.role === "edge")).filter((d): d is Device => !!d).slice(0, 40)} />
