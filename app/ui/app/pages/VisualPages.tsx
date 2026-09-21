@@ -13,7 +13,7 @@ import { carrierContext, deviceContext, networkContext } from "../utils/assist";
 import { carrierQuestions, deviceQuestions, sitesQuestions } from "../utils/prompts";
 import { AssistPanel } from "../components/AssistPanel";
 import { DeviceBubbles } from "../components/DeviceBubbles";
-import { Chips, Gauge, KpiTile, LimitLine, PageBar, StatusShape, Tile, TONE, verdictTone, type View } from "../components/Visual";
+import { Chips, Gauge, inSet, KpiTile, LimitLine, PageBar, StatusShape, Tile, TONE, verdictTone, type View } from "../components/Visual";
 import { DevicesPage, LinksPage, SitesPage, type Filters, type PageProps } from "./EntityPages";
 import { buildCauses } from "../model/causes";
 import { DataNeeds } from "../components/DataNeeds";
@@ -61,8 +61,8 @@ export function SitesVisual(p: VisualProps) {
   const [kind, setKind] = useState<string | null>(null);
 
   const visible = (i: SiteInfo) => matches(i.verdict, filters.status)
-    && (!filters.carrier || i.circuits.some((c) => c.kind === "primary" && c.carrier === filters.carrier))
-    && (!kind || kinds(i) === kind);
+    && (!filters.carrier || i.circuits.some((c) => c.kind === "primary" && inSet(filters.carrier, c.carrier)))
+    && inSet(kind, kinds(i));
   const groups = useMemo(() => {
     const map = new Map<string, SiteInfo[]>();
     infos.forEach((i) => { const r = i.site.dc ? "Data centers" : i.site.region ?? i.site.name; const l = map.get(r); if (l) l.push(i); else map.set(r, [i]); });
@@ -255,10 +255,16 @@ export function DevicesVisual(p: VisualProps) {
               <div className="vz-fluid" ref={bubbleRef}>
                 <DeviceBubbles groups={layout.placed} width={W} height={layout.h} visible={visible} selected={device?.name ?? null} onPick={setPicked} />
               </div>
-              <div className="vz-top" role="list" aria-label="Most impactful devices">
-                {model.devices.filter((d) => isBad(d.verdict) && visible(d)).sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || sitesBehindIn(behind, b, model) - sitesBehindIn(behind, a, model)).slice(0, 6).map((d) => (
-                  <button key={d.name} type="button" role="listitem" className={`vz-chip${device?.name === d.name ? " is-on" : ""}`} style={{ "--c": verdictTone(d.verdict) } as React.CSSProperties} onClick={() => setPicked(d.name)}>
-                    <i aria-hidden="true" />{shortDevice(d.name)} · {model.sites[d.site]?.name.split(" · ")[0] ?? d.site}
+              {/* The worst device of each role, not the worst six of the estate: ranked over everything, an
+                  edge router always wins on sites behind it, so all six came from the same bubble and the
+                  row read as a caption for that one circle. */}
+              <div className="vz-top" role="list" aria-label="The device that matters most in each role">
+                {groups.map((g) => g.devices.filter((d) => isBad(d.verdict) && visible(d))
+                  .sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || sitesBehindIn(behind, b, model) - sitesBehindIn(behind, a, model))[0])
+                  .filter(Boolean).map((d) => (
+                  <button key={d.name} type="button" role="listitem" className={`vz-chip${device?.name === d.name ? " is-on" : ""}`} style={{ "--c": verdictTone(d.verdict) } as React.CSSProperties}
+                    title={`${ROLE_LABEL[d.role] ?? d.role}: ${d.name} at ${model.sites[d.site]?.name ?? d.site} · ${d.verdict}`} onClick={() => setPicked(d.name)}>
+                    <i aria-hidden="true" />{(ROLE_LABEL[d.role] ?? d.role)}<small>{shortDevice(d.name)} · {model.sites[d.site]?.name.split(" · ")[0] ?? d.site}</small>
                   </button>
                 ))}
               </div>
@@ -327,7 +333,7 @@ export function LinksVisual(p: VisualProps) {
   // What the row above points at: the circuits of the focused carrier, worst first.
   const [allCircuits, setAllCircuits] = useState(false);
   const listed = useMemo(() => circuits
-    .filter((c) => (!focusCarrier || c.carrier === focusCarrier)
+    .filter((c) => inSet(focusCarrier, c.carrier)
       && matches(c.verdict, filters.status)
       && (!filters.region || model.sites[c.site]?.region === filters.region))
     .sort((a, b) => Number(b.status === "down") - Number(a.status === "down")
@@ -352,7 +358,7 @@ export function LinksVisual(p: VisualProps) {
           <div className="vz-k4">
             {carriers.map((c) => (
               <KpiTile key={c.name} tone={c.down ? TONE.bad : c.over ? TONE.warn : c.backupActive ? TONE.cyan : TONE.accent}
-                label={`${c.name} · ${c.tech}`} active={focusCarrier === c.name} onClick={() => onFilters({ carrier: focusCarrier === c.name ? null : c.name })}
+                label={`${c.name} · ${c.tech}`} active={inSet(focusCarrier, c.name) && !!focusCarrier} onClick={() => onFilters({ carrier: focusCarrier === c.name ? null : c.name })}
                 value={c.down ? `${c.down} down` : c.backupActive ? `${c.backupActive} active` : fmtInt(c.circuits.length)}
                 caption={c.down ? `of ${c.circuits.length}${c.regions ? ` · ${c.regions}` : ""}` : c.backupActive ? "sites running on backup" : `links${c.over ? ` · ${c.over} over SLA` : ""}${c.median != null ? ` · median ${Math.round(c.median * 100)}% of SLA` : ""}`} />
             ))}
@@ -368,7 +374,7 @@ export function LinksVisual(p: VisualProps) {
                 </defs>
                 {carriers.map((g, k) => {
                   const y = top + k * rowH + rowH / 2;
-                  const dim = focusCarrier && focusCarrier !== g.name;
+                  const dim = !!focusCarrier && !inSet(focusCarrier, g.name);
                   const ratio = g.median ?? 0;
                   const lit = Math.max(g.median == null ? 0 : 1, Math.min(SEGS, Math.floor(ratio * SEGS)));
                   const partial = g.median == null ? 0 : Math.min(1, ratio * SEGS - Math.floor(ratio * SEGS));

@@ -1,6 +1,6 @@
 // Shared visual vocabulary of the NetO11y pages (UX Delivery Chain look): tinted tiles
 // with corner brackets, KPI tiles, filter chips, the page bar and the visual/table toggle.
-import React from "react";
+import React, { useState } from "react";
 import type { NetworkModel, Verdict } from "../model/types";
 import { fmtBps, fmtBytes, hhmm } from "../utils/format";
 import { MAP_COLORS } from "./LiveMap";
@@ -39,14 +39,52 @@ export function KpiTile({ tone, label, value, caption, active, onClick }: { tone
 
 export interface ChipOption { key: string; label: string; count?: number; tone?: string }
 
+/** A filter holds the keys it accepts, comma separated, so the URL and everything reading it stay strings. */
+export const chosen = (value: string | null) => (value ? value.split(",").filter(Boolean) : []);
+export const inSet = (value: string | null, key: string | undefined | null) => !value || (key != null && chosen(value).includes(key));
+const toggle = (value: string | null, key: string) => {
+  const set = chosen(value);
+  const next = set.includes(key) ? set.filter((k) => k !== key) : [...set, key];
+  return next.length ? next.join(",") : null;
+};
+
+/** More than this many options and the row would run off the page, so they fold into a menu. */
+const FOLD_AT = 6;
+
 export function Chips({ label, options, value, onChange }: { label: string; options: ChipOption[]; value: string | null; onChange: (key: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const picked = chosen(value);
+  // Several values at once: a network has four carriers and a reader wants two of them side by side. And
+  // an environment with twenty carriers would have pushed the row off the screen, so past a handful the
+  // options fold into a menu that stays one line wide however many there are.
+  if (options.length > FOLD_AT) {
+    return (
+      <div className="vz-chips vz-pick" role="group" aria-label={label}>
+        <span className="vz-chips__label">{label}</span>
+        <button type="button" className={`vz-chip${picked.length ? " is-on" : ""}`} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          {picked.length ? `${picked.length} of ${options.length}` : `Any ${label.toLowerCase()}`}<b>▾</b>
+        </button>
+        {picked.length > 0 && <button type="button" className="vz-pick__clear" onClick={() => onChange(null)}>Clear</button>}
+        {open && (
+          <div className="vz-pick__menu" role="listbox" aria-multiselectable="true">
+            {options.map((o) => (
+              <button key={o.key} type="button" role="option" aria-selected={picked.includes(o.key)}
+                className={`vz-pick__opt${picked.includes(o.key) ? " is-on" : ""}`} onClick={() => onChange(toggle(value, o.key))}>
+                <i aria-hidden="true">{picked.includes(o.key) ? "✓" : ""}</i>{o.label}{o.count != null && <b>{o.count}</b>}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="vz-chips" role="group" aria-label={label}>
       <span className="vz-chips__label">{label}</span>
       {options.map((o) => {
-        const on = value === o.key;
+        const on = picked.includes(o.key);
         return (
-          <button key={o.key} type="button" className={`vz-chip${on ? " is-on" : ""}`} aria-pressed={on} onClick={() => onChange(on ? null : o.key)}
+          <button key={o.key} type="button" className={`vz-chip${on ? " is-on" : ""}`} aria-pressed={on} onClick={() => onChange(toggle(value, o.key))}
             style={o.tone ? ({ "--c": o.tone } as React.CSSProperties) : undefined}>
             {o.tone && <i aria-hidden="true" />}{o.label}{o.count != null && <b>{o.count}</b>}
           </button>

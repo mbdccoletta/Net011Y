@@ -127,6 +127,20 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
 
   const ev = (min: number, level: string, mnemonic: string, sev: number, text: string): NetEvent => ({ t: ago(min), kind: "syslog", level, mnemonic, sev, text });
 
+  // one line per kind of device, so what a reader opens matches the box it came from
+  const ERR_LINES: Record<string, [string, string][]> = {
+    ap: [["%DOT11-4-MAXRETRIES", "Client 4c:32:75:9a:11:02 excluded after repeated retries on radio 0"],
+      ["%CAPWAP-3-ECHO_ERR", "Echo response not received from controller, retrying"]],
+    switch: [["%LINK-3-UPDOWN", "Interface GigabitEthernet1/0/14, changed state to down"],
+      ["%PORT_SECURITY-2-PSECURE_VIOLATION", "Security violation on Gi1/0/22, putting the port in err-disable"]],
+    edge: [["%LINEPROTO-5-UPDOWN", "Line protocol on Interface Gi0/0/1, changed state to down"],
+      ["%CRYPTO-4-RECVD_PKT_INV_SPI", "Received packet with invalid SPI from the peer, dropping"]],
+    firewall: [["%PAN-3-SESSION_END", "Session dropped: no route to destination zone trust"],
+      ["%PAN-4-DP_LOAD", "Dataplane packet buffer above 80%"]],
+    default: [["%SYS-3-CPUHOG", "Task ran for 2160 ms, process = IP Input"],
+      ["%SNMP-3-AUTHFAIL", "Authentication failure for SNMP request from 10.0.0.9"]],
+  };
+
   const iface = (name: string, speed: number, utilPct: number, uplink: boolean, oper = "up(1)"): Iface => {
     const bps = (speed * 1e6 * utilPct) / 100;
     const inn = Array.from({ length: 24 }, () => Math.round(bps * uni(0.55, 0.97)));
@@ -142,6 +156,8 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
   interface DevOpts { cpu?: number; vendor?: string; blind?: boolean; rtt?: number | null; loss?: number; downMin?: number; incident?: string; events?: NetEvent[]; location?: string }
   const addDevice = (name: string, site: string, role: string, ip: string, hw: string, ifs: Iface[], o: DevOpts = {}) => {
     const cpu = o.cpu ?? r1(uni(4, 30));
+    // 24 buckets of fifteen minutes — six hours, the window the app reads device logs over and the one
+    // the chart draws. They used to be filled as if they were hours, so the bars sat in the wrong place.
     const errTs = Array.from({ length: 24 }, () => (rnd() < 0.15 ? 1 : 0));
     const d: Device = {
       id: `DEMO-${name}`, name, site, role, vendor: o.vendor ?? "cisco", ip, mode: o.blind ? "Discovery" : "Extension",
@@ -172,9 +188,23 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
     };
     if (down) {
       d.unreachableSince = ago(down);
-      d.syslogErrTs.fill(0, 24 - Math.ceil(down / 60));
+      // nothing arrives from a device that stopped answering: zero every bucket since it went quiet
+      d.syslogErrTs.fill(0, Math.max(0, 24 - Math.ceil(down / 15)));
       d.syslog.ERROR = d.syslogErrTs.reduce((a, b) => a + b, 0);
     }
+    // A counter saying "3 syslog errors · 6 h" over a list saying nothing arrived reads as a broken app.
+    // Live, those lines come from the same logs as the counter; here they are written from the buckets
+    // that fall inside the three hours the app reads records for, so the two halves agree.
+    const lines = ERR_LINES[role] ?? ERR_LINES.default;
+    d.events = [
+      ...d.events,
+      ...d.syslogErrTs.flatMap((n, k) => {
+        const minsAgo = (24 - k) * 15 - 7;
+        if (!n || minsAgo > 180 || (down && minsAgo < down)) return [];
+        const l = lines[k % lines.length];
+        return [ev(minsAgo, "ERROR", l[0], 3, l[1])];
+      }),
+    ];
     if (o.incident) d.incident = o.incident;
     devices.push(d);
     return d;

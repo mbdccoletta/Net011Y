@@ -34,14 +34,22 @@ interface Props {
 
 const shortDevice = (name: string) => name.replace(/^BR-[A-Z]{2}-[A-Z0-9]+-/, "");
 
-function Head({ title, verdict, subtitle, onClose }: { title: string; verdict: SiteInfo["verdict"]; subtitle: string; onClose: () => void }) {
+function Head({ title, verdict, subtitle, onClose, back }: {
+  title: string; verdict: SiteInfo["verdict"]; subtitle: string; onClose: () => void;
+  /** where this panel was opened from: a device or a circuit always belongs to a site */
+  back?: { label: string; onBack: () => void };
+}) {
   return (
     <div className="vz-dhead">
       <div>
         <h2><StatusShape verdict={verdict} />{title}</h2>
         <span className="vz-cap vz-mono">{subtitle}</span>
       </div>
-      <button type="button" className="lm-btn" onClick={onClose} aria-label="Close details">Close</button>
+      <div className="vz-dhead__acts">
+        {/* the way back sits where a reader looks for it, instead of a button further down the panel */}
+        {back && <button type="button" className="lm-btn" onClick={back.onBack} title={`Back to ${back.label}`}>← {back.label}</button>}
+        <button type="button" className="lm-btn" onClick={onClose} aria-label="Close details">Close</button>
+      </div>
     </div>
   );
 }
@@ -293,7 +301,8 @@ export function EntityDetails(props: Props) {
       const behind = model.sites[d.site]?.dc ? infos.filter((i) => i.site.hub === d.site).length : 1;
       return (
         <div className="lm vz vz-details">
-          <Head title={shortDevice(d.name)} verdict={d.verdict} onClose={onClose} subtitle={`${d.name} · ${ROLE_LABEL[d.role] ?? d.role} · ${d.ip || "—"}`} />
+          <Head title={shortDevice(d.name)} verdict={d.verdict} onClose={onClose} subtitle={`${d.name} · ${ROLE_LABEL[d.role] ?? d.role} · ${d.ip || "—"}`}
+            back={model.sites[d.site] ? { label: model.sites[d.site].name, onBack: () => onSelect(`site:${d.site}`) } : undefined} />
           <Tile tone={verdictTone(d.verdict)} title={model.sites[d.site]?.name ?? d.site} right={`${behind} ${behind === 1 ? "site" : "sites"} depend on it`}>
             <div className="vz-inst-top">
               <Gauge value={d.cpuNow} label="CPU" warn={T.cpu_warn} crit={T.cpu_crit} />
@@ -307,7 +316,6 @@ export function EntityDetails(props: Props) {
               </div>
             </div>
             <LimitLine values={d.cpu} limit={T.cpu_crit} label="CPU" />
-            <button type="button" className="lm-btn" onClick={() => onSelect(`site:${d.site}`)}>Open site {model.sites[d.site]?.name ?? d.site}</button>
           </Tile>
           <Tile tone={TONE.violet}>
             <NativeDrill devices={[d]} focus={d} since={d.unreachableSince} demo={model.demo} />
@@ -331,7 +339,8 @@ export function EntityDetails(props: Props) {
         .sort((a, b) => (b.iface.util ?? 0) - (a.iface.util ?? 0))[0];
       return (
         <div className="lm vz vz-details">
-          <Head title={`${c.siteName} · ${c.kind}`} verdict={c.status === "down" ? "Critical" : c.verdict} onClose={onClose} subtitle={`${c.carrier} · ${c.tech}${c.incident ? ` · ${c.incident}` : ""}`} />
+          <Head title={`${c.siteName} · ${c.kind}`} verdict={c.status === "down" ? "Critical" : c.verdict} onClose={onClose} subtitle={`${c.carrier} · ${c.tech}${c.incident ? ` · ${c.incident}` : ""}`}
+            back={model.sites[c.site] ? { label: c.siteName, onBack: () => onSelect(`site:${c.site}`) } : undefined} />
           <Tile tone={c.status === "down" ? TONE.bad : verdictTone(c.verdict)} title="Latency vs SLA" right={c.status === "down" ? `down since ${hhmm(c.since)}` : `${c.slaMs} ms SLA`}>
             <div className="vz-inst-top">
               <Gauge value={c.status === "down" ? 100 : pct} label={c.status === "down" ? "Down" : "Of SLA"} warn={100} crit={150}
@@ -342,7 +351,6 @@ export function EntityDetails(props: Props) {
                 <span className="vz-stat"><b>{c.jitterMs != null ? `${fmtNum(c.jitterMs)} ms` : "—"}</b>jitter</span>
               </div>
             </div>
-            <button type="button" className="lm-btn" onClick={() => onSelect(`site:${c.site}`)}>Open site {c.siteName}</button>
           </Tile>
           <Tile title="Latency over 24 h" right={`${c.carrier} · ${c.tech}`}>
             <LatencyOverTime series={c.rttTs ?? []} sla={c.slaMs} />

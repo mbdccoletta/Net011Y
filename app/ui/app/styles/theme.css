@@ -178,6 +178,9 @@
 .lm-stats b { font-family: var(--lm-sans); font-size: 24px; font-weight: 600; color: var(--lm-ink-hi); line-height: 1.15; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px color-mix(in srgb, var(--lm-ink-hi) 25%, transparent); }
 .lm-cause b { min-width: 0; }
 .lm-cause__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-cause__here { flex: none; font-style: normal; font: 600 10px var(--lm-mono); letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 999px; color: var(--lm-ink-hi); background: color-mix(in srgb, var(--lm-accent) 30%, transparent); }
+.lm-cause.is-here { border-color: color-mix(in srgb, var(--lm-accent) 60%, transparent); }
 .lm-cause__sub { display: block; margin: 1px 0 0 22px; font-size: 11px; color: var(--lm-ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lm-cause b em { font-style: normal; font-family: var(--np-mono); font-size: 12px; color: var(--lm-ink); }
 .lm-cause__bar { display: block; height: 3px; margin-left: 17px; border-radius: 2px; background: color-mix(in srgb, var(--lm-ink-hi) 10%, transparent); overflow: hidden; }
@@ -187,6 +190,11 @@
 .lm-right { display: grid; gap: 14px; align-content: start; }
 .lm-title { margin: 0; padding-bottom: 8px; border-bottom: 1px solid color-mix(in srgb, var(--lm-ink-hi) 18%, transparent); display: flex; align-items: center; gap: 8px; font: 600 14px var(--lm-sans); color: var(--lm-ink-hi); min-width: 0; }
 .lm-title span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a Davis problem name does not fit one line, and cutting it left the reader unable to tell two causes
+   apart; the panel title takes two, with the site under it */
+.lm-title--wrap { align-items: flex-start; }
+.lm-title--wrap span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; overflow: hidden; line-height: 1.3; }
+.lm-title--wrap small { display: block; font: 500 11px var(--lm-mono); color: var(--lm-ink-3); margin-top: 2px; }
 .lm-title em { font-style: normal; font-family: var(--np-mono); font-size: 12px; color: var(--lm-muted); }
 
 .lm-chain { display: grid; grid-template-columns: 1fr 14px 1fr 14px 1fr 14px 1fr; align-items: center; }
@@ -271,10 +279,16 @@
 .lm-clock small { font-size: 12px; color: var(--lm-muted); }
 
 @media (min-width: 700px) {
-  .lm-stage:not(.is-wide) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Stacked stage — what you get once the details pane takes its half. The map used to keep its whole
+     440 px and push both panels into whatever strip was left at the bottom of the window, where the cause
+     text was cut mid-sentence. The stage now fills the height it has and splits it: map above, the two
+     panels below with their own scroll. */
+  .lm-stage:not(.is-wide) { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(200px, 1fr) minmax(280px, 52%) auto; height: 100%; min-height: 560px; }
   .lm-stage:not(.is-wide) .lm-map, .lm-stage:not(.is-wide) .lm-time { grid-column: 1 / -1; }
+  .lm-stage:not(.is-wide) .lm-map { height: auto; }
   .lm-stage:not(.is-wide) .lm-left { margin-right: 0; }
   .lm-stage:not(.is-wide) .lm-right { margin-left: 0; }
+  .lm-stage:not(.is-wide) .lm-left, .lm-stage:not(.is-wide) .lm-right { min-height: 0; overflow-y: auto; }
 }
 .lm-stage.is-wide { display: block; height: 100%; min-height: 320px; padding: 0; }
 .lm-stage.is-wide .lm-map { position: absolute; inset: 0; height: auto; }
@@ -367,6 +381,22 @@
   font: 600 12px var(--lm-mono); }
 .vz-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
 .vz-chip b { font-family: var(--lm-mono); color: var(--lm-ink-hi); }
+/* the role leads, the device that carries it follows in the lighter voice */
+.vz-chip small { font-weight: 500; color: var(--lm-ink-3); }
+.vz-dhead__acts { display: flex; gap: 8px; align-items: center; flex: none; }
+/* A filter row grows with the environment: four carriers fit, twenty do not. Past a handful the options
+   fold into this menu, which stays one control wide however many there are. */
+.vz-pick { position: relative; }
+.vz-pick__clear { border: 0; background: none; padding: 2px 4px; cursor: pointer; font: 500 12px var(--lm-mono); color: var(--lm-ink-3); }
+.vz-pick__clear:hover { color: var(--lm-ink-hi); }
+.vz-pick__menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 220px; max-height: 320px; overflow-y: auto;
+  display: grid; gap: 2px; padding: 6px; border-radius: 10px; border: 1px solid var(--lm-line-2); background: var(--lm-panel); box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35); }
+.vz-pick__opt { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; cursor: pointer;
+  background: none; color: var(--lm-ink-2); font: 500 13px var(--lm-sans); text-align: left; }
+.vz-pick__opt i { width: 12px; font-style: normal; color: var(--lm-accent); }
+.vz-pick__opt b { margin-left: auto; font: 600 12px var(--lm-mono); color: var(--lm-ink-3); }
+.vz-pick__opt:hover { background: var(--lm-tint); color: var(--lm-ink-hi); }
+.vz-pick__opt.is-on { color: var(--lm-ink-hi); }
 .vz-chip:hover { border-color: var(--c); }
 .vz-chip.is-on { border-color: var(--c); background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--lm-ink-hi); }
 

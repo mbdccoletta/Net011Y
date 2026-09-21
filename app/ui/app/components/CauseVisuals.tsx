@@ -13,10 +13,10 @@ import { MAP_COLORS } from "./LiveMap";
 
 const compact = (n: number) => (Math.abs(n) >= 10000 ? `${(n / 1000).toFixed(0)}k` : fmtInt(n));
 
-function Node({ icon, value, label, tone }: { icon: React.ReactNode; value: string; label: string; tone: Verdict | "neutral" }) {
+function Node({ icon, value, label, tone, hint }: { icon: React.ReactNode; value: string; label: string; tone: Verdict | "neutral"; hint?: string }) {
   const color = tone === "neutral" ? "var(--lm-muted)" : MAP_COLORS[tone];
   return (
-    <div className="lm-chain__node" style={{ "--lm-tone": color } as React.CSSProperties} title={`${value} ${label}`}>
+    <div className="lm-chain__node" style={{ "--lm-tone": color } as React.CSSProperties} title={hint ? `${value} ${label} — ${hint}` : `${value} ${label}`}>
       <span className="lm-chain__icon">{icon}</span>
       <b>{value}</b>
       <span>{label}</span>
@@ -29,14 +29,19 @@ export function CauseChain({ cause }: { cause: Cause }) {
   const origin = cause.kind === "carrier" ? <LinkBrokenIcon /> : cause.kind === "datacenter" ? (cause.devices[0]?.role === "firewall" ? <FirewallIcon /> : <DataCenterIcon />) : cause.kind === "application" ? <ApplicationsIcon /> : <NetworkDevicesIcon />;
   const originValue = cause.kind === "carrier" ? String(cause.elements.length || cause.sites.length) : String(Math.max(1, cause.devices.length));
   const p90 = Math.max(0, ...cause.sites.map((s) => s.path?.hops.find((h) => h.kind === "app")?.stats.p90Ms ?? 0));
-  const app = cause.impact.sessionsLost ? { v: `−${compact(cause.impact.sessionsLost)}`, l: "sessions/h", t: "Critical" as Verdict }
-    : cause.impact.sessionsSlowed ? { v: compact(cause.impact.sessionsSlowed), l: "slow sessions/h", t: "Warning" as Verdict }
-      : p90 ? { v: `${(p90 / 1000).toFixed(1)}s`, l: "app p90", t: p90 >= 2000 ? ("Warning" as Verdict) : ("Healthy" as Verdict) } : { v: "—", l: "app impact", t: "neutral" as const };
+  // the last node changes what it measures with what the environment can say, so each one carries the
+  // sentence that explains it: a reader asked what "2.6 s app p90" meant, and nothing on screen answered
+  const app = cause.impact.sessionsLost ? { v: `−${compact(cause.impact.sessionsLost)}`, l: "sessions/h", t: "Critical" as Verdict, h: "user sessions per hour missing from the sites this cause touches, against what those hours usually hold" }
+    : cause.impact.sessionsSlowed ? { v: compact(cause.impact.sessionsSlowed), l: "slow sessions/h", t: "Warning" as Verdict, h: "sessions per hour from these sites that are being served more slowly than usual" }
+      : p90 ? { v: `${(p90 / 1000).toFixed(1)}s`, l: "app p90", t: p90 >= 2000 ? ("Warning" as Verdict) : ("Healthy" as Verdict), h: "the slowest tenth of page loads from these sites takes at least this long" } : { v: "—", l: "app impact", t: "neutral" as const, h: "no user sessions or requests are reported for these sites, so the app cannot say what people felt" };
   const nodes = [
-    <Node key="o" icon={origin} value={originValue} label={cause.kind === "carrier" ? "links" : "origin"} tone={cause.verdict} />,
-    <Node key="s" icon={<LocationMarkerIcon />} value={fmtInt(cause.impact.sites)} label={cause.impact.offline ? `sites · ${cause.impact.offline} dark` : "sites"} tone={cause.impact.offline ? "Critical" : "Warning"} />,
-    <Node key="d" icon={<NetworkDevicesIcon />} value={fmtInt(cause.impact.devices)} label="devices" tone="neutral" />,
-    <Node key="a" icon={<UserSessionsIcon />} value={app.v} label={app.l} tone={app.t} />,
+    <Node key="o" icon={origin} value={originValue} label={cause.kind === "carrier" ? "links" : "origin"} tone={cause.verdict}
+      hint={cause.kind === "carrier" ? "WAN links this outage is on" : "devices the alert was raised on"} />,
+    <Node key="s" icon={<LocationMarkerIcon />} value={fmtInt(cause.impact.sites)} label={cause.impact.offline ? `sites · ${cause.impact.offline} dark` : "sites"} tone={cause.impact.offline ? "Critical" : "Warning"}
+      hint={`sites behind it${cause.impact.offline ? `, of which ${cause.impact.offline} have nothing answering` : ""}`} />,
+    <Node key="d" icon={<NetworkDevicesIcon />} value={fmtInt(cause.impact.devices)} label="devices" tone="neutral"
+      hint="devices at those sites that are red or amber right now" />,
+    <Node key="a" icon={<UserSessionsIcon />} value={app.v} label={app.l} tone={app.t} hint={app.h} />,
   ];
   return (
     <div className="lm-chain" role="img" aria-label={`Cause chain: ${originValue} origin, ${cause.impact.sites} sites, ${cause.impact.devices} devices with issues, application ${app.v} ${app.l}`}>

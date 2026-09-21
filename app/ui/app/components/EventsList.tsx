@@ -20,12 +20,16 @@ export function EventsList({ devices, limit = 80, onDevice }: Props) {
     // and saying the first when the second is true contradicts the counters drawn right above: the text
     // comes from the newest lines of the whole environment, the counts from a per-device series.
     const sys = devices.reduce((a, d) => a + d.syslog.ERROR + d.syslog.WARN + d.syslog.INFO, 0);
+    const errors = devices.reduce((a, d) => a + d.syslog.ERROR, 0);
     const traps = devices.reduce((a, d) => a + d.traps, 0);
+    const whose = devices.length === 1 ? "this device" : "these devices";
     return (
       <p className="np-muted">
         {sys + traps > 0
-          ? `No lines from ${devices.length === 1 ? "this device" : "these devices"} among the newest read for the environment (last 3 hours). ${devices.length === 1 ? "Its" : "Their"} counters report ${fmtInt(sys)} syslog message${sys === 1 ? "" : "s"} and ${fmtInt(traps)} trap${traps === 1 ? "" : "s"} in the last 6 hours.`
-          : "No syslog messages or traps in the last 3 hours."}
+          // the counters are named here exactly as the box above names them, because a reader comparing
+          // "3 syslog errors · 6 h" against "75 syslog messages" reads two numbers that cannot both be true
+          ? `None of ${whose}'s lines are among the ones read for the last 3 hours. The counters report ${fmtInt(sys)} syslog message${sys === 1 ? "" : "s"} in the last 6 hours, ${fmtInt(errors)} of them error${errors === 1 ? "" : "s"}, and ${fmtInt(traps)} trap${traps === 1 ? "" : "s"}.`
+          : `No syslog messages or traps from ${whose} in the last 3 hours.`}
       </p>
     );
   }

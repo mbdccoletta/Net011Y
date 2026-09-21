@@ -209,7 +209,8 @@ export function App() {
           {page === "causes" ? (
             <LiveMapPage model={model} infos={infos} causeId={url.cause} failed={net.failed} needs={needs} onExample={onExample} onSettings={openSettings} next={nextFor(VIEW_NEEDS.map)} onLive={onLive} onCause={(cause) => setUrl({ cause }, false)}
               onSite={(code) => select(`site:${code}`)} onDevice={(name) => select(`device:${name}`)}
-              onSites={(patch) => setUrl({ page: "sites", sel: null, ...NO_FILTERS, ...patch })} />
+              onSites={(patch) => setUrl({ page: "sites", sel: null, ...NO_FILTERS, ...patch })}
+              selectedSite={url.sel?.startsWith("site:") ? url.sel.slice(5) : null} />
           ) : page === "traffic" ? (
             <TrafficPage model={model} needs={needs} onSettings={openSettings} onSite={(code) => select(`site:${code}`)} onExample={onExample} />
           ) : page === "devices" ? <DevicesVisual {...visualProps} /> : page === "links" ? <LinksVisual {...visualProps} /> : <SitesVisual {...visualProps} />}

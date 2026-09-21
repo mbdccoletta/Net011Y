@@ -8,7 +8,7 @@ import type { Circuit, Device, NetworkModel, Verdict } from "../model/types";
 import { ROLE_LABEL, type SiteInfo } from "../model/site";
 import { isBad } from "../model/verdict";
 import { Status } from "../components/Status";
-import { Spark } from "../components/Visual";
+import { inSet, Spark } from "../components/Visual";
 import { fmtNum, hhmm } from "../utils/format";
 
 export interface Filters {
@@ -179,7 +179,7 @@ export function LinksPage({ model, filters, onFilters, selected, onSelect }: Pag
   const regions = useMemo(() => uniq(Object.values(model.sites).map((s) => s.region)), [model]);
   const carriers = useMemo(() => uniq(circuits.map((c) => c.carrier)), [circuits]);
   const data = useMemo(() => circuits.filter((c) =>
-    matchStatus(c.verdict, filters.status) && (!filters.carrier || c.carrier === filters.carrier)
+    matchStatus(c.verdict, filters.status) && inSet(filters.carrier, c.carrier)
     && (!filters.region || model.sites[c.site]?.region === filters.region)
     && contains(`${c.siteName} ${c.site} ${c.carrier} ${c.tech} ${c.incident ?? ""}`, filters.q)) as LinkRow[], [circuits, model, filters]);
 

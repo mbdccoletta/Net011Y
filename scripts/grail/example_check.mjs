@@ -89,6 +89,12 @@ function audit(size) {
   const sysSum = devices.filter((d) => d.syslogErrTs?.length && d.syslogErrTs.reduce((a, b) => a + (b ?? 0), 0) > d.syslog.ERROR);
   check("The syslog error series never exceeds the error count", !sysSum.length,
     sysSum.slice(0, 3).map((d) => `${d.name}: ${d.syslogErrTs.reduce((a, b) => a + (b ?? 0), 0)} > ${d.syslog.ERROR}`).join(", ") || "none");
+  // "3 syslog errors · 6 h" over a list that says nothing arrived reads as a broken app: an error inside
+  // the three hours the app reads records for has to have a line behind it
+  const recentErr = (d) => (d.syslogErrTs ?? []).slice(12).reduce((a, b) => a + (b ?? 0), 0);
+  const noLines = devices.filter((d) => !d.unreachableSince && recentErr(d) > 0 && !(d.events ?? []).some((e) => e.kind === "syslog"));
+  check("A device with syslog errors in the read window has the lines behind them", !noLines.length,
+    noLines.slice(0, 3).map((d) => `${d.name}: ${recentErr(d)} errors, no line`).join(", ") || `${devices.filter((d) => recentErr(d) > 0).length} devices with recent errors`);
   const eventsOverCount = devices.filter((d) => (d.events ?? []).filter((e) => e.kind === "trap").length > d.traps);
   check("A device never lists more traps than it counted", !eventsOverCount.length,
     eventsOverCount.slice(0, 3).map((d) => d.name).join(", ") || "none");

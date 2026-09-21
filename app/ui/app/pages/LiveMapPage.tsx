@@ -36,6 +36,8 @@ interface Props {
   onSite: (code: string) => void;
   onDevice: (name: string) => void;
   onSites: (patch: { status: string; region: string | null; q: string }) => void;
+  /** the site whose details are open beside the map, when one is */
+  selectedSite?: string | null;
   /** Offered while the environment has no network data yet. */
   onExample?: () => void;
   /** Opens Settings › Data, where every item says what to send and links to its documentation */
@@ -63,7 +65,7 @@ function causeMeta(c: Cause) {
   ].filter(Boolean).join(" · ");
 }
 
-export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onSite, onDevice, onSites, onExample, onSettings, next, onLive }: Props) {
+export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onSite, onDevice, onSites, onExample, onSettings, next, onLive, selectedSite }: Props) {
   const causes = useMemo(() => buildCauses(model, infos), [model, infos]);
   const shared = causes.filter((c) => c.sites.length > 1 || c.kind === "carrier" || c.kind === "datacenter");
   const isolated = causes.filter((c) => !shared.includes(c));
@@ -221,10 +223,18 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   const ips = scopeDevices.map((d) => d.ip).filter(Boolean).slice(0, 40);
   const maxSites = Math.max(1, ...causes.map((c) => c.sites.length));
 
+  // With a site open beside the map, the list is a wall of alerts that may have nothing to do with it.
+  // Every cause that reaches the open site is marked and sorted to the front, so the question a reader
+  // asked — does this alert have anything to do with this site? — is answered on the row.
+  const touchesOpenSite = (c: Cause) => !!selectedSite && c.sites.some((s) => s.code === selectedSite);
+  const openSiteName = selectedSite ? model.sites[selectedSite]?.name ?? selectedSite : null;
+  const byRelevance = (list: Cause[]) => (selectedSite ? [...list].sort((a, b) => Number(touchesOpenSite(b)) - Number(touchesOpenSite(a))) : list);
+
   const causeButton = (c: Cause) => (
-    <button key={c.id} type="button" className={`lm-cause${cause?.id === c.id ? " is-on" : ""}`} aria-pressed={cause?.id === c.id}
-      style={{ "--lm-tone": MAP_COLORS[c.verdict] } as React.CSSProperties} onClick={() => onCause(c.id)} title={causeMeta(c)}>
-      <b><Marker verdict={c.verdict} /><span className="lm-cause__title">{c.title}</span><em>{c.sites.length}</em></b>
+    <button key={c.id} type="button" className={`lm-cause${cause?.id === c.id ? " is-on" : ""}${touchesOpenSite(c) ? " is-here" : ""}`} aria-pressed={cause?.id === c.id}
+      style={{ "--lm-tone": MAP_COLORS[c.verdict] } as React.CSSProperties} onClick={() => onCause(c.id)}
+      title={touchesOpenSite(c) ? `${causeMeta(c)} · includes ${openSiteName}` : selectedSite ? `${causeMeta(c)} · does not reach ${openSiteName}` : causeMeta(c)}>
+      <b><Marker verdict={c.verdict} /><span className="lm-cause__title">{c.title}</span>{touchesOpenSite(c) && <i className="lm-cause__here">this site</i>}<em>{c.sites.length}</em></b>
       {/* Davis names a problem after its kind, so seven devices down are seven rows with the same words.
           Where they differ is the site, which the subtitle already holds. */}
       {c.subtitle && <span className="lm-cause__sub">{c.subtitle}</span>}
@@ -310,16 +320,20 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
             <b><span className="lm-cause__title">Whole network</span><em>{fmtInt(affected.length)}/{fmtInt(infos.length)}</em></b>
           </button>
           {shared.length > 0 && <h3 className="lm-sub">Shared causes · {shared.length}</h3>}
-          {shared.map(causeButton)}
+          {byRelevance(shared).map(causeButton)}
           {isolated.length > 0 && <h3 className="lm-sub">Isolated faults · {isolated.length}</h3>}
-          {isolated.map(causeButton)}
+          {byRelevance(isolated).map(causeButton)}
           </>)}
         </aside>
 
         <aside className="lm-panel lm-right" aria-label={cause ? cause.title : "Whole network"}>
           {cause ? (
             <>
-              <h2 className="lm-title"><Marker verdict={cause.verdict} /><span>{cause.title}</span>{cause.since && <em>{clock(parseTs(cause.since))}</em>}</h2>
+              <h2 className="lm-title lm-title--wrap" title={causeMeta(cause)}>
+                <Marker verdict={cause.verdict} />
+                <span>{cause.title}{cause.subtitle && <small>{cause.subtitle}</small>}</span>
+                {cause.since && <em>{clock(parseTs(cause.since))}</em>}
+              </h2>
               <CauseChain cause={cause} />
               <EvidenceBadges cause={cause} onLogs={() => openLogs(logsQuery(ips, cause.since))} />
             </>
@@ -349,7 +363,8 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
 
         {replayable && (
         <div className="lm-panel lm-time" role="group" aria-label="Replay">
-          <button type="button" className="lm-play" onClick={() => { if (cursor >= 1) setCursor(0); setPlaying((p) => !p); }} aria-label={playing ? "Pause replay" : "Replay how it spread"}>
+          <button type="button" className="lm-play" onClick={() => { if (cursor >= 1) setCursor(0); setPlaying((p) => !p); }} aria-label={playing ? "Pause replay" : "Replay how it spread"}
+            title={playing ? "Pause" : `Replay: play the last ${Math.max(1, Math.round((end - start) / 3600e3))} h forward and watch the sites go dark in the order they did, from the moments Dynatrace recorded`}>
             {playing ? <PauseIcon /> : <PlayIcon />}
           </button>
           <div className="lm-track">
