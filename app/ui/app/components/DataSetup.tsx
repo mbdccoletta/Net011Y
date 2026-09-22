@@ -180,14 +180,14 @@ export function DataSourceSection({ source, scale, onSource }: Pick<Props, "sour
             <Select.Trigger placeholder="Data source" />
             <Select.Content>
               <Select.Option value="live" textValue="This environment">This environment</Select.Option>
-              <Select.Option value="example" textValue="Example network · 410 sites">Example network · 410 sites</Select.Option>
+              <Select.Option value="example" textValue="Example network · 550 sites">Example network · 550 sites</Select.Option>
               <Select.Option value="example-xl" textValue="Example network · 20,000 devices">Example network · 20,000 devices</Select.Option>
             </Select.Content>
           </Select>
         </div>
         <Text textStyle="small">
-          This environment reads what your Dynatrace environment already stores. The example network is a fictitious retail company with about 400 sites, so you can explore the app before sending data;
-          the extra-large one is the same company at about 4,200 sites and 20,000 devices, read the way the app reads an estate that size (per-device summaries, not every port).
+          This environment reads what your Dynatrace environment already stores. The example network is a fictitious retail group with about 550 sites across Brazil and the United States, so you can explore
+          the app before sending data; the extra-large one is the same group at about 4,200 sites and 20,000 devices, read the way the app reads an estate that size (per-device summaries, not every port).
         </Text>
       </section>
   );

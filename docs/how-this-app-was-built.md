@@ -224,7 +224,9 @@ reads the sources for the hook-order mistake.
 
 1. *A check anchored to the clock lies.* The restart check compared against "two hours ago" and failed
    every time the fixtures aged, which teaches people to ignore the suite. It reads the moment from the
-   fixture now.
+   fixture now — and the fixtures themselves carry moments, so a set left for a day ages out of every
+   window the model reads. The suite rebuilds a stale set before it reads anything, rather than going red
+   for a reason that has nothing to do with the code.
 2. *Two paths to the same number must be checked against each other.* The per-device summary took the
    largest counter delta in a bucket and divided it by the whole bucket, while the per-port series summed
    the deltas of the bucket — a five-fold understatement that nothing caught, because the fixtures had no

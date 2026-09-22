@@ -1,7 +1,20 @@
 // Feeds the generated Grail results through the app's own model code and reports what every view gets.
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, buildJourney, asRoutes, nextSteps, coverage } from "./out/app-model.mjs";
+
+// The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
+// the model only reports what happened in the last day. Left for a day, they age out of every window and
+// the suite goes red for a reason that has nothing to do with the code, which is how a suite stops being
+// believed. So a stale set is rebuilt before anything is read.
+const scenarioAge = () => {
+  try { return Date.now() - Date.parse(JSON.parse(readFileSync("out/scenario.json", "utf8")).generatedFor); } catch { return Infinity; }
+};
+if (scenarioAge() > 18 * 3600e3) {
+  console.error("fixtures are more than 18 h old — regenerating before the checks");
+  execFileSync(process.execPath, [new URL("generate.mjs", import.meta.url).pathname], { stdio: "inherit", cwd: new URL(".", import.meta.url).pathname });
+}
 
 const R = JSON.parse(readFileSync("out/results.json", "utf8"));
 const report = { schema: {}, needs: {}, views: {}, checks: [] };

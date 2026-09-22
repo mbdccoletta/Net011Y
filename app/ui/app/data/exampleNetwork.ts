@@ -1,8 +1,8 @@
-// Simulated Brazilian retail and distribution network at enterprise scale: five regions,
-// ~400 sites, two data centers and four carriers. The extra-large size is the same company at
-// ~4,200 sites and ~20,000 devices with four data centers, read the way the app reads an estate
-// that size: per-device summaries instead of every port (DETAIL_MAX_DEVICES). Every name and number is fictitious and
-// the UI labels it as an example. Health is judged with the same verdict and end-to-end
+// Simulated retail and distribution network at enterprise scale, on two continents: a Brazilian arm of
+// five regions and an American one of three, ~550 sites, three data centers and four carriers. The
+// extra-large size is the same group at ~4,200 sites and ~20,000 devices with five data centers, read the
+// way the app reads an estate that size: per-device summaries instead of every port (DETAIL_MAX_DEVICES).
+// Every name and number is fictitious and the UI labels it as an example. Health is judged with the same verdict and end-to-end
 // rules as live data (model/verdict.ts, model/e2e.ts).
 import type { AppExperience, AppTransaction, Circuit, Device, DeviceProblem, E2EPath, Hop, Iface, NetEvent, NetworkModel, PathLink, Site, Verdict } from "../model/types";
 import { T, ORDER, worst, deviceVerdict } from "../model/verdict";
@@ -14,7 +14,10 @@ import { DETAIL_MAX_DEVICES } from "./queries";
 type Size = "L" | "M" | "S";
 type CityRow = [name: string, uf: string, lat: number, lon: number];
 
-const REGIONS: { name: string; sites: number; hub: string; cities: CityRow[] }[] = [
+// The same fictitious group on two continents: a Brazilian retail arm and a North American one, each
+// with its own data center, carriers and regions. Two countries is what makes the map, the site tags and
+// the carrier filters say something — one country reads as one big region.
+const REGIONS: { name: string; sites: number; hub: string; cities: CityRow[]; country?: "BR" | "US" }[] = [
   { name: "Southeast", sites: 150, hub: "SPO1", cities: [
     ["São Paulo", "SP", -23.55, -46.63], ["Campinas", "SP", -22.91, -47.06], ["Santos", "SP", -23.96, -46.33], ["Ribeirão Preto", "SP", -21.18, -47.81],
     ["Sorocaba", "SP", -23.5, -47.46], ["São José dos Campos", "SP", -23.18, -45.89], ["Rio de Janeiro", "RJ", -22.91, -43.17], ["Niterói", "RJ", -22.88, -43.1],
@@ -38,14 +41,34 @@ const REGIONS: { name: string; sites: number; hub: string; cities: CityRow[] }[]
     ["Manaus", "AM", -3.12, -60.02], ["Belém", "PA", -1.46, -48.49], ["Santarém", "PA", -2.44, -54.71], ["Porto Velho", "RO", -8.76, -63.9],
     ["Palmas", "TO", -10.18, -48.33], ["Macapá", "AP", 0.03, -51.07], ["Boa Vista", "RR", 2.82, -60.67],
   ] },
+  { name: "East US", sites: 60, hub: "DAL1", country: "US", cities: [
+    ["New York", "NY", 40.71, -74.01], ["Philadelphia", "PA", 39.95, -75.17], ["Boston", "MA", 42.36, -71.06], ["Newark", "NJ", 40.74, -74.17],
+    ["Baltimore", "MD", 39.29, -76.61], ["Richmond", "VA", 37.54, -77.44], ["Charlotte", "NC", 35.23, -80.84], ["Raleigh", "NC", 35.78, -78.64],
+    ["Atlanta", "GA", 33.75, -84.39], ["Orlando", "FL", 28.54, -81.38], ["Miami", "FL", 25.76, -80.19], ["Pittsburgh", "PA", 40.44, -80.0],
+  ] },
+  { name: "Central US", sites: 44, hub: "DAL1", country: "US", cities: [
+    ["Dallas", "TX", 32.78, -96.8], ["Houston", "TX", 29.76, -95.37], ["San Antonio", "TX", 29.42, -98.49], ["Austin", "TX", 30.27, -97.74],
+    ["Oklahoma City", "OK", 35.47, -97.52], ["Kansas City", "MO", 39.1, -94.58], ["Saint Louis", "MO", 38.63, -90.2], ["Chicago", "IL", 41.88, -87.63],
+    ["Minneapolis", "MN", 44.98, -93.27], ["Omaha", "NE", 41.26, -95.93], ["Memphis", "TN", 35.15, -90.05], ["Nashville", "TN", 36.16, -86.78],
+  ] },
+  { name: "West US", sites: 36, hub: "DAL1", country: "US", cities: [
+    ["Los Angeles", "CA", 34.05, -118.24], ["San Diego", "CA", 32.72, -117.16], ["San Jose", "CA", 37.34, -121.89], ["Sacramento", "CA", 38.58, -121.49],
+    ["Phoenix", "AZ", 33.45, -112.07], ["Tucson", "AZ", 32.22, -110.97], ["Las Vegas", "NV", 36.17, -115.14], ["Denver", "CO", 39.74, -104.99],
+    ["Salt Lake City", "UT", 40.76, -111.89], ["Portland", "OR", 45.52, -122.68], ["Seattle", "WA", 47.61, -122.33], ["Boise", "ID", 43.62, -116.2],
+  ] },
 ];
 
 type DcSpec = [key: string, role: string, model: string, cpu: number];
-const BASE_DCS: { code: string; name: string; uf: string; lat: number; lon: number; specs: DcSpec[] }[] = [
+const BASE_DCS: { code: string; name: string; uf: string; lat: number; lon: number; specs: DcSpec[]; country?: "BR" | "US"; region?: string }[] = [
   { code: "SPO1", name: "Data Center São Paulo", uf: "SP", lat: -23.55, lon: -46.63, specs: [
     ["CON1", "core", "Cisco ASR 1002-HX", 46], ["CON2", "core", "Cisco ASR 1002-HX", 39], ["COR1", "core", "Cisco Nexus 9336C", 22],
     ["FWL1", "firewall", "Palo Alto PA-5220", 34], ["FWL2", "firewall", "Palo Alto PA-5220", 29], ["LBL1", "lb", "F5 BIG-IP i5800", 18],
     ["SWT1", "switch", "Cisco Nexus 93180YC", 9], ["SWT2", "switch", "Cisco Nexus 93180YC", 8],
+  ] },
+  { code: "DAL1", name: "Data Center Dallas", uf: "TX", lat: 32.78, lon: -96.8, country: "US", region: "Central US", specs: [
+    ["CON1", "core", "Cisco ASR 1006-X", 43], ["CON2", "core", "Cisco ASR 1006-X", 35], ["COR1", "core", "Cisco Nexus 9364C", 25],
+    ["FWL1", "firewall", "Palo Alto PA-5250", 37], ["FWL2", "firewall", "Palo Alto PA-5250", 31], ["LBL1", "lb", "F5 BIG-IP i7800", 20],
+    ["SWT1", "switch", "Cisco Nexus 93180YC", 11], ["SWT2", "switch", "Cisco Nexus 93180YC", 9],
   ] },
   { code: "CPS1", name: "Data Center Campinas", uf: "SP", lat: -22.91, lon: -47.06, specs: [
     ["CON1", "core", "Cisco ASR 1002-HX", 41], ["COR1", "core", "Cisco Nexus 9336C", 24], ["FWL1", "firewall", "Palo Alto PA-3260", 78],
@@ -58,13 +81,19 @@ const XL_DCS: typeof BASE_DCS = [
     ["CON1", "core", "Cisco ASR 1006-X", 44], ["CON2", "core", "Cisco ASR 1006-X", 37], ["COR1", "core", "Cisco Nexus 9364C", 26],
     ["FWL1", "firewall", "Palo Alto PA-5250", 41], ["LBL1", "lb", "F5 BIG-IP i7800", 23], ["SWT1", "switch", "Cisco Nexus 93180YC", 11],
   ] },
+  { code: "ASH1", name: "Data Center Ashburn", uf: "VA", lat: 39.04, lon: -77.49, country: "US", region: "East US", specs: [
+    ["CON1", "core", "Cisco ASR 1006-X", 40], ["COR1", "core", "Cisco Nexus 9364C", 23], ["FWL1", "firewall", "Palo Alto PA-5250", 35],
+    ["LBL1", "lb", "F5 BIG-IP i7800", 19], ["SWT1", "switch", "Cisco Nexus 93180YC", 10],
+  ] },
   { code: "REC1", name: "Data Center Recife", uf: "PE", lat: -8.05, lon: -34.88, specs: [
     ["CON1", "core", "Cisco ASR 1002-HX", 38], ["COR1", "core", "Cisco Nexus 9336C", 21], ["FWL1", "firewall", "Palo Alto PA-3260", 33],
     ["SWT1", "switch", "Cisco Nexus 93180YC", 9],
   ] },
 ];
-/** Sites per region and single-site scenarios grow by this factor in the extra-large size */
-const XL = 10.25;
+/** Sites per region and single-site scenarios grow by this factor in the extra-large size.
+ *  Tuned so the extra-large estate lands on the twenty thousand devices the app is documented and tested
+ *  at; it came down when the American arm was added, which brought its own sites with it. */
+const XL = 7.6;
 
 interface Scenario {
   circuitsDown?: number;
@@ -110,7 +139,8 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
   // which data center a branch's WAN terminates on: the extra-large estate splits the Southeast between
   // São Paulo and Rio and sends the North and Northeast to Recife
   const hubOf = (region: string, k: number) => (!xl ? REGIONS.find((r) => r.name === region)!.hub
-    : region === "Southeast" ? (k % 2 ? "RIO1" : "SPO1") : region === "Northeast" || region === "North" ? "REC1" : region === "Midwest" ? "CPS1" : "SPO1");
+    : region === "East US" ? "ASH1" : region === "Central US" || region === "West US" ? "DAL1"
+      : region === "Southeast" ? (k % 2 ? "RIO1" : "SPO1") : region === "Northeast" || region === "North" ? "REC1" : region === "Midwest" ? "CPS1" : "SPO1");
   const rnd = mulberry32(xl ? 20260919 : 20260914);
   const uni = (a: number, b: number) => a + rnd() * (b - a);
   const int = (a: number, b: number) => Math.floor(uni(a, b + 1));
@@ -211,8 +241,9 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
   };
 
   DCS.forEach((dc) => {
-    sites[dc.code] = { code: dc.code, name: dc.name, city: dc.name.replace("Data Center ", ""), uf: dc.uf, id: String(1001 + DCS.indexOf(dc)), dc: true, lat: dc.lat, lon: dc.lon, region: dc.uf === "PE" ? "Northeast" : "Southeast",
-      tags: { "primary_tags.country": "br", "primary_tags.region": dc.uf === "PE" ? "northeast" : "southeast", "primary_tags.federativeunit": dc.uf.toLowerCase(), "primary_tags.city": dc.name.replace("Data Center ", ""), "primary_tags.site_type": "data center", "primary_tags.site": dc.code.toLowerCase() } };
+    const dcRegion = dc.region ?? (dc.uf === "PE" ? "Northeast" : "Southeast");
+    sites[dc.code] = { code: dc.code, name: dc.name, city: dc.name.replace("Data Center ", ""), uf: dc.uf, id: String(1001 + DCS.indexOf(dc)), dc: true, lat: dc.lat, lon: dc.lon, region: dcRegion,
+      tags: { "primary_tags.country": (dc.country ?? "BR").toLowerCase(), "primary_tags.region": dcRegion.toLowerCase(), "primary_tags.federativeunit": dc.uf.toLowerCase(), "primary_tags.city": dc.name.replace("Data Center ", ""), "primary_tags.site_type": "data center", "primary_tags.site": dc.code.toLowerCase() } };
     dcEvents[dc.code] = [ev(int(20, 90), "INFO", "%SYS-5-CONFIG_I", 5, "Configured from console by netops on vty0")];
   });
   const firewallCpuEvent = ev(38, "WARN", "%PAN-4-DP_CPU", 4, "Dataplane CPU above 75% for 30 minutes on FWL1 (SSL decryption)");
@@ -222,7 +253,8 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
     const [city, uf, lat, lon] = reg.cities[k % reg.cities.length];
     const roll = rnd();
     const size: Size = roll < 0.08 ? "L" : roll < 0.38 ? "M" : "S";
-    const carrier = reg.name === "South" ? "Carrier B" : reg.name === "Midwest" ? (rnd() < 0.65 ? "Carrier B" : "Carrier A") : "Carrier A";
+    const carrier = reg.country === "US" ? (reg.name === "Central US" ? "Carrier A" : rnd() < 0.7 ? "Carrier D" : "Carrier A")
+      : reg.name === "South" ? "Carrier B" : reg.name === "Midwest" ? (rnd() < 0.65 ? "Carrier B" : "Carrier A") : "Carrier A";
     const satellite = reg.name === "North" && size === "S" && rnd() < 0.4;
     return { reg, city, uf, lat: lat + uni(-0.12, 0.12) * Math.sqrt(K), lon: lon + uni(-0.12, 0.12) * Math.sqrt(K), size, carrier, satellite, hub: hubOf(reg.name, k) };
   }));
@@ -248,6 +280,15 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
   pick(1, (s, i) => s.reg.name === "Northeast" && i % 9 === 4, () => ({ routerDown: 75, incident: "INC-DEMO-3120" }));
   pick(1, (s, i) => s.reg.name === "Northeast" && i % 7 === 2, () => ({ apDown: 31 }));
   pick(1, (s, i) => s.reg.name === "North" && i % 5 === 3, () => ({ routerBlind: true }));
+  // the American arm has its own weather: a smaller carrier problem, so the Brazilian outage stays the
+  // headline, plus the single-site faults that make the other pages worth opening
+  pick(5, (s, i) => s.reg.name === "East US" && s.carrier === "Carrier D" && i % 3 === 0,
+    () => ({ degraded: { latencyMs: 88, lossPct: 2.6, jitterMs: 24 }, app: { p90Ms: 2300, errPct: 0.8 }, incident: "INC-DEMO-3140" }), true);
+  pick(1, (s, i) => s.reg.name === "West US" && s.size !== "S" && i % 7 === 2, () => ({ routerDown: 54, incident: "INC-DEMO-3147" }));
+  pick(1, (s, i) => s.reg.name === "West US" && i % 11 === 6, () => ({ routerBlind: true }));
+  pick(1, (s, i) => s.reg.name === "Central US" && i % 9 === 1, () => ({ apDown: 42 }));
+  pick(1, (s, i) => s.reg.name === "Central US" && s.size === "L" && i % 4 === 2, () => ({ wanSaturated: 94.2, app: { p90Ms: 3900, errPct: 1.9 } }));
+  pick(1, (s, i) => s.reg.name === "East US" && i % 13 === 8, () => ({ switchDown: 26, incident: "INC-DEMO-3152" }));
 
   // ---------- branches ----------
   const used = new Set(DCS.map((d) => d.code));
@@ -272,7 +313,7 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
     const name = `${s.city} · ${kind} ${nth}`;
     const hub = DCS.find((d) => d.code === s.hub)!;
     sites[code] = { code, name, city: s.city, uf: s.uf, id: String(2000 + i), dc: false, lat: r2(s.lat), lon: r2(s.lon), region: s.reg.name, hub: hub.code,
-      tags: { "primary_tags.country": "br", "primary_tags.region": s.reg.name.toLowerCase(), "primary_tags.federativeunit": s.uf.toLowerCase(), "primary_tags.city": s.city, "primary_tags.site_type": kind.toLowerCase(), "primary_tags.site": code.toLowerCase() } };
+      tags: { "primary_tags.country": (s.reg.country ?? "BR").toLowerCase(), "primary_tags.region": s.reg.name.toLowerCase(), "primary_tags.federativeunit": s.uf.toLowerCase(), "primary_tags.city": s.city, "primary_tags.site_type": kind.toLowerCase(), "primary_tags.site": code.toLowerCase() } };
 
     // circuits
     const baseLat = r1(6 + km(s.lat, s.lon, hub.lat, hub.lon) * 0.011 + uni(0, 4));
@@ -298,7 +339,7 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
     if (sc.routerDown) circ.forEach((c) => Object.assign(c, { latencyMs: null, lossPct: null, jitterMs: null, rttTs: [], note: "not measured: the branch router is not responding" }));
     circuits.push(...circ);
 
-    const P = `BR-${s.uf}-${code}`;
+    const P = `${s.reg.country ?? "BR"}-${s.uf}-${code}`;
     const net = `10.${20 + (i >> 8)}.${i & 255}`;
     const allDown = !!sc.circuitsDown;
     const offline = sc.circuitsDown ?? sc.routerDown;
@@ -323,7 +364,7 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
     });
     if (offline) {
       dcEvents[hub.code].unshift(ev(offline, "WARN", "%BGP-5-ADJCHANGE", 5, `neighbor ${net}.1 Down BGP Notification sent (hold time expired) · ${code}`));
-      traps.push({ t: ago(offline), ip: `10.${DCS.indexOf(hub)}.0.11`, device: `BR-${hub.uf}-${hub.code}-CON1`, oid: "IF-MIB::linkDown" });
+      traps.push({ t: ago(offline), ip: `10.${DCS.indexOf(hub)}.0.11`, device: `${hub.country ?? "BR"}-${hub.uf}-${hub.code}-CON1`, oid: "IF-MIB::linkDown" });
     }
 
     // switches
@@ -370,7 +411,7 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
   DCS.forEach((dc, k) => {
     dc.specs.forEach(([key, role, hw, cpu], j) => {
       const ifs = [iface("Hu1/0/1", 100000, r1(uni(5, 30)), true), iface("Hu1/0/2", 100000, r1(uni(5, 30)), true)];
-      addDevice(`BR-${dc.uf}-${dc.code}-${key}`, dc.code, role, `10.${k}.0.${11 + j}`, hw, ifs, {
+      addDevice(`${dc.country ?? "BR"}-${dc.uf}-${dc.code}-${key}`, dc.code, role, `10.${k}.0.${11 + j}`, hw, ifs, {
         cpu, rtt: 0.4, vendor: role === "firewall" ? "paloalto" : role === "lb" ? "f5" : "cisco",
         events: key === "CON1" ? dcEvents[dc.code] : key === "FWL1" && dc.code === "CPS1" ? [firewallCpuEvent] : undefined, location: `${dc.name.replace("Data Center ", "")} · ${dc.uf}`,
       });
