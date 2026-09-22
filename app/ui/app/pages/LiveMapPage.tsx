@@ -278,11 +278,21 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
           <div className="lm-stats">
             <span><b style={{ color: offline ? "var(--lm-bad)" : undefined }}>{fmtInt(offline)}</b>sites offline</span>
             {/* demand as measured, when the environment reports it; the example network carries its own loss */}
-            {demand.pct != null ? (
-              <span title={`${demand.source === "requests" ? "Requests served" : "User sessions"} in the last settled hour against what that hour usually holds, whole environment`}>
-                <b style={{ color: demand.dropped ? "var(--lm-bad)" : undefined }}>{demand.pct}%</b>usual {demand.source === "requests" ? "requests" : "sessions"}
-              </span>
-            ) : lost ? (
+            {demand.pct != null ? (() => {
+              // A median baseline puts half the days above it, so a hundred-and-six per cent is what a
+              // quiet network looks like — printed as a headline beside "sites offline" it read as a
+              // fault. The number is kept for the readings that mean something: a fall, or a surge.
+              const what = demand.source === "requests" ? "requests" : "sessions";
+              const usual = demand.pct >= 90 && demand.pct <= 125;
+              const tip = `${demand.source === "requests" ? "Requests served" : "User sessions"} in the last complete hour, ${fmtInt(demand.now ?? 0)}, against the median of the same hour over the last seven days, ${fmtInt(demand.typical ?? 0)} — ${demand.pct}%. Whole environment.`;
+              return (
+                <span title={tip}>
+                  {usual
+                    ? <><b>Usual</b>{what} this hour</>
+                    : <><b style={{ color: demand.dropped ? "var(--lm-bad)" : undefined }}>{demand.pct}%</b>of usual {what}</>}
+                </span>
+              );
+            })() : lost ? (
               <span><b style={{ color: "var(--lm-bad)" }}>−{fmtInt(lost)}</b>sessions/h</span>
             ) : null}
           </div>
