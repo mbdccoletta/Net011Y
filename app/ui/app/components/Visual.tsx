@@ -140,14 +140,14 @@ export function StatusShape({ verdict }: { verdict: Verdict }) {
 }
 
 /**
- * Ring gauge for a percentage. The colour follows the thresholds, unless the caller states the status:
- * a circuit that is down reads 100% of its SLA, which lands exactly on the warning threshold and paints
- * the ring amber for something that is actually critical.
+ * Ring gauge for a percentage. Green, amber and red are the status of an alert and nothing else, so a
+ * reading only wears them when the caller passes the verdict it belongs to; on its own it is drawn in the
+ * data colour, however high it is. A ring painted amber by a threshold announced a warning nobody raised,
+ * and one painted green called a device well when all it knew was that its CPU was low.
  */
-export function Gauge({ value, label, warn, crit, size = 110, verdict }: { value: number | null; label: string; warn: number; crit: number; size?: number; verdict?: Verdict }) {
+export function Gauge({ value, label, size = 110, verdict }: { value: number | null; label: string; warn?: number; crit?: number; size?: number; verdict?: Verdict }) {
   const R = 44, C = 2 * Math.PI * R, pct = value == null ? 0 : Math.max(0, Math.min(100, value));
-  const tone = verdict ? verdictTone(verdict)
-    : value == null ? TONE.neutral : value >= crit ? TONE.bad : value >= warn ? TONE.warn : TONE.good;
+  const tone = verdict ? verdictTone(verdict) : value == null ? TONE.neutral : TONE.cyan;
   // the reading sits alone inside the ring; the caption goes under it, where it has the whole width of
   // the tile and cannot run into the number or over the ring
   return (
@@ -202,7 +202,8 @@ export function InOut({ inn, out, w = 104, h = 30, stepMs = 300e3, volume = fals
 export function Spark({ values, max = 100, unit = "%", w = 84, h = 26 }: { values: number[]; max?: number; unit?: string; w?: number; h?: number }) {
   if (values.length < 2) return <span className="np-muted">—</span>;
   const last = values[values.length - 1];
-  const tone = last >= 90 ? TONE.bad : last >= 70 ? TONE.warn : TONE.cyan;
+  // one hue for the measurement: the status of the row is already in its own column
+  const tone = TONE.cyan;
   const top = Math.max(max, ...values);
   // the curve keeps a margin for its end dot; the value sits in its own box beside it, so it can never
   // run into the next column the way a label drawn at the edge of the SVG did
@@ -230,18 +231,29 @@ export function Spark({ values, max = 100, unit = "%", w = 84, h = 26 }: { value
 }
 
 /** Line of a series against a limit, e.g. CPU against the critical threshold. */
-export function LimitLine({ values, limit, label }: { values: number[]; limit: number; label: string }) {
+/**
+ * A measurement over its window, with a reference line across it. Nothing here says anything about status:
+ * the line was amber for every reading below the limit, so a device at four per cent of its CPU drew the
+ * same warning colour as one at eighty-four, and nothing on screen said the drawing was CPU at all.
+ */
+export function LimitLine({ values, limit, label, unit = "%", hours = 24 }: {
+  values: number[]; limit: number; label: string; unit?: string; hours?: number;
+}) {
   const W = 300, H = 70;
   if (values.length < 2) return <div className="vz-cap">No {label.toLowerCase()} history</div>;
   const max = Math.max(limit * 1.1, ...values);
   const x = (i: number) => (i / (values.length - 1)) * W;
   const y = (v: number) => H - 4 - (v / max) * (H - 12);
   const d = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  const last = values[values.length - 1];
+  const peak = Math.max(...values);
   return (
-    <svg className="vz-limit" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`${label}: last ${Math.round(last)}, limit ${limit}`}>
-      <line x1={0} x2={W} y1={y(limit)} y2={y(limit)} stroke={TONE.bad} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-      <path d={d} fill="none" stroke={last >= limit ? TONE.bad : TONE.warn} strokeWidth={2.2} vectorEffect="non-scaling-stroke" />
-    </svg>
+    <div>
+      <svg className="vz-limit" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
+        aria-label={`${label} over the last ${hours} hours: peak ${Math.round(peak)}${unit}, reference line at ${limit}${unit}`}>
+        <line x1={0} x2={W} y1={y(limit)} y2={y(limit)} stroke="var(--lm-line-2)" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+        <path d={d} fill="none" stroke={TONE.cyan} strokeWidth={2.2} vectorEffect="non-scaling-stroke" />
+      </svg>
+      <div className="vz-cap">{label} · last {hours} h · peak {Math.round(peak)}{unit} · dashed line {limit}{unit}</div>
+    </div>
   );
 }

@@ -149,12 +149,16 @@ const sitesBehindIn = (behind: Map<string, number>, d: Device, model: NetworkMod
 function DeviceInstrument({ model, infos, device, onDetails }: { model: NetworkModel; infos: SiteInfo[]; device: Device; onDetails: () => void }) {
   const upIfs = count(device.interfaces, (i) => i.oper.startsWith("up"));
   const behind = sitesBehind(infos, device, model);
+  const behindUnknown = !!model.sites[device.site]?.dc && behind === 0;
   const cpuSeries = device.cpu.length > 1 ? device.cpu : [];
   return (
     <Tile tone={verdictTone(device.verdict)} title={<><StatusShape verdict={device.verdict} /> {shortDevice(device.name)}</>} right={ROLE_LABEL[device.role] ?? device.role} className="vz-instrument">
       <div className="vz-inst-top">
-        <Gauge value={device.cpuNow} label="CPU" warn={T.cpu_warn} crit={T.cpu_crit} />
-        <div><div className="vz-big">{fmtInt(behind)}</div><div className="vz-cap">{behind === 1 ? "site depends on it" : "sites depend on it"}</div>
+        <Gauge value={device.cpuNow} label="CPU" />
+        {/* A data center nothing points at does not mean nothing depends on it: it means no site says
+            which data center its WAN terminates on. Printing a bare 0 stated the first. */}
+        <div><div className="vz-big" title={behindUnknown ? "Sites say which data center they depend on through the circuit tags on their ICMP monitor, or a site hub. None of them does yet in this environment." : undefined}>{behindUnknown ? "—" : fmtInt(behind)}</div>
+          <div className="vz-cap">{behindUnknown ? "no site points here yet" : behind === 1 ? "site depends on it" : "sites depend on it"}</div>
           <div className="vz-cap vz-mono">{model.sites[device.site]?.name ?? device.site} · {device.ip || "—"}</div></div>
       </div>
       <LimitLine values={cpuSeries} limit={T.cpu_crit} label="CPU" />

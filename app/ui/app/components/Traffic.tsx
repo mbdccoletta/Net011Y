@@ -21,7 +21,7 @@ export function SiteTrafficTile({ model, code, onSite }: { model: NetworkModel; 
   const insights = trafficInsights(t, flows, code);
   const nameOf = (c: string) => model.sites[c]?.name ?? c;
   return (
-    <Tile tone={insights.length ? TONE.warn : TONE.cyan} title="Traffic · last hour" right={`NetFlow · ${t.exporters.join(", ")}`}>
+    <Tile tone={TONE.cyan} title="Traffic · last hour" right={`NetFlow · ${t.exporters.join(", ")}`}>
       <div className="tf-head">
         <div><div className="vz-big">{fmtBytes(t.bytes)}</div><div className="vz-cap">{fmtInt(t.flows)} flows</div></div>
         <div className="tf-split" role="img" aria-label={SPLIT.map((s) => `${s.label} ${fmtBytes(t[s.key])}`).join(", ")}>

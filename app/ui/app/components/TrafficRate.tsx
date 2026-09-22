@@ -6,7 +6,9 @@ import React, { useState } from "react";
 import type { NetworkModel } from "../model/types";
 import { fmtBps } from "../utils/format";
 
-const COLORS = ["var(--lm-cyan)", "var(--lm-accent)", "var(--lm-violet)", "var(--lm-good-fill)", "var(--lm-warn-fill)", "var(--lm-neutral)"];
+// categorical hues only: an exporter is not a status, and borrowing the amber and green tokens for the
+// fourth and fifth band made two of them look like a verdict
+const COLORS = ["var(--lm-cyan)", "var(--lm-accent)", "var(--lm-violet)", "var(--lm-cyan-2, #4aa3c7)", "var(--lm-violet-2, #8b7fd4)", "var(--lm-neutral)"];
 const W = 1000, H = 120, PAD = 6;
 
 export function TrafficRate({ rate }: { rate: NonNullable<NetworkModel["flowMap"]>["rate"] }) {

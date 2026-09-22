@@ -196,7 +196,8 @@ function UplinkOverTime({ iface }: { iface: Iface }) {
     <>
       <div className="vz-fluid" ref={box}>
       <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="vz-ruler vz-ruler--fit" role="img" aria-label={`Traffic in and out of ${iface.name} over the last two hours`}>
-        {cap > 0 && cap <= max && <line x1={padX} x2={W - padX} y1={y(cap)} y2={y(cap)} stroke={TONE.bad} strokeWidth={1.5} strokeDasharray="5 4" />}
+        {/* the port's own speed: a reference the reader measures against, not a verdict */}
+        {cap > 0 && cap <= max && <line x1={padX} x2={W - padX} y1={y(cap)} y2={y(cap)} stroke="var(--lm-line-2)" strokeWidth={1.5} strokeDasharray="5 4" />}
         <path d={line(iface.in)} fill="none" stroke={TONE.cyan} strokeWidth={2} strokeLinejoin="round" />
         <path d={line(iface.out)} fill="none" stroke={TONE.violet} strokeWidth={2} strokeLinejoin="round" />
         <text x={padX} y={H - 2} className="vz-svg-cap">−2 h</text>
@@ -303,10 +304,11 @@ export function EntityDetails(props: Props) {
         <div className="lm vz vz-details">
           <Head title={shortDevice(d.name)} verdict={d.verdict} onClose={onClose} subtitle={`${d.name} · ${ROLE_LABEL[d.role] ?? d.role} · ${d.ip || "—"}`}
             back={model.sites[d.site] ? { label: model.sites[d.site].name, onBack: () => onSelect(`site:${d.site}`) } : undefined} />
-          <Tile tone={verdictTone(d.verdict)} title={model.sites[d.site]?.name ?? d.site} right={`${behind} ${behind === 1 ? "site" : "sites"} depend on it`}>
+          <Tile tone={verdictTone(d.verdict)} title={model.sites[d.site]?.name ?? d.site}
+            right={model.sites[d.site]?.dc && behind === 0 ? "no site points here yet" : `${behind} ${behind === 1 ? "site" : "sites"} depend on it`}>
             <div className="vz-inst-top">
-              <Gauge value={d.cpuNow} label="CPU" warn={T.cpu_warn} crit={T.cpu_crit} />
-              <Gauge value={d.availPct} label="Availability" warn={101} crit={101} />
+              <Gauge value={d.cpuNow} label="CPU" />
+              <Gauge value={d.availPct} label="Availability" />
               <div className="vz-chipline vz-chipline--col">
                 <span className="vz-stat"><b>{d.interfaces.filter((i) => i.oper.startsWith("up")).length}/{d.interfaces.length}</b>interfaces up</span>
                 <span className="vz-stat"><b>{fmtInt(d.syslog.ERROR)}</b>syslog errors · 6 h</span>

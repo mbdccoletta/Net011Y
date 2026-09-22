@@ -141,7 +141,8 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
 
       <PathQualityTile model={model} site={site || undefined} onSite={onSite} />
 
-      <Tile tone={findings.length ? TONE.warn : TONE.good} title={`Findings · ${findings.length}`} right="measured, not judged">
+      {/* the caption says it: measured, not judged. Amber here announced a warning nobody raised. */}
+      <Tile tone={TONE.cyan} title={`Findings · ${findings.length}`} right="measured, not judged">
         {findings.length ? (
           <ul className="tr-findings">
             {findings.map((x) => (
