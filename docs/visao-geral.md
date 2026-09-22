@@ -30,8 +30,10 @@ mostrar uma tela vazia.
    site, circuitos, exportadores de fluxo e agentes *somam* — nunca são pré-requisito.
 2. **Lê só formato documentado.** Nenhum texto de log de fabricante é interpretado. Assim nada quebra quando
    um equipamento muda a redação de uma mensagem.
-3. **Não inventa saúde.** Vermelho e amarelo vêm de um problema aberto pelo Dynatrace Intelligence.
-   Utilização, erro, reinício e latência aparecem como *medida*, não como julgamento.
+3. **Não inventa saúde e não tem limiar próprio.** Vermelho e amarelo vêm de um problema aberto pelo
+   Dynatrace Intelligence. Utilização, erro, reinício e latência aparecem como *medida*, não como
+   julgamento — e não existe no app um número decidindo o que é "CPU alta". Esse número mora nos alert
+   templates da plataforma, onde é do cliente.
 4. **Nada que chegou desaparece.** Um alerta que o app não consegue ligar a nenhum equipamento continua na
    lista, com o motivo de não ter sido posicionado.
 

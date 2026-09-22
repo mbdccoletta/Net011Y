@@ -317,7 +317,7 @@ export function EntityDetails(props: Props) {
                 {(d.vlans?.length ?? 0) > 0 && <span className="vz-stat"><b>{d.vlans!.length}</b>VLANs</span>}
               </div>
             </div>
-            <LimitLine values={d.cpu} limit={T.cpu_crit} label="CPU" />
+            <LimitLine values={d.cpu} label="CPU" />
           </Tile>
           <Tile tone={TONE.violet}>
             <NativeDrill devices={[d]} focus={d} since={d.unreachableSince} demo={model.demo} />

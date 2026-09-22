@@ -5,15 +5,14 @@
 import type { Circuit, AppExperience, Device, DeviceProblem, Reason, Verdict } from "./types";
 
 /**
- * Reference marks for the charts and for descriptive labels ("saturated", "high") — never a verdict.
- * What turns a device red is an open problem in Dynatrace, not a number in this file.
+ * The one number left here is the syslog severity the protocol itself defines: 0 to 3 are error and
+ * above. It counts events; it decides nothing.
+ *
+ * There are no other thresholds in this app. What turns anything red or amber is a problem the platform
+ * has open — the alert templates hold the customer's numbers, and a second opinion written here would
+ * only disagree with them.
  */
 export const T = {
-  util_warn: 80, util_crit: 95,
-  cpu_warn: 70, cpu_crit: 85,
-  avail_crit: 99,
-  icmp_loss_warn: 2,
-  retr_warn: 1, retr_crit: 3,
   syslog_sev_warn: 3,
 };
 

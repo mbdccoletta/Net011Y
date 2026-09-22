@@ -237,11 +237,14 @@ export function Spark({ values, max = 100, unit = "%", w = 84, h = 26 }: { value
  * same warning colour as one at eighty-four, and nothing on screen said the drawing was CPU at all.
  */
 export function LimitLine({ values, limit, label, unit = "%", hours = 24 }: {
-  values: number[]; limit: number; label: string; unit?: string; hours?: number;
+  values: number[]; label: string;
+  /** a reference the platform or the customer gave — an SLA, a port's own speed. The app has none of
+   *  its own: a dashed line at a number this code invented would be this app judging. */
+  limit?: number | null; unit?: string; hours?: number;
 }) {
   const W = 300, H = 70;
   if (values.length < 2) return <div className="vz-cap">No {label.toLowerCase()} history</div>;
-  const max = Math.max(limit * 1.1, ...values);
+  const max = Math.max(limit ? limit * 1.1 : 0, ...values, 1);
   const x = (i: number) => (i / (values.length - 1)) * W;
   const y = (v: number) => H - 4 - (v / max) * (H - 12);
   const d = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
@@ -249,11 +252,11 @@ export function LimitLine({ values, limit, label, unit = "%", hours = 24 }: {
   return (
     <div>
       <svg className="vz-limit" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
-        aria-label={`${label} over the last ${hours} hours: peak ${Math.round(peak)}${unit}, reference line at ${limit}${unit}`}>
-        <line x1={0} x2={W} y1={y(limit)} y2={y(limit)} stroke="var(--lm-line-2)" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+        aria-label={`${label} over the last ${hours} hours: peak ${Math.round(peak)}${unit}`}>
+        {limit != null && <line x1={0} x2={W} y1={y(limit)} y2={y(limit)} stroke="var(--lm-line-2)" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />}
         <path d={d} fill="none" stroke={TONE.cyan} strokeWidth={2.2} vectorEffect="non-scaling-stroke" />
       </svg>
-      <div className="vz-cap">{label} · last {hours} h · peak {Math.round(peak)}{unit} · dashed line {limit}{unit}</div>
+      <div className="vz-cap">{label} · last {hours} h · peak {Math.round(peak)}{unit}{limit != null ? ` · dashed line ${limit}${unit}` : ""}</div>
     </div>
   );
 }

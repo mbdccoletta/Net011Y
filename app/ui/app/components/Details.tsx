@@ -114,9 +114,9 @@ export function DeviceDetails({ model, device, onDevice }: { model: NetworkModel
         <dl className="np-kv">
           <dt>Role</dt><dd>{ROLE_LABEL[device.role] ?? device.role} · {device.vendor}</dd>
           <dt>Availability, 24 h</dt>
-          <dd style={{ color: (device.availPct ?? 100) < T.avail_crit ? toneVar("Critical") : undefined }}>{device.availPct != null ? `${fmtNum(device.availPct)}%` : "—"}</dd>
+          <dd>{device.availPct != null ? `${fmtNum(device.availPct)}%` : "—"}</dd>
           <dt>CPU now</dt>
-          <dd style={{ color: device.cpuNow != null && device.cpuNow >= T.cpu_warn ? toneVar(device.cpuNow >= T.cpu_crit ? "Critical" : "Warning") : undefined }}>{device.cpuNow != null ? `${Math.round(device.cpuNow)}%` : "—"}</dd>
+          <dd>{device.cpuNow != null ? `${Math.round(device.cpuNow)}%` : "—"}</dd>
           <dt>ICMP round trip</dt><dd>{device.icmp?.rttMs != null ? `${fmtNum(device.icmp.rttMs)} ms` : "—"} · loss {device.icmp?.loss != null ? `${fmtNum(device.icmp.loss)}%` : "—"}</dd>
           <dt>Interfaces</dt>
           <dd>{ports.loading ? "loading the ports of this device…"
@@ -148,7 +148,7 @@ export function DeviceDetails({ model, device, onDevice }: { model: NetworkModel
                       </td>
                       <td className="np-mono np-small" style={{ padding: "6px 8px" }}>{i.oper} / {i.admin}</td>
                       <td className="np-mono" style={{ padding: "6px 8px" }}>{speedLabel(i.speed)}</td>
-                      <td className="np-mono" style={{ padding: "6px 8px", color: i.flag === "saturated" ? "var(--np-crit)" : i.flag ? "var(--np-warn)" : undefined }}>
+                      <td className="np-mono" style={{ padding: "6px 8px" }}>
                         {i.util != null ? `${fmtNum(i.util, 1)}%` : "—"}{i.flag === "inconsistent" ? " · above speed" : ""}
                       </td>
                       <td className="np-mono np-small" style={{ padding: "6px 8px" }}>{i.in.length ? <InOut inn={i.in} out={i.out} volume /> : "—"}</td>

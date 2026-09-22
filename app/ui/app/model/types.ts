@@ -127,7 +127,8 @@ export interface Iface {
   discards: number;
   crc: number;
   uplink: boolean;
-  flag: "inconsistent" | "saturated" | "high" | null;
+  /** "inconsistent" when the counters exceed the port's own reported speed: a fact about the data */
+  flag: "inconsistent" | null;
 }
 
 export interface NetEvent {

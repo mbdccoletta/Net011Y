@@ -402,7 +402,7 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     const bout = clean(o).map((v) => Math.round((v * 8) / 300));
     const util = speed && (bin.length || bout.length) ? round((Math.max(...bin, ...bout) / (speed * 1e6)) * 100) : null;
     const e = errs.get(sid) ?? {};
-    const flag: Iface["flag"] = util == null ? null : util > 100 ? "inconsistent" : util >= T.util_crit ? "saturated" : util >= T.util_warn ? "high" : null;
+    const flag: Iface["flag"] = util == null ? null : util > 100 ? "inconsistent" : null;
     d.interfaces.push({
       id: sid.startsWith("EXT_NETWORK_INTERFACE") ? sid : undefined, name: ifname || node.name, speed, oper: node.operational_status || "unknown", admin: node.admin_status || "unknown",
       type: node.interface_type, util, in: bin, out: bout,

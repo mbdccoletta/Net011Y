@@ -161,7 +161,7 @@ function DeviceInstrument({ model, infos, device, onDetails }: { model: NetworkM
           <div className="vz-cap">{behindUnknown ? "no site points here yet" : behind === 1 ? "site depends on it" : "sites depend on it"}</div>
           <div className="vz-cap vz-mono">{model.sites[device.site]?.name ?? device.site} · {device.ip || "—"}</div></div>
       </div>
-      <LimitLine values={cpuSeries} limit={T.cpu_crit} label="CPU" />
+      <LimitLine values={cpuSeries} label="CPU" />
       <div className="vz-chipline">
         <span className="vz-stat"><b>{upIfs}/{device.interfaces.length}</b>interfaces up</span>
         <span className="vz-stat"><b>{device.availPct != null ? `${fmtNum(device.availPct, 1)}%` : "—"}</b>availability</span>

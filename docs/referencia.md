@@ -40,7 +40,7 @@ Quatro regras explicam praticamente toda decisão de desenho:
 |---|---|
 | **Funciona em qualquer ambiente** | Uma extensão SNMP da Dynatrace basta. Tags de site, circuitos, NetFlow e agentes somam; nenhum é pré-requisito. O que falta é nomeado na tela com o que destravaria. |
 | **Lê só formato documentado** | Smartscape, métricas das extensões, problemas e eventos da plataforma, syslog do ActiveGate, traps, NetFlow via OpenTelemetry Collector, fluxos do OneAgent. Nenhum texto de log de fabricante é interpretado. |
-| **Não julga saúde** | Vermelho e amarelo vêm de um problema aberto pelo Dynatrace Intelligence. Utilização, CPU, erro, reinício e latência são medida. A única exceção é o SLA que o cliente marcou no circuito — número dele. |
+| **Não julga saúde, e não tem limiar** | Vermelho e amarelo vêm de um problema aberto pelo Dynatrace Intelligence. Utilização, CPU, erro, reinício e latência são medida. Os únicos números que o app aplica são do cliente: o SLA marcado no circuito e o limite de queda de demanda, editável em Settings. |
 | **Nada que chegou desaparece** | Um alerta que não pôde ser ligado a um equipamento continua listado, com o motivo. |
 
 ---
@@ -150,14 +150,19 @@ tem um problema aberto sobre ele. A categoria do problema define a cor: *slowdow
 amarelo, o resto — disponibilidade, erro, alerta customizado — é vermelho. Problema **mutado** é ignorado
 exatamente como a plataforma o ignora.
 
-**Os limiares existem, mas não julgam.** O app usa referências para *descrever* uma medida, nunca para mudar o
-status:
+**O app não tem limiar nenhum.** Não existe um número neste código decidindo o que é CPU alta, porta
+saturada ou disponibilidade ruim. Quem guarda esses números é a plataforma: os **alert templates** de
+Infrastructure & Operations e os alertas que o cliente já escreveu. Se o app tivesse os seus, eles
+discordariam dos do cliente — e quem está de plantão deixaria de confiar nos dois.
 
-| Medida | Aviso | Crítico |
-|---|---|---|
-| Utilização de porta | 80% | 95% |
-| CPU | 70% | 85% |
-| Disponibilidade SNMP | — | abaixo de 99% |
+As únicas duas exceções são números **do cliente**, não do app:
+
+- O **SLA** marcado na tag do circuito, usado na página de WAN links.
+- O **limite de queda de demanda** que decide quando uma hora conta como queda, editável em Settings e
+  guardado no próprio tenant.
+
+Uma porta cujos contadores passam da velocidade que ela mesma reporta é marcada como *inconsistente* — isso
+é um fato sobre o dado, não um limiar.
 
 **Quatro vereditos**: `Critical`, `Warning`, `Healthy`, `Not monitored`. O último é tão importante quanto os
 outros — equipamento descoberto mas não consultado, site sem nada sendo medido, salto sem medição. O app
@@ -406,7 +411,7 @@ tráfego mostra o que aqueles exportadores veem e diz quantos são.
 **Por que o app não define os próprios limiares de saúde?**
 Porque dois lugares julgando a mesma rede discordam, e quem está de plantão perde a confiança nos dois. O
 julgamento é do Dynatrace Intelligence; o app mostra a medida ao lado. Os limiares que ele tem servem para
-descrever ("acima de 95% da velocidade da porta"), não para mudar cor.
+descrever, não para mudar cor — e desde a versão 0.1.32 nem isso: o app não guarda limiar nenhum.
 
 **Funciona com equipamento de fabricante X?**
 Se existe extensão SNMP da Dynatrace para ele, sim. O app lê o conjunto comum que todas reportam e, quando a

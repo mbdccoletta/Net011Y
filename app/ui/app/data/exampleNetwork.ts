@@ -11,6 +11,9 @@ import { buildAddressing } from "../model/addressing";
 import { buildFlowMap } from "./buildFlowMap";
 import { DETAIL_MAX_DEVICES } from "./queries";
 
+/** What the fictitious customer set on their alert templates, so the example has problems to show. */
+const TEMPLATE = { cpu: 85, util: 95 };
+
 type Size = "L" | "M" | "S";
 type CityRow = [name: string, uf: string, lat: number, lon: number];
 
@@ -179,7 +182,7 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
     const util = r1((Math.max(...inn, ...out) / (speed * 1e6)) * 100);
     return {
       name, speed, oper, admin: "up(1)", type: "ethernetCsmacd(6)", util, in: inn, out, errors: 0, discards: 0, crc: 0, uplink,
-      flag: util >= T.util_crit ? "saturated" : util >= T.util_warn ? "high" : null,
+      flag: null,
     };
   };
 
@@ -448,8 +451,10 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
   const incidentOf = (site: string) => incidentBy.get(site);
   devices.forEach((d) => {
     if (d.unreachableSince) attach(d, problem(incidentOf(d.site) ?? `unreachable:${d.site}`, "Network devices unreachable", "AVAILABILITY", d.unreachableSince));
-    if (d.cpuNow != null && d.cpuNow >= T.cpu_crit) attach(d, problem(`cpu:${d.name}`, `${d.vendor === "cisco" ? "Cisco" : "Device"} CPU utilization high`, "CUSTOM_ALERT", ago(35)));
-    d.interfaces.filter((i) => i.flag === "saturated").forEach((i) => attach(d, problem(`sat:${d.name}`, "Interface saturation", "RESOURCE_CONTENTION", ago(50)), i.name));
+    // The numbers below are the alert templates this fictitious customer configured — the example stands
+    // in for the platform here. They are not the app's thresholds: the app has none.
+    if (d.cpuNow != null && d.cpuNow >= TEMPLATE.cpu) attach(d, problem(`cpu:${d.name}`, `${d.vendor === "cisco" ? "Cisco" : "Device"} CPU utilization high`, "CUSTOM_ALERT", ago(35)));
+    d.interfaces.filter((i) => (i.util ?? 0) >= TEMPLATE.util).forEach((i) => attach(d, problem(`sat:${d.name}`, "Interface saturation", "RESOURCE_CONTENTION", ago(50)), i.name));
     d.interfaces.filter((i) => i.uplink && (i.errors || i.crc)).forEach((i) => attach(d, problem(`err:${d.name}`, "Interface packet errors high rate", "ERROR", ago(40)), i.name));
     d.interfaces.filter((i) => i.uplink && i.oper.startsWith("down") && i.admin.startsWith("up")).forEach((i) => attach(d, problem(`ifdown:${d.name}`, "Interface operationally going down", "AVAILABILITY", ago(25)), i.name));
   });

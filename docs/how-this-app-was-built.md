@@ -23,10 +23,11 @@ extensions, Davis problems and events, ActiveGate syslog, the SNMP traps extensi
 through the OpenTelemetry Collector, OneAgent network metrics and flows. No vendor log text is parsed, so
 nothing breaks when a device changes its wording.
 
-**It does not judge health.** A device, a port, a link or a site is red or yellow because Dynatrace has an
-open problem on it. Everything else — utilisation, errors, retransmissions, restarts — is shown as a
-measurement. The single exception is the SLA the customer tags on a circuit monitor, which is their own
-number.
+**It does not judge health, and holds no thresholds.** A device, a port, a link or a site is red or yellow
+because the platform has an open problem on it. Everything else — utilisation, errors, retransmissions,
+restarts — is shown as a measurement, and no number in this code decides what counts as high: that number
+lives in the customer's alert templates, where it is theirs. Two figures the app applies are the customer's
+own: the SLA tagged on a circuit monitor, and the demand-drop threshold they set in Settings.
 
 **Nothing the environment reports disappears.** An alert the app cannot place on a device is still listed,
 with the reason it could not be placed.

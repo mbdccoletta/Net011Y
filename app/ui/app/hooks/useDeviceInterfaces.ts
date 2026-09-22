@@ -65,7 +65,7 @@ export function useDeviceInterfaces(device: Device | null, enabled: boolean): De
       oper: String(node.operational_status ?? "unknown"), admin: String(node.admin_status ?? "unknown"),
       type: node.interface_type ? String(node.interface_type) : undefined,
       util, in: bin, out: bout, errors: 0, discards: 0, crc: 0, uplink: isUplink(name, speed),
-      flag: (util == null ? null : util > 100 ? "inconsistent" : util >= T.util_crit ? "saturated" : util >= T.util_warn ? "high" : null) as Iface["flag"],
+      flag: (util == null ? null : util > 100 ? "inconsistent" : null) as Iface["flag"],
     };
   }).sort((a, b) => (b.util ?? -1) - (a.util ?? -1));
 
