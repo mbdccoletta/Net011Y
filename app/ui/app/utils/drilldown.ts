@@ -4,6 +4,7 @@
 // problem or data. Other apps open in a dedicated browser tab, so the user keeps this app; Dynatrace Assist
 // opens in the same tab.
 import { getAppLink, getIntentLink, openApp, sendIntent, type IntentPayload } from "@dynatrace-sdk/navigation";
+import { SOURCE_IP, SYSLOG_SOURCE } from "../data/queries";
 
 const APPS = {
   problems: "dynatrace.davis.problems",
@@ -111,14 +112,15 @@ export function hoursBack(since?: string | null) {
 /** Syslog and SNMP traps of the given device IPs, same source filters as the app's own queries. */
 export function logsQuery(ips: string[], since?: string | null) {
   const list = ips.map(quote).join(", ");
+  // the address is matched wherever it landed: the ActiveGate ingest, a OneAgent, or the device attribute
   const bySource = ips.length
-    ? ` and (in(dt.ingest.source.ip, array(${list})) or in(device.address, array(${list})))`
+    ? ` and (in(dt.ingest.source.ip, array(${list})) or in(custom.ingest.source.ip, array(${list})) or in(device.address, array(${list})))`
     : "";
   return [
     `fetch logs, from:now()-${hoursBack(since)}h`,
-    `| filter (dt.openpipeline.source == "extension:syslog" or log.source == "snmptraps")${bySource}`,
+    `| filter (${SYSLOG_SOURCE} or log.source == "snmptraps")${bySource}`,
     "| sort timestamp desc",
-    "| fields timestamp, dt.ingest.source.ip, device.address, loglevel, syslog.appname, snmp.trap_oid, content",
+    `| fields timestamp, ip = ${SOURCE_IP}, loglevel, syslog.appname, snmp.trap_oid, content`,
   ].join("\n");
 }
 

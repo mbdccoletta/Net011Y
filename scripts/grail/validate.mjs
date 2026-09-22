@@ -11,9 +11,14 @@ import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad
 const scenarioAge = () => {
   try { return Date.now() - Date.parse(JSON.parse(readFileSync("out/scenario.json", "utf8")).generatedFor); } catch { return Infinity; }
 };
-if (scenarioAge() > 18 * 3600e3) {
-  console.error("fixtures are more than 18 h old — regenerating before the checks");
-  execFileSync(process.execPath, [new URL("generate.mjs", import.meta.url).pathname], { stdio: "inherit", cwd: new URL(".", import.meta.url).pathname });
+// Half an hour, not a working day: the checks that compare a burst of alerts against the moment of a
+// degradation stop holding once the two drift apart, and the suite went red for a set that was only two
+// hours old. Generating the whole estate takes a fifth of a second, so there is nothing to save by
+// keeping a stale one.
+if (scenarioAge() > 30 * 60e3) {
+  console.error("fixtures are more than 30 min old — regenerating before the checks");
+  // its own report goes nowhere: this script's stdout is the JSON the tooling reads
+  execFileSync(process.execPath, [new URL("generate.mjs", import.meta.url).pathname], { stdio: ["ignore", "ignore", "inherit"], cwd: new URL(".", import.meta.url).pathname });
 }
 
 const R = JSON.parse(readFileSync("out/results.json", "utf8"));

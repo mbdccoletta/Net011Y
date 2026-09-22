@@ -27,7 +27,7 @@ const CATALOG: Record<NeedKey, { label: string; how: string; queries?: string[] 
   cpu: { label: "Device CPU and memory", how: "CPU and memory as each network extension reports them (network_device, Cisco CPM, Juniper routing engine, Palo Alto management plane, F5 host)", queries: familyKeys("cpu", "memory") },
   availability: { label: "Device availability", how: "sysUpTime polled by the network extension every minute (any family)", queries: familyKeys("uptime") },
   icmp: { label: "Reachability and latency", how: "Synthetic network availability monitors (ICMP) targeting device and WAN circuit IPs", queries: ["icmp", "icmpNow"] },
-  syslog: { label: "Syslog", how: "Syslog extension or ActiveGate syslog ingest from each device (dt.openpipeline.source = extension:syslog)", queries: ["deviceLogs", "deviceLogsRecent"] },
+  syslog: { label: "Syslog", how: "Syslog extension, ActiveGate syslog ingest or a OneAgent from each device (openpipeline.source = extension:syslog)", queries: ["deviceLogs", "deviceLogsRecent"] },
   traps: { label: "SNMP traps", how: "SNMP traps extension receiving traps from the devices (log.source = snmptraps)", queries: ["deviceLogs", "deviceLogsRecent"] },
   lldp: { label: "Topology neighbours", how: "Neighbor discovery (CDP and LLDP) in SNMP autodiscovery, or the LLDP metric group of the SNMP extension. The map draws a route between two sites only where a cable between them is reported", queries: ["netEdges", "neighbors", "lldp"] },
   routing: { label: "Routing peers", how: "BGP and OSPF metric groups of the SNMP extension", queries: ["routing"] },

@@ -50,7 +50,7 @@ const DOCS = {
  * app shows changes, as long as every network source goes there and the switch leaves no gap.
  */
 export const NETWORK_BUCKET_MATCHER = [
-  'dt.openpipeline.source == "extension:syslog"',
+  'dt.openpipeline.source == "extension:syslog" or custom.openpipeline.source == "extension:syslog"',
   'or log.source == "snmptraps"',
   'or log.source == "snmp_autodiscovery"',
   'or otel.scope.name == "otelcol/netflowreceiver"',
@@ -223,14 +223,14 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
   },
   syslog: {
     uses: "Device events and evidence of a probable cause (for example BGP neighbor down, power supply failure).",
-    source: "Syslog ingestion on an ActiveGate. Records arrive with dt.openpipeline.source = extension:syslog.",
+    source: "Syslog ingestion on an ActiveGate, or through a OneAgent on the host that receives it. Records arrive with openpipeline.source = extension:syslog — under dt. from the ActiveGate ingest, under custom. through a OneAgent. The app reads both.",
     prerequisites: ["Environment ActiveGate on Linux 1.295 or later (multi-environment ActiveGates don't support syslog)."],
     steps: [
       "Only syslog received by the ActiveGate syslog ingestion is read (dt.openpipeline.source = extension:syslog, log.source = syslog). Syslog written to files by a syslog server and collected from there is not in the documented format and is not read.",
       "Enable syslog ingestion on the ActiveGate. It listens on UDP 514 and TCP 601 (RFC 5424); RFC 3164 needs a receiver change.",
       "Point each device's syslog to the ActiveGate IP. The device must send from the same IP address that the SNMP extension polls: the app links logs to devices by source IP (dt.ingest.source.ip).",
     ],
-    verify: "fetch logs, from:now()-1h\n| filter dt.openpipeline.source == \"extension:syslog\"\n| summarize records = count(), by:{dt.ingest.source.ip, loglevel}",
+    verify: "fetch logs, from:now()-1h\n| filter dt.openpipeline.source == \"extension:syslog\" or custom.openpipeline.source == \"extension:syslog\"\n| summarize records = count(), by:{ip = coalesce(dt.ingest.source.ip, custom.ingest.source.ip), loglevel}",
     networkBucket: true,
     docs: [DOCS.syslog, DOCS.logBuckets],
   },
