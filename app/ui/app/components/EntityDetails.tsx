@@ -269,7 +269,7 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
       {/* is what is degraded here explained by the network? A suspicion, and Assist to argue it */}
       {(model.users || (model.unmappedAlerts ?? []).some((a) => a.scope === "application" || a.scope === "service" || a.scope === "host")) && (
         <Tile title="Fault domain" right="network or not">
-          <SuspicionStrip s={suspicion} users={model.users}
+          <SuspicionStrip s={suspicion} users={model.users} model={model}
             assist={<AssistPanel subject={`isolate|${info.code}`} questions={isolationQuestions(info.site.name)} object="impact"
               context={() => isolationContext(model, suspicion, info, dropPct)} />} />
         </Tile>

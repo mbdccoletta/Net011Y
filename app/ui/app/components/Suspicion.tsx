@@ -5,9 +5,10 @@
 // and the buttons hand that over to the native apps and to Dynatrace Assist.
 import React from "react";
 import { ExternalLinkIcon } from "@dynatrace/strato-icons";
+import { Menu } from "@dynatrace/strato-components/navigation";
 import type { NetworkModel } from "../model/types";
-import { trafficDrop, type Suspicion } from "../model/suspicion";
-import { openNative } from "../utils/drilldown";
+import { outsideAlerts, trafficDrop, type Suspicion } from "../model/suspicion";
+import { openNative, openProblem } from "../utils/drilldown";
 
 const TONE: Record<Suspicion["kind"], string> = {
   "network-implicated": "is-net",
@@ -27,8 +28,10 @@ const MARK: Record<Suspicion["kind"], string> = {
   blind: "Cannot tell",
 };
 
-export function SuspicionStrip({ s, users, assist }: { s: Suspicion; users: NetworkModel["users"]; assist?: React.ReactNode }) {
+export function SuspicionStrip({ s, users, model, assist }: { s: Suspicion; users: NetworkModel["users"]; model?: NetworkModel; assist?: React.ReactNode }) {
   const outside = s.outside.application + s.outside.service + s.outside.host + s.outside.other;
+  // only the ones the Problems app can actually open: an event that never became a problem has no page
+  const out = model && !model.demo ? outsideAlerts(model).filter((p) => p.eventKind === "DAVIS_PROBLEM" && p.eventId) : [];
   const drop = trafficDrop(users, 0);
   const pct = drop.pct;
   return (
@@ -53,11 +56,36 @@ export function SuspicionStrip({ s, users, assist }: { s: Suspicion; users: Netw
         )}
       </div>
       <div className="sus__acts">
-        {outside > 0 && (
-          <button type="button" className="lm-btn" onClick={() => openNative("problems")} title="The detail of what is alerting outside the network lives in the Problems app">
+        {/* The button used to land on the Problems home, where the alerts it had just counted were mixed
+            with everything else. The Problems app opens one problem at a time, so one alert opens
+            directly and several are listed by name — the same way the device panel does it. */}
+        {outside > 0 && (out.length === 1 ? (
+          <button type="button" className="lm-btn" onClick={() => openProblem(out[0].eventId, out[0].eventKind)}
+            title={`Open ${out[0].displayId ?? "the alert"} · ${out[0].name} in Problems`}>
+            {out[0].displayId ? `Problem ${out[0].displayId}` : "The alert outside"} <ExternalLinkIcon />
+          </button>
+        ) : out.length > 1 ? (
+          <Menu>
+            <Menu.Trigger>
+              <button type="button" className="lm-btn" title={`${out.length} problems open outside the network`}>
+                Problems · {out.length} <ExternalLinkIcon />
+              </button>
+            </Menu.Trigger>
+            <Menu.Content>
+              <Menu.Label>Alerting outside the network</Menu.Label>
+              {out.slice(0, 12).map((p) => (
+                <Menu.Item key={p.eventId} onSelect={() => openProblem(p.eventId, p.eventKind)}>
+                  {p.displayId ? `${p.displayId} · ` : ""}{p.name}
+                </Menu.Item>
+              ))}
+            </Menu.Content>
+          </Menu>
+        ) : (
+          <button type="button" className="lm-btn" onClick={() => openNative("problems")}
+            title="These alerts are events the Problems app does not open one by one">
             Problems <ExternalLinkIcon />
           </button>
-        )}
+        ))}
       </div>
       {assist}
     </section>

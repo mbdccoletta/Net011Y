@@ -326,7 +326,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
           {/* is what is degraded explained by the network? A suspicion for the whole environment, with the
               analysis handed to Assist. Only shown when there is something to compare it against. */}
           {suspicion.kind !== "blind" && suspicion.kind !== "watching" && (
-            <SuspicionStrip s={suspicion} users={model.users}
+            <SuspicionStrip s={suspicion} users={model.users} model={model}
               assist={<AssistPanel subject={`isolate|network`} questions={isolationQuestions("this network")} object="impact"
                 context={() => isolationContext(model, suspicion, undefined, dropPct)} />} />
           )}
