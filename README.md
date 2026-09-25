@@ -11,14 +11,17 @@ monitored by any Dynatrace SNMP extension is enough. Everything more specific �
 NetFlow, OneAgent network flows — adds to what it shows, and the app says which step adds what.
 
 **It reads only documented formats.** Smartscape network nodes and edges, the metrics of the Dynatrace
-network extensions, Davis problems and events, ActiveGate syslog, the SNMP Traps extension, NetFlow through
+network extensions, the problems and events Dynatrace Intelligence raises, ActiveGate syslog, the SNMP
+Traps extension, NetFlow through
 the OpenTelemetry Collector, OneAgent network metrics and flows. Raw log text in a vendor's own format is
 not parsed.
 
-**It does not judge health.** A device, an interface, a link or a site is red or yellow because Dynatrace
-has an open problem or alert on it. Everything else — CPU, saturation, errors, retransmissions — is shown
-as a measurement, never turned into a verdict. The one number the app checks itself is the SLA the customer
-tags on a circuit monitor (`sla_ms`).
+**It does not judge health, and holds no thresholds of its own.** A device, an interface, a link or a site
+is red or yellow because Dynatrace Intelligence has an open problem or alert on it. Everything else — CPU,
+saturation, errors, retransmissions — is shown as a measurement, and no number in this code decides what
+counts as high: that number lives in the customer's alert templates, where it is theirs. The two figures
+the app applies are the customer's own — the SLA tagged on a circuit monitor (`sla_ms`), and the
+demand-drop threshold they set in Settings.
 
 **Nothing the environment reports disappears.** An alert the app cannot place is still listed, with the
 reason.
@@ -30,12 +33,13 @@ reason.
 | Devices and ports | Any Dynatrace network extension, through Smartscape (`EXT_NETWORK_DEVICE`, `EXT_NETWORK_INTERFACE`) | — |
 | Health (CPU, memory, availability, traffic, errors, VLANs) | The common `network_device` metrics and the vendor families: Generic Cisco, generic SNMP, Juniper, Palo Alto, F5 (`app/ui/app/data/formats.ts`) | Vendor extensions (CRC, VLAN tables) |
 | Sites | sysLocation, the SNMP autodiscovery group, the management network | Primary tags `site`, `site_name`, `site_type`, `region`, `geo_lat`, `geo_lon`, `hub`, `site_cidr` |
-| Map | A schematic layout by region | Coordinates, for the geographic map |
+| Map | A schematic layout by region, when nothing can be placed | Coordinates (`geo_lat` / `geo_lon`, or a place the app recognises): geography is then the default, and the bar says how many sites it is drawing |
 | WAN | Reachability per site from any ICMP monitor that pings a device (network coverage monitors included) | Circuit tags on the monitors: `circuit_id`, `circuit_role`, `carrier`, `circuit_tech`, `sla_ms` |
 | Topology | Smartscape `calls` between network devices and interfaces | SNMP autodiscovery neighbour discovery (CDP / LLDP) |
 | Status | `dt.davis.problems`, `dt.davis.events` (severity, maintenance, root cause); a week of problems says whether any alert watches the polled devices at all | Network alert templates in Infrastructure & Operations |
-| What changed (24 h) | Restarts (sysUpTime stepping down), devices that stopped or started answering, Davis problems opened and closed, circuits down — all included in the subscription | — |
-| Events | ActiveGate syslog, SNMP Traps extension | — |
+| Thresholds | None in the app | The alert templates, which hold the customer's own numbers |
+| What changed (24 h) | Restarts (sysUpTime stepping down), devices that stopped or started answering, problems opened and closed, circuits down — all included in the subscription | — |
+| Events | Syslog, whichever road it takes — the ActiveGate ingest writes `dt.openpipeline.source`, a OneAgent writes the same under `custom.`, and both are read — and the SNMP Traps extension | — |
 | Traffic | — | NetFlow / IPFIX through the OpenTelemetry Collector; OneAgent network connection monitoring |
 | Fault domain | OneAgent process network metrics, service requests | Real user sessions, `site_cidr` |
 
@@ -88,8 +92,8 @@ to run, how it is tested, and the mistakes that shaped it.
 ```bash
 cd scripts/grail
 node build.mjs                 # bundles the app's model and queries for the scripts
-node generate.mjs              # Grail-shaped fixtures for a 62-site network
-node example_check.mjs         # 161 coherence checks on the bundled example, both sizes
+node generate.mjs              # Grail-shaped fixtures: 62 sites, 494 devices (rebuilt automatically when stale)
+node example_check.mjs         # 163 coherence checks on the bundled example, both sizes
 node validate.mjs              # 70 scenario checks against the app's own model
 node scorecard.mjs proxy       # what the app delivers in the environment the dev server serves
 node scorecard.mjs dtctl:<ctx> # the same through a dtctl context
