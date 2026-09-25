@@ -262,6 +262,8 @@ point at the environment being opened. One app at a time.
 ```bash
 cd app && npm install && npm start     # development server
 npm run typecheck                      # types
+npm run build                          # the bundle a deploy ships
+npx dt-app deploy --skip-build --environment-url https://<env>.apps.dynatrace.com   # raise the version first
 cd scripts/grail
 node build.mjs                         # bundle the app's model and queries for the checks
 node generate.mjs                      # regenerate the fixtures

@@ -74,6 +74,33 @@ the environment being opened.
 cd app && npm install && npm start
 ```
 
+## Deploying
+
+Every deploy needs a **new version**: the platform refuses to install a version it already has, and says
+`Failed to install the app` when it does.
+
+```bash
+cd app
+# 1. raise "version" in app.config.json
+npm run build                                                        # optimised bundle
+npx dt-app deploy --skip-build --environment-url https://<env>.apps.dynatrace.com
+```
+
+Repeat the last line once per environment. `environmentUrl` in `app/app.config.json` is the default
+target: switch environments with the flag rather than by editing the file, so a local switch never travels
+in a commit.
+
+Green before deploying — the suites take seconds and have caught every serious bug in this app:
+
+```bash
+cd app/ui && npx tsc --noEmit
+cd scripts/grail && node build.mjs && node validate.mjs && node example_check.mjs && node hooks_after_return.mjs
+```
+
+Two failures are worth one retry before investigating, because both happen on a healthy environment:
+`fetch failed`, and `Failed to install the app` on a version that was already raised. `dt-app` also warns
+on any Node other than 24; it deploys anyway.
+
 ## Example networks
 
 Settings › General › Data source opens two simulated networks, so the app can be explored before any data
