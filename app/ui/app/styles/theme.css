@@ -152,6 +152,10 @@
 .lm-tip b { display: flex; align-items: center; gap: 6px; color: var(--lm-ink); font-size: 12px; }
 .lm-tip b i { width: 8px; height: 8px; border-radius: 50%; }
 .lm-tip__cause { color: var(--lm-ink); }
+/* Full screen, or as close as a framed app gets to it: over everything the app draws, with its own
+   ground so the page behind does not show through the dotted continents. */
+.lm-map.is-full { position: fixed; inset: 0; z-index: 60; height: auto; border-radius: 0; background: var(--lm-bg); }
+.lm-map.is-full:not(:fullscreen) { inset: 0; }
 .lm-zoom { position: absolute; display: grid; gap: 4px; z-index: 3; }
 .lm-zoom button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--lm-accent) 55%, transparent); background: color-mix(in srgb, var(--lm-tint) 90%, transparent); cursor: pointer; font-size: 14px; }
 .lm-zoom button:hover { border-color: var(--lm-accent); }

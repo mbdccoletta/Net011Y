@@ -2,7 +2,7 @@
 // data centers, sites coloured by status, and the selected cause glowing on the territory.
 // The camera flies to whatever is in focus; drag to pan, Ctrl/Cmd + scroll (or pinch) to zoom, click a site.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MinusIcon, PlusIcon, ZoomToFitIcon } from "@dynatrace/strato-icons";
+import { MaximizeIcon, MinimizeIcon, MinusIcon, PlusIcon, ZoomToFitIcon } from "@dynatrace/strato-icons";
 import type { Verdict } from "../model/types";
 import { LAND_BITS, LAND_COLS, LAND_ROWS, LAND_STEP } from "../data/landMask";
 import { prefersReducedMotion } from "../utils/format";
@@ -149,6 +149,24 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
   }, []);
 
   const byCode = useMemo(() => new Map(sites.map((s) => [s.code, s])), [sites]);
+  // Full screen, with a fallback. The app runs inside the platform's frame, and a frame that was not
+  // given permission cannot enter real full screen — so when the request is refused the map takes over
+  // the app's own viewport instead, which always works. Escape leaves either one.
+  const [full, setFull] = useState(false);
+  const toggleFull = () => {
+    const el = wrap.current;
+    if (document.fullscreenElement) { document.exitFullscreen().catch(() => undefined); setFull(false); return; }
+    if (full) { setFull(false); return; }
+    el?.requestFullscreen?.().then(() => setFull(true)).catch(() => setFull(true));
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && full && !document.fullscreenElement) setFull(false); };
+    const onChange = () => { if (!document.fullscreenElement) setFull((v) => (v && !document.fullscreenElement ? false : v)); };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("fullscreenchange", onChange); };
+  }, [full]);
+
   const props = useRef({ sites, links, focus, insets, byCode, schematic });
   props.current = { sites, links, focus, insets, byCode, schematic };
   useEffect(() => { dirty.current = true; }, [sites, links, focus, insets, schematic]);
@@ -501,7 +519,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
   }, []);
 
   return (
-    <div ref={wrap} className="lm-map">
+    <div ref={wrap} className={`lm-map${full ? " is-full" : ""}`}>
       <canvas ref={canvas} className="lm-canvas" role="img"
         aria-label={`Map of ${sites.length} sites${focus ? `, ${focus.size} in focus` : ""}. Click the map, then drag to pan and scroll to zoom.`}
         style={{ cursor: hover ? "pointer" : drag.current ? "grabbing" : "grab" }}
@@ -540,6 +558,8 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         <button type="button" onClick={() => zoomBy(1.4)} aria-label="Zoom in"><PlusIcon /></button>
         <button type="button" onClick={() => zoomBy(1 / 1.4)} aria-label="Zoom out"><MinusIcon /></button>
         <button type="button" onClick={() => fitTo(focus, true)} aria-label="Fit to focus"><ZoomToFitIcon /></button>
+        <button type="button" onClick={toggleFull} aria-pressed={full} title={full ? "Leave full screen (Esc)" : "Full screen"}
+          aria-label={full ? "Leave full screen" : "Show the map full screen"}>{full ? <MinimizeIcon /> : <MaximizeIcon />}</button>
       </div>
     </div>
   );
