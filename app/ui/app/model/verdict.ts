@@ -46,9 +46,15 @@ export const openProblems = (problems: DeviceProblem[] | undefined): DeviceProbl
 export const problemLevel = (p: DeviceProblem): Verdict =>
   p.category === "SLOWDOWN" || p.category === "RESOURCE_CONTENTION" ? "Warning" : "Critical";
 
+/**
+ * An alert in the words of the screen. The moment it opened belongs in the sentence: the readings beside
+ * it cover windows of their own — availability a day, CPU now, round trip the last hour — and without the
+ * hour the alert started, a device red beside a hundred per cent availability reads as a contradiction
+ * rather than as two true statements about different periods.
+ */
 export const problemReason = (p: DeviceProblem): Reason => ({
   level: problemLevel(p),
-  text: `${p.name}${p.on ? ` · ${p.on}` : ""}${p.displayId ? ` (${p.displayId})` : ""}`,
+  text: `${p.name}${p.on ? ` · ${p.on}` : ""}${p.displayId ? ` (${p.displayId})` : ""}${p.start ? ` · open since ${hhmm(p.start)} UTC` : ""}`,
 });
 
 export function deviceVerdict(d: Device): [Verdict, Reason[], number] {

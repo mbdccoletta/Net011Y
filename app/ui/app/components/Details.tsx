@@ -117,7 +117,7 @@ export function DeviceDetails({ model, device, onDevice }: { model: NetworkModel
           <dd>{device.availPct != null ? `${fmtNum(device.availPct)}%` : "—"}</dd>
           <dt>CPU now</dt>
           <dd>{device.cpuNow != null ? `${Math.round(device.cpuNow)}%` : "—"}</dd>
-          <dt>ICMP round trip</dt><dd>{device.icmp?.rttMs != null ? `${fmtNum(device.icmp.rttMs)} ms` : "—"} · loss {device.icmp?.loss != null ? `${fmtNum(device.icmp.loss)}%` : "—"}</dd>
+          <dt>ICMP round trip, last hour</dt><dd>{device.icmp?.rttMs != null ? `${fmtNum(device.icmp.rttMs)} ms` : "—"} · loss {device.icmp?.loss != null ? `${fmtNum(device.icmp.loss)}%` : "—"}</dd>
           <dt>Interfaces</dt>
           <dd>{ports.loading ? "loading the ports of this device…"
             : all.length ? `${all.filter((i) => i.oper.startsWith("up")).length} up of ${all.length}${ports.fromModel ? "" : " · fetched for this device"}`
