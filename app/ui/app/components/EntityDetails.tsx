@@ -235,6 +235,15 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
     <div className="lm vz vz-details">
       <Head title={info.site.name} verdict={info.verdict} onClose={onClose}
         subtitle={[info.code, info.site.region, info.site.dc ? "data center" : info.site.hub ? `via ${model.sites[info.site.hub]?.name ?? info.site.hub}` : null, info.site.approx ? "position approximate: centre of the state" : null, since ? `since ${hhmm(since)}` : null].filter(Boolean).join(" · ")} />
+      {/* The panel showed a path, two red names and two readings, and never said in one sentence what is
+          wrong here. The sentence already existed — it is the one the map puts in its tooltip. */}
+      {isBad(info.verdict) && info.cause && (
+        <p className="vz-wrong">
+          <StatusShape verdict={info.verdict} />
+          <span>{info.cause}</span>
+          {info.incident && <em>{info.incident}</em>}
+        </p>
+      )}
       <div className="vz-k3">
         <Tile tone={bad ? TONE.bad : TONE.good} title="Devices"><div className="vz-big">{bad}<small>/{info.devices.length}</small></div><div className="vz-cap">with issues</div></Tile>
         {/* a site with no circuit tagged says so, rather than reading "0/0 up" */}
@@ -250,8 +259,19 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
         </Tile>
       </div>
       {path && (
-        <Tile tone={verdictTone(info.verdict)} title="End-to-end path" right="select a hop">
+        <Tile tone={verdictTone(info.verdict)} title="End-to-end path"
+          right={path.hops.length < 2 ? `only ${path.hops[0]?.layer.toLowerCase()} is known here` : "select a hop"}>
           <Trail path={path} selected={hop} onSelect={(i) => setHop(hop === i ? null : i)} />
+          {/* one circle is not a path, and drawn alone it reads as if the whole way were fine */}
+          {path.hops.length < 2 && (
+            <p className="vz-cap">
+              The other layers cannot be drawn for this site: {[
+                !info.devices.some((d) => d.role === "edge" || d.role === "firewall" || d.role === "lb") ? "no edge device" : null,
+                !info.circuits.length ? "no circuit tagged on its ICMP monitor" : null,
+                !info.site.hub ? "no data center it depends on" : null,
+              ].filter(Boolean).join(", ") || "the data they need is not arriving"}.
+            </p>
+          )}
           {hop != null && path.hops[hop] && <div className="vz-hop"><HopDetails model={model} path={path} index={hop} onDevice={(n) => onSelect(`device:${n}`)} /></div>}
         </Tile>
       )}
@@ -268,7 +288,7 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
       <SitePathsTile model={model} code={info.code} />
       {/* is what is degraded here explained by the network? A suspicion, and Assist to argue it */}
       {(model.users || (model.unmappedAlerts ?? []).some((a) => a.scope === "application" || a.scope === "service" || a.scope === "host")) && (
-        <Tile title="Fault domain" right="network or not">
+        <Tile title="Fault domain" right="this site · network or not">
           <SuspicionStrip s={suspicion} users={model.users} model={model}
             assist={<AssistPanel subject={`isolate|${info.code}`} questions={isolationQuestions(info.site.name)} object="impact"
               context={() => isolationContext(model, suspicion, info, dropPct)} />} />

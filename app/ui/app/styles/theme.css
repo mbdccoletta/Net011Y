@@ -373,6 +373,12 @@
 .vz-chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
 .vz-chip b { font-family: var(--lm-mono); color: var(--lm-ink-hi); }
 .vz-dhead__acts { display: flex; gap: 8px; align-items: center; flex: none; }
+/* What is wrong here, in one sentence, above everything that elaborates on it */
+.vz-wrong { display: flex; align-items: baseline; gap: 8px; margin: 0 0 12px; padding: 9px 12px; border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--lm-ink-hi) 14%, transparent); background: var(--lm-tint);
+  font-size: 13px; line-height: 1.4; color: var(--lm-ink-hi); }
+.vz-wrong span { flex: 1; min-width: 0; }
+.vz-wrong em { flex: none; font-style: normal; font: 500 11px var(--lm-mono); color: var(--lm-ink-3); }
 /* A filter row grows with the environment: four carriers fit, twenty do not. Past a handful the options
    fold into this menu, which stays one control wide however many there are. */
 .vz-pick { position: relative; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--lm-ink-3); }

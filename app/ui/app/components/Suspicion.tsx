@@ -30,6 +30,7 @@ const MARK: Record<Suspicion["kind"], string> = {
 
 export function SuspicionStrip({ s, users, model, assist }: { s: Suspicion; users: NetworkModel["users"]; model?: NetworkModel; assist?: React.ReactNode }) {
   const outside = s.outside.application + s.outside.service + s.outside.host + s.outside.other;
+  const about = s.scope === "site" ? "this site" : "the whole environment";
   // only the ones the Problems app can actually open: an event that never became a problem has no page
   const out = model && !model.demo ? outsideAlerts(model).filter((p) => p.eventKind === "DAVIS_PROBLEM" && p.eventId) : [];
   const drop = trafficDrop(users, 0);
@@ -37,12 +38,14 @@ export function SuspicionStrip({ s, users, model, assist }: { s: Suspicion; user
   return (
     <section className={`sus ${TONE[s.kind]}`} aria-label="Fault domain">
       <div className="sus__head">
-        <span className="sus__eyebrow">Fault domain</span>
+        <span className="sus__eyebrow">Fault domain · {about}</span>
         <span className="sus__mark">{MARK[s.kind]}</span>
         {s.fromMeasurement && <em className="sus__hint" title="No traffic anomaly alert fired: this comes from the app's own measurement">suspicion, not a problem</em>}
       </div>
       <p className="sus__line">{s.headline}</p>
       <div className="sus__facts">
+        {/* both strips can be on screen at once — the map's about the environment, the panel's about one
+            site — and read as disagreement until each says what it is about */}
         <span><b>{s.network}</b>network alert{s.network === 1 ? "" : "s"}</span>
         <span><b>{outside}</b>alerting outside the network</span>
         <span title={s.trafficScope === "environment" ? "Sessions are counted across the environment: this site has no client subnet of its own yet" : undefined}>
