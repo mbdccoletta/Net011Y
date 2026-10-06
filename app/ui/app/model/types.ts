@@ -320,7 +320,8 @@ export interface Hop {
   title: string;
   site: string;
   verdict: Verdict;
-  headline: { value: number | string | null; unit: string; label: string };
+  /** `short` is the caption drawn under a hop on the trail, where the full label does not fit */
+  headline: { value: number | string | null; unit: string; label: string; short?: string };
   stats: HopStats;
   devices: string[];
   topReason: string | null;

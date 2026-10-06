@@ -31,12 +31,12 @@ export function deviceHop(devices: Device[], layer: string, title: string, site:
   // Otherwise the first measurement the devices actually have, and a plain reason when they have none.
   const alerts = ds.reduce((a, d) => a + openProblems(d.problems).length, 0);
   let head: Hop["headline"];
-  if (alerts) head = { value: alerts, unit: "", label: alerts > 1 ? "open alerts" : "open alert" };
-  else if (st.unreachable) head = { value: st.unreachable, unit: "", label: "no response" };
-  else if (st.rttMax != null) head = { value: st.rttMax, unit: "ms", label: "max ICMP round trip" };
-  else if (st.cpuMax != null) head = { value: Math.round(st.cpuMax), unit: "%", label: "max CPU" };
-  else if (st.availMin != null) head = { value: st.availMin, unit: "%", label: "min SNMP availability" };
-  else if (st.utilMax != null) head = { value: st.utilMax, unit: "%", label: "max uplink" };
+  if (alerts) head = { value: alerts, unit: "", label: alerts > 1 ? "open alerts" : "open alert", short: "open alerts" };
+  else if (st.unreachable) head = { value: st.unreachable, unit: "", label: "no response", short: "no response" };
+  else if (st.rttMax != null) head = { value: st.rttMax, unit: "ms", label: "max ICMP round trip", short: "ICMP RTT" };
+  else if (st.cpuMax != null) head = { value: Math.round(st.cpuMax), unit: "%", label: "max CPU", short: "CPU" };
+  else if (st.availMin != null) head = { value: st.availMin, unit: "%", label: "min SNMP availability", short: "SNMP avail" };
+  else if (st.utilMax != null) head = { value: st.utilMax, unit: "%", label: "max uplink", short: "uplink" };
   else if (st.blind.length === st.total) head = { value: "—", unit: "", label: "no polling extension" };
   else head = { value: "—", unit: "", label: "no metric yet" };
   return {
@@ -67,11 +67,11 @@ export function circuitHop(circuits: Circuit[], site = "WAN"): Hop {
   };
   const top = reasons[0], txt = top?.text ?? "";
   let head: Hop["headline"];
-  if (!measured.length && !up.length) head = { value: `0/${circuits.length}`, unit: "", label: "active links" };
+  if (!measured.length && !up.length) head = { value: `0/${circuits.length}`, unit: "", label: "active links", short: "links up" };
   else if (!measured.length) head = { value: "—", unit: "", label: "not measured" };
-  else if (top && (txt.includes("down since") || txt.includes("backup"))) head = { value: `${up.length}/${circuits.length}`, unit: "", label: "active links" };
-  else if (top && txt.startsWith("packet loss")) head = { value: st.lossMax, unit: "%", label: "link loss" };
-  else { const a = measured.find((c) => c.kind === "primary") ?? measured[0]; head = { value: a.latencyMs, unit: "ms", label: `latency · SLA ${a.slaMs} ms` }; }
+  else if (top && (txt.includes("down since") || txt.includes("backup"))) head = { value: `${up.length}/${circuits.length}`, unit: "", label: "active links", short: "links up" };
+  else if (top && txt.startsWith("packet loss")) head = { value: st.lossMax, unit: "%", label: "link loss", short: "loss" };
+  else { const a = measured.find((c) => c.kind === "primary") ?? measured[0]; head = { value: a.latencyMs, unit: "ms", label: `latency · SLA ${a.slaMs} ms`, short: "latency" }; }
   const name = (id?: string) => { const c = circuits.find((x) => x.id === id); return c ? `${c.kind === "primary" ? "Primary link" : "Backup link"} (${c.carrier} · ${c.tech})` : "Link"; };
   const latLevels = reasons.filter((r) => r.text.includes("latency")).map((r) => r.level);
   return {
@@ -87,7 +87,7 @@ export function appHop(title: string, site: string, app: AppExperience): Hop {
   const p90 = app.p90Ms;
   return {
     kind: "app", layer: "Application", title, site, verdict: v,
-    headline: p90 != null ? { value: Math.round(p90 / 100) / 10, unit: "s", label: "p90 from the site" } : { value: "—", unit: "", label: "no sessions from the site" },
+    headline: p90 != null ? { value: Math.round(p90 / 100) / 10, unit: "s", label: "p90 from the site", short: "p90" } : { value: "—", unit: "", label: "no sessions from the site" },
     stats: { p90Ms: p90, errPct: app.errPct, sessions: app.sessions, rttMax: null, lossMax: null, availMin: null, blind: [], critEvents: 0, total: 0 },
     app, devices: [], topReason: reasons[0]?.text ?? null,
     consequenceOnly: reasons.length > 0 && reasons.every((r) => r.consequence), incidents: [],
@@ -100,7 +100,7 @@ export function internetHop(peers: Peer[]): Hop | null {
   const up = bgp.filter((p) => (p.state || "").startsWith("established")).length;
   return {
     kind: "internet", layer: "Internet", title: `Carrier AS ${bgp[0].remoteAs ?? "—"}`, site: "WAN",
-    verdict: up === bgp.length ? "Healthy" : "Critical", headline: { value: `${up}/${bgp.length}`, unit: "", label: "BGP peers established" },
+    verdict: up === bgp.length ? "Healthy" : "Critical", headline: { value: `${up}/${bgp.length}`, unit: "", label: "BGP peers established", short: "BGP peers" },
     stats: {}, peers: bgp, devices: [], topReason: up === bgp.length ? null : `${bgp.length - up} BGP peer(s) not established`, consequenceOnly: false, incidents: [],
   };
 }
@@ -112,7 +112,7 @@ export function cloudHop(clusters: CloudCluster[]): Hop | null {
   const v: Verdict = "Healthy";
   return {
     kind: "cloud", layer: "Application", title: "OneAgent workloads", site: "Cloud", verdict: v,
-    headline: { value: Math.round(retr * 1000) / 1000, unit: "%", label: "max TCP retransmission" },
+    headline: { value: Math.round(retr * 1000) / 1000, unit: "%", label: "max TCP retransmission", short: "TCP retr" },
     stats: { conv: clusters.reduce((a, c) => a + c.conv, 0), hosts: clusters.reduce((a, c) => a + c.hosts, 0), procs: clusters.reduce((a, c) => a + c.procs, 0) },
     clusters, devices: [], topReason: null, consequenceOnly: false, incidents: [],
   };
