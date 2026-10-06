@@ -417,6 +417,8 @@
 .vz-spark__v { flex: none; min-width: 3ch; text-align: right; font: 500 12px var(--np-mono); font-variant-numeric: tabular-nums; }
 .vz-svg-label { font: 600 12px var(--lm-mono); fill: var(--lm-ink-3); }
 .vz-svg-cap { font: 500 12px var(--lm-mono); fill: var(--lm-ink-3); }
+/* the name of the measure under a hop: smaller than the layer, and never a status colour */
+.vz-svg-cap--measure { font-size: 9px; fill: color-mix(in srgb, var(--lm-ink-3) 85%, transparent); }
 .vz-dot { cursor: pointer; }
 .vz-ring-hit { cursor: pointer; }
 

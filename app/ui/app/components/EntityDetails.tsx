@@ -88,7 +88,12 @@ function Trail({ path, selected, onSelect }: { path: E2EPath; selected: number |
               <title>{tip}</title>
               <text x={x(i)} y={Y + 5} textAnchor="middle" className="vz-trail__val" style={v.length > 5 ? { fontSize: 13 } : undefined}>{v}</text>
               <text x={x(i)} y={Y + 48} textAnchor="middle" className="vz-svg-label" fill={cause ? "var(--lm-bad)" : undefined}>{h.layer.toUpperCase()}</text>
-              {(cause || cons) && <text x={x(i)} y={Y + 63} textAnchor="middle" className="vz-svg-cap" fill={cause ? "var(--lm-bad)" : "var(--lm-warn)"}>{cause ? "probable cause" : "consequence"}</text>}
+              {/* The ring is the status of the alerts on this layer; the number inside it is a
+                  measurement, and fused into one mark the colour reads as a verdict on the number —
+                  "180.2 ms" in green. Naming the measure under the layer separates the two. */}
+              {cause || cons
+                ? <text x={x(i)} y={Y + 63} textAnchor="middle" className="vz-svg-cap" fill={cause ? "var(--lm-bad)" : "var(--lm-warn)"}>{cause ? "probable cause" : "consequence"}</text>
+                : !none && <text x={x(i)} y={Y + 62} textAnchor="middle" className="vz-svg-cap vz-svg-cap--measure">{h.headline.label.replace(/^(max|min|p90) /, "")}</text>}
             </g>
           );
         })}
