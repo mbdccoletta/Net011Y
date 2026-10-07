@@ -19,6 +19,17 @@ export interface MapSite {
   cause?: string | null;
 }
 
+/** A state, province or prefecture to draw: its outline, and what the sites inside it add up to. */
+export interface MapRegion {
+  code: string;
+  name: string;
+  lon: number;
+  lat: number;
+  rings: Float64Array[];
+  verdict: Verdict;
+  sites: number;
+}
+
 export interface MapLink {
   id: string;
   a: string;
@@ -43,6 +54,8 @@ interface Props {
   onSite: (code: string) => void;
   /** sites placed by the app rather than by coordinates: no continents behind them */
   schematic?: boolean;
+  /** the state layer: outlines drawn under the sites, filled by what stands in each one */
+  regions?: MapRegion[];
 }
 
 /** Status colours for DOM and SVG: the Delivery Chain tokens (Strato status fills). */
@@ -125,7 +138,7 @@ const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 
 /** How many names the map tries to place per frame. Past this the pruning below would be the cost. */
 const LABEL_TRIES = 240;
 
-export function LiveMap({ sites, links, focus, insets, onSite, schematic = false }: Props) {
+export function LiveMap({ sites, links, focus, insets, onSite, schematic = false, regions }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const landLayer = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null);
@@ -170,9 +183,9 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
     return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("fullscreenchange", onChange); };
   }, [full]);
 
-  const props = useRef({ sites, links, focus, insets, byCode, schematic });
-  props.current = { sites, links, focus, insets, byCode, schematic };
-  useEffect(() => { dirty.current = true; }, [sites, links, focus, insets, schematic]);
+  const props = useRef({ sites, links, focus, insets, byCode, schematic, regions });
+  props.current = { sites, links, focus, insets, byCode, schematic, regions };
+  useEffect(() => { dirty.current = true; }, [sites, links, focus, insets, schematic, regions]);
 
   const fitTo = useCallback((codes: Set<string> | null, animate: boolean, withHubs = true, tight = false) => {
     const { w, h } = size.current;
@@ -240,7 +253,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
       if (reduce && !dirty.current) return;
       dirty.current = false;
 
-      const { sites: S, links: L, focus: F, insets: ins, byCode: B } = props.current;
+      const { sites: S, links: L, focus: F, insets: ins, byCode: B, regions: RG } = props.current;
       const P = palette.current ?? (wrap.current ? (palette.current = readPalette(wrap.current)) : null);
       if (!P) return;
       const COL = P.status;
@@ -294,7 +307,31 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         }
       }
 
-      if (!props.current.schematic) ctx.drawImage(landLayer.current.canvas, 0, 0, w, h);
+      if (!props.current.schematic && !RG?.length) ctx.drawImage(landLayer.current.canvas, 0, 0, w, h);
+
+      // The state layer. Drawn in place of the dotted land, because two grounds under the same marks
+      // read as noise: the fill carries the status of what stands in the region, the border its shape.
+      if (RG?.length) {
+        ctx.drawImage(landLayer.current.canvas, 0, 0, w, h);
+        ctx.globalAlpha = 1;
+        for (const rg of RG) {
+          const col = COL[rg.verdict];
+          ctx.beginPath();
+          for (const ring of rg.rings) {
+            for (let i = 0; i < ring.length; i += 2) {
+              const px = sx(ring[i]), py = sy(ring[i + 1]);
+              if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+          }
+          // a region nobody is measuring is left as outline only: filling it would claim a reading
+          ctx.fillStyle = withAlpha(col, rg.sites ? (rg.verdict === "Not monitored" ? 0.1 : 0.22) : 0.05);
+          ctx.fill("evenodd");
+          ctx.strokeStyle = withAlpha(col, rg.sites ? 0.85 : 0.3);
+          ctx.lineWidth = rg.sites ? 1.2 : 0.8;
+          ctx.stroke();
+        }
+      }
 
       // groups of sites that fall close together on screen (only in a large estate, and not when zoomed in far)
       let clusterOf = new Map<string, Cluster>();
@@ -458,6 +495,25 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
       // data centres first, because they are the ones a reader is looking for.
       ctx.textBaseline = "middle";
       const taken: { x0: number; y0: number; x1: number; y1: number }[] = [];
+      // the regions are named first and hold their space: a state's name belongs to the whole shape,
+      // and a site's name sitting on top of it would be the one that reads as the region
+      if (RG?.length) {
+        ctx.textAlign = "center";
+        for (const rg of [...RG].sort((a, b) => b.sites - a.sites)) {
+          if (!rg.sites) continue;
+          const x = sx(rg.lon), y = sy(rg.lat);
+          if (x < 0 || y < 0 || x > w || y > h) continue;
+          const text = `${rg.code || rg.name} · ${rg.sites}`;
+          ctx.font = `600 ${v.k > 6 ? 12 : 11}px ${mono}`;
+          const tw = ctx.measureText(text).width;
+          const box = { x0: x - tw / 2 - 6, y0: y - 9, x1: x + tw / 2 + 6, y1: y + 9 };
+          if (taken.some((t) => box.x0 < t.x1 && box.x1 > t.x0 && box.y0 < t.y1 && box.y1 > t.y0)) continue;
+          taken.push(box);
+          ctx.lineWidth = 3.5; ctx.strokeStyle = withAlpha(P.halo, 0.95); ctx.fillStyle = P.ink;
+          ctx.strokeText(text, x, y); ctx.fillText(text, x, y);
+        }
+        ctx.textAlign = "start";
+      }
       [...labelled].sort((a, b) => Number(b.dc) - Number(a.dc)).forEach((s) => {
         const x = sx(s.lon), y = sy(s.lat);
         ctx.font = s.dc ? `600 12px ${font}` : `500 11px ${mono}`;

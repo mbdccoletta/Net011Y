@@ -6,7 +6,8 @@ import type { SiteInfo } from "../model/site";
 import { ChangesPanel } from "../components/Changes";
 import { isBad, worst } from "../model/verdict";
 import { buildCauses, type Cause } from "../model/causes";
-import { LiveMap, MAP_COLORS, type Insets, type MapLink, type MapSite } from "../components/LiveMap";
+import { LiveMap, MAP_COLORS, type Insets, type MapLink, type MapRegion, type MapSite } from "../components/LiveMap";
+import { loadRegions, regionAt, type RegionShape } from "../data/geo/admin1/load";
 import { fmtInt, hhmm } from "../utils/format";
 import { logsQuery, openLogs } from "../utils/drilldown";
 import { NativeDrill } from "../components/NativeDrill";
@@ -76,11 +77,13 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   // is drawn in a schematic layout — data centres in the middle, each region a cluster around them — so the
   // map works in any environment. The reader can switch between the two when both make sense.
   const placedShare = infos.length ? infos.filter((i) => i.site.lat != null && i.site.lon != null).length / infos.length : 0;
-  const [layout, setLayout] = useState<"geo" | "schematic" | null>(null);
+  const [layout, setLayout] = useState<"geo" | "states" | "schematic" | null>(null);
   // Geography is the default the moment any site can be placed: a reader opens the map to see where the
   // network is. Only an environment that gives no coordinates at all starts on the schematic layout, and
   // when geography would leave sites out, the bar says how many it is drawing.
-  const schematic = (layout ?? (placedShare > 0 ? "geo" : "schematic")) === "schematic";
+  const chosen = layout ?? (placedShare > 0 ? "geo" : "schematic");
+  const schematic = chosen === "schematic";
+  const states = chosen === "states";
   const placedCount = infos.filter((i) => i.site.lat != null && i.site.lon != null).length;
   const groupBy = useMemo(() => {
     try { return new URLSearchParams(window.location.search).get("group"); } catch { return null; }
@@ -123,6 +126,37 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
     });
     return out;
   }, [infos, siteCause, schematic, groupBy]);
+  // Only this view fetches them, and only for the countries the sites are in: one chunk per country.
+  const [shapes, setShapes] = useState<RegionShape[] | null>(null);
+  useEffect(() => {
+    if (!states || shapes) return;
+    let live = true;
+    loadRegions(infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({ lat: i.site.lat!, lon: i.site.lon! })))
+      .then((r) => { if (live) setShapes(r); });
+    return () => { live = false; };
+  }, [states, shapes, infos]);
+
+  // what stands in each region: the sites inside its outline, and the worst of them
+  const mapRegions = useMemo<MapRegion[]>(() => {
+    if (!states || !shapes) return [];
+    const count = new Map<string, SiteInfo[]>();
+    infos.forEach((i) => {
+      if (i.site.lat == null || i.site.lon == null) return;
+      const r = regionAt(shapes, i.site.lon, i.site.lat);
+      if (!r) return;
+      const key = `${r.cc}|${r.code}|${r.name}`;
+      const l = count.get(key); if (l) l.push(i); else count.set(key, [i]);
+    });
+    return shapes.map((r) => {
+      const members = count.get(`${r.cc}|${r.code}|${r.name}`) ?? [];
+      return {
+        code: r.code, name: r.name, lon: r.lon, lat: r.lat, rings: r.rings,
+        verdict: members.length ? worst(members.map((i) => i.verdict)) : ("Not monitored" as const),
+        sites: members.length,
+      };
+    });
+  }, [states, shapes, infos]);
+
   const mapLinks = useMemo<MapLink[]>(() => {
     const placed = new Set(mapSites.map((s) => s.code));
     // traffic of a site's WAN: latest in + out of the edge routers' uplinks (bits per second)
@@ -258,7 +292,10 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
           : <span className="lm-pill lm-pill--warn">Example data</span>)}
         {!model.demo && failed.length > 0 && <span className="lm-pill lm-pill--warn" title={failed.join(", ")}>{failed.length} data source(s) unavailable</span>}
         <span className="vz-seg" role="group" aria-label="Map layout" title={placedShare < 1 ? `${Math.round(placedShare * 100)}% of the sites have coordinates (geo_lat / geo_lon tags or a known place)` : undefined}>
-          <button type="button" className={!schematic ? "is-on" : ""} aria-pressed={!schematic} disabled={placedShare === 0} onClick={() => setLayout("geo")}>Geographic</button>
+          <button type="button" className={chosen === "geo" ? "is-on" : ""} aria-pressed={chosen === "geo"} disabled={placedShare === 0} onClick={() => setLayout("geo")}>Geographic</button>
+          <button type="button" className={states ? "is-on" : ""} aria-pressed={states} disabled={placedShare === 0}
+            title="States, provinces and prefectures of the countries the sites are in, filled by what stands in each one. The outlines are fetched when this view is opened, one country at a time."
+            onClick={() => setLayout("states")}>States</button>
           <button type="button" className={schematic ? "is-on" : ""} aria-pressed={schematic} onClick={() => setLayout("schematic")}>Schematic</button>
         </span>
         {groupBy && !schematic && (
@@ -282,7 +319,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
       <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.map} needs={needs} compact next={next} /></div>
       <div ref={stage} className={`lm-stage${wide ? " is-wide" : ""}`}>
         {mapSites.length ? (
-          <LiveMap sites={mapSites} links={mapLinks} focus={focus} insets={insets} onSite={onSite} schematic={schematic} />
+          <LiveMap sites={mapSites} links={mapLinks} focus={focus} insets={insets} onSite={onSite} schematic={schematic} regions={mapRegions} />
         ) : (
           // no coordinates: the steps live in Settings › Data, so this points there instead of repeating them
           <div className="lm-map lm-map--empty">
