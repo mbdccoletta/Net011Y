@@ -11,7 +11,7 @@ import { fmtInt, hhmm } from "../utils/format";
 import { logsQuery, openLogs } from "../utils/drilldown";
 import { NativeDrill } from "../components/NativeDrill";
 import { SiteTree } from "../components/SiteTree";
-import { useSiteHierarchy } from "../hooks/useSiteHierarchy";
+import { levelValue, useSiteHierarchy } from "../hooks/useSiteHierarchy";
 import { causeContext, isolationContext, networkContext } from "../utils/assist";
 import { causeQuestions, isolationQuestions, networkQuestions } from "../utils/prompts";
 import { AssistPanel } from "../components/AssistPanel";
@@ -82,8 +82,35 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   // when geography would leave sites out, the bar says how many it is drawing.
   const schematic = (layout ?? (placedShare > 0 ? "geo" : "schematic")) === "schematic";
   const placedCount = infos.filter((i) => i.site.lat != null && i.site.lon != null).length;
+  const groupBy = useMemo(() => {
+    try { return new URLSearchParams(window.location.search).get("group"); } catch { return null; }
+  }, []);
   const mapSites = useMemo<MapSite[]>(() => {
     const base = (i: SiteInfo) => ({ code: i.code, name: i.site.name, verdict: i.verdict, dc: i.site.dc, region: i.site.region, cause: i.cause ? i.cause : siteCause.get(i.code) ?? null });
+    // PROTOTYPE (?group=<level>): the map drawn at a level of the site hierarchy instead of site by
+    // site — one mark per state, region or country, at the centre of the sites it holds. Hidden unless
+    // the flag is in the URL. What it is for is judging placement and labels on real data before this
+    // becomes a control: a group's mark sits where no site is, and that is the thing to look at.
+    if (groupBy && !schematic) {
+      const placed = infos.filter((i) => i.site.lat != null && i.site.lon != null);
+      const by = new Map<string, SiteInfo[]>();
+      placed.forEach((i) => {
+        const v = levelValue(i.site, groupBy) ?? "Not tagged";
+        const l = by.get(v); if (l) l.push(i); else by.set(v, [i]);
+      });
+      return [...by].map(([value, members]) => {
+        const bad = members.filter((i) => isBad(i.verdict)).length;
+        return {
+          code: `group:${value}`,
+          name: `${value} · ${members.length}`,
+          lat: members.reduce((a, i) => a + i.site.lat!, 0) / members.length,
+          lon: members.reduce((a, i) => a + i.site.lon!, 0) / members.length,
+          verdict: worst(members.map((i) => i.verdict)),
+          region: value,
+          cause: bad ? `${bad} of ${members.length} sites alerting · ${members.filter((i) => isBad(i.verdict)).slice(0, 3).map((i) => i.site.name).join(", ")}` : `${members.length} sites, none alerting`,
+        };
+      });
+    }
     if (!schematic) return infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({ ...base(i), lat: i.site.lat!, lon: i.site.lon! }));
     const dcs = infos.filter((i) => i.site.dc), rest = infos.filter((i) => !i.site.dc);
     const groups = [...new Set(rest.map((i) => i.site.region ?? "No region"))].sort();
@@ -95,7 +122,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
       members.forEach((i, k) => out.push({ ...base(i), ...(members.length > 1 ? ring(members.length, k, Math.min(9, 2 + members.length * 0.6), c.lon, c.lat) : c) }));
     });
     return out;
-  }, [infos, siteCause, schematic]);
+  }, [infos, siteCause, schematic, groupBy]);
   const mapLinks = useMemo<MapLink[]>(() => {
     const placed = new Set(mapSites.map((s) => s.code));
     // traffic of a site's WAN: latest in + out of the edge routers' uplinks (bits per second)
@@ -234,7 +261,12 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
           <button type="button" className={!schematic ? "is-on" : ""} aria-pressed={!schematic} disabled={placedShare === 0} onClick={() => setLayout("geo")}>Geographic</button>
           <button type="button" className={schematic ? "is-on" : ""} aria-pressed={schematic} onClick={() => setLayout("schematic")}>Schematic</button>
         </span>
-        {!schematic && placedShare < 1 && (
+        {groupBy && !schematic && (
+          <span className="lm-pill lm-pill--warn" title="Prototype: the map drawn at a level of the site hierarchy. Each mark sits at the centre of the sites it holds, which is a place where no site is. Remove ?group= from the URL to go back.">
+            Prototype · grouped by {groupBy.replace(/^primary_tags\./, "")}
+          </span>
+        )}
+        {!groupBy && !schematic && placedShare < 1 && (
           <button type="button" className="lm-pill lm-pill--warn lm-pill--btn" onClick={() => setLayout("schematic")}
             title="Sites without geo_lat / geo_lon tags, and whose location the app could not recognise, cannot be drawn on a map. The schematic layout holds every site.">
             {fmtInt(placedCount)} of {fmtInt(infos.length)} sites on the map · see all
