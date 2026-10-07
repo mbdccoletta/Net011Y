@@ -74,6 +74,33 @@ def encode(ring):
     return "".join(out)
 
 
+def cluster_boxes(bs, gap=1.0, cap=14):
+    """A country is not one box. France reaches from French Guiana to Réunion, and that rectangle holds
+    Brazil, Africa and two oceans — so a site in São Paulo was fetching the hundred and one regions of
+    France and drawing them over Europe. Overseas territories get boxes of their own."""
+    boxes = [list(b) for b in bs]
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(boxes)):
+            for j in range(i + 1, len(boxes)):
+                a, b = boxes[i], boxes[j]
+                if a[0] - gap <= b[2] and b[0] - gap <= a[2] and a[1] - gap <= b[3] and b[1] - gap <= a[3]:
+                    boxes[i] = [min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])]
+                    boxes.pop(j)
+                    merged = True
+                    break
+            if merged:
+                break
+    while len(boxes) > cap:   # the smallest join whatever is nearest, so the list stays short
+        boxes.sort(key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+        a = boxes.pop(0)
+        k = min(range(len(boxes)), key=lambda i: abs(boxes[i][0] - a[0]) + abs(boxes[i][1] - a[1]))
+        b = boxes[k]
+        boxes[k] = [min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])]
+    return [[round(v, 2) for v in b] for b in boxes]
+
+
 def main():
     data = json.load(open(SRC))
     by_cc = {}
@@ -100,10 +127,20 @@ def main():
         code = (p.get("iso_3166_2") or "").split("-")[-1] or p.get("postal") or ""
         xs = [x for r in rings for x, _ in r]
         ys = [y for r in rings for _, y in r]
+        # A region that crosses the antimeridian — Chukotka, the Aleutians, Fiji — has points at both
+        # ends of the scale, and a plain min/max turns its box into the whole planet. Russia then
+        # matched a site in Seattle and fetched sixty kilobytes to draw nothing.
+        if max(xs) - min(xs) > 180:
+            west = [x for x in xs if x > 0]
+            east = [x for x in xs if x <= 0]
+            parts = [[min(west), min(ys), 180.0, max(ys)], [-180.0, min(ys), max(east), max(ys)]]
+        else:
+            parts = [[min(xs), min(ys), max(xs), max(ys)]]
         by_cc.setdefault(cc, []).append({
             "code": code, "name": p.get("name") or code,
             "lon": round(cx, 2), "lat": round(cy, 2),
             "b": [round(min(xs), 2), round(min(ys), 2), round(max(xs), 2), round(max(ys), 2)],
+            "p": [[round(v, 2) for v in q] for q in parts],
             "d": [encode(r) for r in rings],
         })
 
@@ -111,9 +148,8 @@ def main():
     rows = []
     boxes = {}
     for cc, regions in sorted(by_cc.items()):
-        boxes[cc] = [round(min(r["b"][0] for r in regions), 2), round(min(r["b"][1] for r in regions), 2),
-                     round(max(r["b"][2] for r in regions), 2), round(max(r["b"][3] for r in regions), 2)]
-        body = json.dumps({"cc": cc, "regions": regions}, separators=(",", ":"), ensure_ascii=False)
+        boxes[cc] = cluster_boxes([q for r in regions for q in r["p"]])
+        body = json.dumps({"cc": cc, "regions": [{k: v for k, v in r.items() if k != "p"} for r in regions]}, separators=(",", ":"), ensure_ascii=False)
         size = len(body.encode())
         total += size
         rows.append((cc, len(regions), size))
@@ -130,8 +166,9 @@ def main():
             "// sites fall in, and only those are fetched. Nobody who never opens the view downloads any.\n"
             "export interface Admin1Region { code: string; name: string; lon: number; lat: number; b: readonly number[]; d: readonly string[] }\n"
             "export interface Admin1Country { cc: string; regions: readonly Admin1Region[] }\n\n"
-            "/** lon/lat bounding box per country, west, south, east, north */\n"
-            "export const ADMIN1_BOXES: Record<string, readonly [number, number, number, number]> = "
+            "/** lon/lat boxes per country, west, south, east, north. More than one where a country\n"
+            " *  has territories far from the rest of it. */\n"
+            "export const ADMIN1_BOXES: Record<string, readonly (readonly number[])[]> = "
             + json.dumps(boxes, separators=(",", ":")) + ";\n\n"
             "export const ADMIN1_LOADERS: Record<string, () => Promise<{ default: Admin1Country }>> = {\n  "
             + loaders + ",\n};\n", encoding="utf8")

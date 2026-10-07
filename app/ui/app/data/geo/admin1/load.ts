@@ -63,8 +63,8 @@ function ofCountry(cc: string): Promise<RegionShape[]> {
 export function countriesOf(points: { lat: number; lon: number }[]): string[] {
   const out = new Set<string>();
   for (const p of points) {
-    for (const [cc, b] of Object.entries(ADMIN1_BOXES)) {
-      if (p.lon >= b[0] && p.lon <= b[2] && p.lat >= b[1] && p.lat <= b[3]) out.add(cc);
+    for (const [cc, boxes] of Object.entries(ADMIN1_BOXES)) {
+      if (boxes.some((b) => p.lon >= b[0] && p.lon <= b[2] && p.lat >= b[1] && p.lat <= b[3])) out.add(cc);
     }
   }
   return [...out];

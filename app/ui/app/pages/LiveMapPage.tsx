@@ -147,7 +147,11 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
       const key = `${r.cc}|${r.code}|${r.name}`;
       const l = count.get(key); if (l) l.push(i); else count.set(key, [i]);
     });
-    return shapes.map((r) => {
+    // A box is not a country: France reaches from Guiana to Réunion, so a Brazilian site used to fetch
+    // it and draw its hundred and one regions over Europe. Only countries that hold a site are drawn,
+    // and inside one the regions without sites stay as outlines, which is the context worth having.
+    const held = new Set([...count.keys()].map((k) => k.split("|")[0]));
+    return shapes.filter((r) => held.has(r.cc)).map((r) => {
       const members = count.get(`${r.cc}|${r.code}|${r.name}`) ?? [];
       return {
         code: r.code, name: r.name, lon: r.lon, lat: r.lat, rings: r.rings,
