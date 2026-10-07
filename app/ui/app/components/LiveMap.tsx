@@ -122,6 +122,9 @@ const CLUSTER_MAX_K = 120;
 const hash = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0) / 4294967295; };
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
+/** How many names the map tries to place per frame. Past this the pruning below would be the cost. */
+const LABEL_TRIES = 240;
+
 export function LiveMap({ sites, links, focus, insets, onSite, schematic = false }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -405,6 +408,8 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
       });
       ctx.globalAlpha = 1;
 
+      // drawn in this order, and named in it too: the data centres a reader looks for first, then what
+      // is alerting, then the rest. When the map is busy it is the useful names that survive the pruning.
       const order = [...S].filter((s) => !clusterOf.has(s.code)).sort((p, q) => Number(shown(p.code) !== "Healthy") - Number(shown(q.code) !== "Healthy") || Number(!!p.dc) - Number(!!q.dc));
       const labelled: MapSite[] = [];
       order.forEach((s) => {
@@ -441,7 +446,10 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         ctx.fillStyle = color;
         ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
         if (hoverCode.current === s.code) { ctx.strokeStyle = P.ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.stroke(); }
-        if ((F && F.has(s.code) && F.size <= 24) || (S.length <= 12)) labelled.push(s);
+        // Every site on screen is offered a name. Which ones get one is decided below, by whether the
+        // text fits without touching another — geometry, not a count. A map of sixteen sites used to
+        // label only the data centres, because the rule was "twelve sites or fewer".
+        if (labelled.length < LABEL_TRIES) labelled.push(s);
       });
       ctx.globalAlpha = 1;
 
@@ -453,7 +461,13 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
       [...labelled].sort((a, b) => Number(b.dc) - Number(a.dc)).forEach((s) => {
         const x = sx(s.lon), y = sy(s.lat);
         ctx.font = s.dc ? `600 12px ${font}` : `500 11px ${mono}`;
-        const text = s.dc || S.length <= 12 ? s.name : s.code;
+        // the name is what a reader is after; the code is the fallback for when the name will not fit
+        const fits = (t: string) => {
+          const tw = ctx.measureText(t).width;
+          const b = { x0: x + 8 - 10, y0: y - (s.dc ? 7 : 6) - 3, x1: x + 12 + tw + 10, y1: y + (s.dc ? 7 : 6) + 3 };
+          return !taken.some((t2) => b.x0 < t2.x1 && b.x1 > t2.x0 && b.y0 < t2.y1 && b.y1 > t2.y0);
+        };
+        const text = fits(s.name) ? s.name : s.code;
         const w = ctx.measureText(text).width, h = s.dc ? 14 : 12;
         const box = { x0: x + 8, y0: y - h / 2, x1: x + 12 + w, y1: y + h / 2 };
         // boxes that merely touch still read as one name — two neighbouring sites ran together into one
