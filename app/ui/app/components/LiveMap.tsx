@@ -322,14 +322,15 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         }
       }
 
-      if (!props.current.schematic && !RG?.length) ctx.drawImage(landLayer.current.canvas, 0, 0, w, h);
+      if (!props.current.schematic && !RG?.some((r) => r.rings.length)) ctx.drawImage(landLayer.current.canvas, 0, 0, w, h);
 
       // The state layer. Drawn in place of the dotted land, because two grounds under the same marks
       // read as noise: the fill carries the status of what stands in the region, the border its shape.
-      if (RG?.length) {
+      if (RG?.length && RG.some((r) => r.rings.length)) {
         ctx.drawImage(landLayer.current.canvas, 0, 0, w, h);
         ctx.globalAlpha = 1;
         for (const rg of RG) {
+          if (!rg.rings.length) continue;
           ctx.beginPath();
           for (const ring of rg.rings) {
             for (let i = 0; i < ring.length; i += 2) {
@@ -587,7 +588,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
     if (RG?.length) {
       const lon = v.cx + (px - ox) / v.k, lat = invY(v.cy + (py - oy) / v.k);
       for (const rg of RG) {
-        if (!rg.rings.some((ring) => pointInRing(ring, lon, lat))) continue;
+        if (!rg.rings.length || !rg.rings.some((ring) => pointInRing(ring, lon, lat))) continue;
         return {
           site: {
             code: `region:${rg.code}`, name: rg.name, lat: rg.lat, lon: rg.lon, verdict: rg.verdict,

@@ -92,16 +92,32 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
     const groups = [...new Set(rest.map((i) => i.site.region ?? "No region"))].sort();
     const ring = (n: number, k: number, r: number, cx = 0, cy = 0) => ({ lon: cx + r * Math.cos((2 * Math.PI * k) / Math.max(n, 1) - Math.PI / 2), lat: cy + r * 0.8 * Math.sin((2 * Math.PI * k) / Math.max(n, 1) - Math.PI / 2) });
     const out: MapSite[] = dcs.map((i, k) => ({ ...base(i), ...(dcs.length > 1 ? ring(dcs.length, k, 3) : { lat: 0, lon: 0 }) }));
+    // Each group is a disc of its own sites, and the discs must not touch: eight regions on a ring of
+    // twenty leave fifteen of space between their centres, and a disc capped at nine across is eighteen
+    // wide — so every region overlapped its neighbours and the whole thing read as one undivided ring.
+    // The disc grows with the square root of what it holds, as the bubbles do, and the ring that carries
+    // them grows with whatever the widest disc needs.
+    const members = new Map(groups.map((g) => [g, rest.filter((i) => (i.site.region ?? "No region") === g)]));
+    const discOf = (n: number) => Math.max(2.5, Math.min(16, 1.6 + Math.sqrt(n) * 0.75));
+    const widest = Math.max(...groups.map((g) => discOf(members.get(g)!.length)), 3);
+    const spread = groups.length > 1
+      ? Math.max(18, (widest + 2.5) / Math.sin(Math.PI / groups.length))
+      : 0;
+    schemGroups.current = [];
     groups.forEach((g, gi) => {
-      const members = rest.filter((i) => (i.site.region ?? "No region") === g);
-      const c = groups.length > 1 || dcs.length ? ring(groups.length, gi, 20) : { lat: 0, lon: 0 };
-      members.forEach((i, k) => out.push({ ...base(i), ...(members.length > 1 ? ring(members.length, k, Math.min(9, 2 + members.length * 0.6), c.lon, c.lat) : c) }));
+      const list = members.get(g)!;
+      const c = spread ? ring(groups.length, gi, spread) : { lat: 0, lon: 0 };
+      const disc = discOf(list.length);
+      schemGroups.current.push({ name: g, lon: c.lon, lat: c.lat + disc * 0.8 + 1.6, sites: list.length, bad: list.filter((i) => isBad(i.verdict)).length, verdict: worst(list.map((i) => i.verdict)) });
+      list.forEach((i, k) => out.push({ ...base(i), ...(list.length > 1 ? ring(list.length, k, disc, c.lon, c.lat) : c) }));
     });
     return out;
   }, [infos, siteCause, schematic]);
   // Only this view fetches them, and only for the countries the sites are in: one chunk per country.
   const [shapes, setShapes] = useState<RegionShape[] | null>(null);
   const regionSites = useRef(new Map<string, Set<string>>());
+  // the schematic names its groups through the same label layer the states use
+  const schemGroups = useRef<{ name: string; lon: number; lat: number; sites: number; bad: number; verdict: Verdict }[]>([]);
   // Loaded once was wrong: the first load answered whichever estate was on screen then, and switching
   // data source — this environment to the example, or the example to the extra-large one — brought
   // sites in countries the first answer never covered. A whole continent stayed blank because the map
@@ -120,6 +136,8 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
 
   // what stands in each region: the sites inside its outline, and the worst of them
   const mapRegions = useMemo<MapRegion[]>(() => {
+    // in the schematic the groups have no shape, only a place and a name — the label layer draws them
+    if (schematic) return schemGroups.current.map((g) => ({ code: g.name, name: g.name, lon: g.lon, lat: g.lat, rings: [], verdict: g.verdict, sites: g.sites, bad: g.bad }));
     if (!states || !shapes) return [];
     const count = new Map<string, SiteInfo[]>();
     infos.forEach((i) => {
@@ -143,7 +161,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
         bad: members.filter((i) => isBad(i.verdict)).length,
       };
     });
-  }, [states, shapes, infos]);
+  }, [states, shapes, infos, schematic, mapSites]);
 
   const mapLinks = useMemo<MapLink[]>(() => {
     const placed = new Set(mapSites.map((s) => s.code));
