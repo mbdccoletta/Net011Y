@@ -7,7 +7,7 @@ import { ChangesPanel } from "../components/Changes";
 import { isBad, worst } from "../model/verdict";
 import { buildCauses, type Cause } from "../model/causes";
 import { LiveMap, MAP_COLORS, type Insets, type MapLink, type MapRegion, type MapSite } from "../components/LiveMap";
-import { loadRegions, regionAt, type RegionShape } from "../data/geo/admin1/load";
+import { countriesOf, loadRegions, regionAt, type RegionShape } from "../data/geo/admin1/load";
 import { fmtInt, hhmm } from "../utils/format";
 import { logsQuery, openLogs } from "../utils/drilldown";
 import { NativeDrill } from "../components/NativeDrill";
@@ -102,13 +102,21 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   // Only this view fetches them, and only for the countries the sites are in: one chunk per country.
   const [shapes, setShapes] = useState<RegionShape[] | null>(null);
   const regionSites = useRef(new Map<string, Set<string>>());
+  // Loaded once was wrong: the first load answered whichever estate was on screen then, and switching
+  // data source — this environment to the example, or the example to the extra-large one — brought
+  // sites in countries the first answer never covered. A whole continent stayed blank because the map
+  // had already decided. It loads what the sites in front of it need, and keeps what it has.
+  const loadedCcs = useRef(new Set<string>());
   useEffect(() => {
-    if (!states || shapes) return;
+    if (!states) return;
+    const points = infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({ lat: i.site.lat!, lon: i.site.lon! }));
+    const want = countriesOf(points).filter((cc) => !loadedCcs.current.has(cc));
+    if (!want.length) { if (!shapes) setShapes([]); return; }
     let live = true;
-    loadRegions(infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({ lat: i.site.lat!, lon: i.site.lon! })))
-      .then((r) => { if (live) setShapes(r); });
+    want.forEach((cc) => loadedCcs.current.add(cc));
+    loadRegions(points).then((r) => { if (live) setShapes(r); });
     return () => { live = false; };
-  }, [states, shapes, infos]);
+  }, [states, infos, shapes]);
 
   // what stands in each region: the sites inside its outline, and the worst of them
   const mapRegions = useMemo<MapRegion[]>(() => {
@@ -277,6 +285,13 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
             onClick={() => setLayout("states")}>States</button>
           <button type="button" className={schematic ? "is-on" : ""} aria-pressed={schematic} onClick={() => setLayout("schematic")}>Schematic</button>
         </span>
+        {states && (
+          <span className="lm-pill" title="The outlines are fetched per country, only for the countries the sites fall in.">
+            {shapes === null ? "Loading outlines…"
+              : mapRegions.length ? `${new Set(mapRegions.map((r) => r.code)).size} regions in ${new Set(shapes.filter((s2) => mapRegions.some((r) => r.code === s2.code)).map((s2) => s2.cc)).size} countries`
+                : "No outlines for these sites"}
+          </span>
+        )}
         {!schematic && placedShare < 1 && (
           <button type="button" className="lm-pill lm-pill--warn lm-pill--btn" onClick={() => setLayout("schematic")}
             title="Sites without geo_lat / geo_lon tags, and whose location the app could not recognise, cannot be drawn on a map. The schematic layout holds every site.">
