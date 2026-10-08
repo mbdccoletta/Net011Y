@@ -140,6 +140,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
         code: r.code, name: r.name, lon: r.lon, lat: r.lat, rings: r.rings,
         verdict: members.length ? worst(members.map((i) => i.verdict)) : ("Not monitored" as const),
         sites: members.length,
+        bad: members.filter((i) => isBad(i.verdict)).length,
       };
     });
   }, [states, shapes, infos]);

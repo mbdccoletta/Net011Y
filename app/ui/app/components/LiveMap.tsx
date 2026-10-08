@@ -26,8 +26,11 @@ export interface MapRegion {
   lon: number;
   lat: number;
   rings: Float64Array[];
+  /** the worst status standing in the region: what the label says, never what the shape is washed with */
   verdict: Verdict;
   sites: number;
+  /** how many of those sites are red or amber */
+  bad: number;
 }
 
 export interface MapLink {
@@ -327,7 +330,6 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         ctx.drawImage(landLayer.current.canvas, 0, 0, w, h);
         ctx.globalAlpha = 1;
         for (const rg of RG) {
-          const col = COL[rg.verdict];
           ctx.beginPath();
           for (const ring of rg.rings) {
             for (let i = 0; i < ring.length; i += 2) {
@@ -336,11 +338,13 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
             }
             ctx.closePath();
           }
-          // a region nobody is measuring is left as outline only: filling it would claim a reading
-          ctx.fillStyle = withAlpha(col, rg.sites ? (rg.verdict === "Not monitored" ? 0.1 : 0.22) : 0.05);
+          // A state is a container, not a thing with a status: washing it in the colour of its worst
+          // site said "Rio de Janeiro is critical" when three of its hundred and ninety-seven were. The
+          // shape is context — the dots on top carry the status, one per site, which is where it is true.
+          ctx.fillStyle = withAlpha(P.ink, rg.sites ? 0.07 : 0.025);
           ctx.fill("evenodd");
-          ctx.strokeStyle = withAlpha(col, rg.sites ? 0.85 : 0.3);
-          ctx.lineWidth = rg.sites ? 1.2 : 0.8;
+          ctx.strokeStyle = withAlpha(P.ink, rg.sites ? 0.38 : 0.16);
+          ctx.lineWidth = rg.sites ? 1.1 : 0.7;
           ctx.stroke();
         }
       }
@@ -515,13 +519,15 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
           if (!rg.sites) continue;
           const x = sx(rg.lon), y = sy(rg.lat);
           if (x < 0 || y < 0 || x > w || y > h) continue;
-          const text = `${rg.code || rg.name} · ${rg.sites}`;
+          const text = rg.bad ? `${rg.code || rg.name} · ${rg.sites} · ${rg.bad} alerting` : `${rg.code || rg.name} · ${rg.sites}`;
           ctx.font = `600 ${v.k > 6 ? 12 : 11}px ${mono}`;
           const tw = ctx.measureText(text).width;
           const box = { x0: x - tw / 2 - 6, y0: y - 9, x1: x + tw / 2 + 6, y1: y + 9 };
           if (taken.some((t) => box.x0 < t.x1 && box.x1 > t.x0 && box.y0 < t.y1 && box.y1 > t.y0)) continue;
           taken.push(box);
-          ctx.lineWidth = 3.5; ctx.strokeStyle = withAlpha(P.halo, 0.95); ctx.fillStyle = P.ink;
+          ctx.lineWidth = 3.5; ctx.strokeStyle = withAlpha(P.halo, 0.95);
+          // the count is ink; only the words that report alerts wear the status colour
+          ctx.fillStyle = rg.bad ? COL[rg.verdict] : P.ink;
           ctx.strokeText(text, x, y); ctx.fillText(text, x, y);
         }
         ctx.textAlign = "start";
