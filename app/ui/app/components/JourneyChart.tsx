@@ -11,6 +11,9 @@ export type JourneyPick = { kind: "node"; id: string } | { kind: "link"; from: s
  * Traffic is one colour and only its weight changes, so a band never turns into another colour halfway
  * along; what a box is stays on its stripe; and green, amber and red are left to status, where a box
  * outlined in the status colour means that device is alerting now.
+ *
+ * That one colour is ink, not cyan. Cyan is what the Internet box is, and while the bands wore it too
+ * the whole drawing read as one teal wash in which neither the ends nor the paths stood out.
  */
 const TONE: Record<JourneyNode["kind"], string> = {
   site: "var(--lm-accent)", internet: "var(--lm-cyan)", private: "var(--lm-neutral)",
@@ -83,7 +86,7 @@ export function JourneyChart({ nodes, links, width, pick, onPick, alerting }: {
   return (
     <svg className="jr" width={W} height={layout.H} viewBox={`0 0 ${W} ${layout.H}`} role="img" aria-label="Traffic journey: where the last hour of traffic came from, which device saw it and where it went">
       {layout.bands.map(({ l, a, b, w, y0, y1 }) => {
-        const tone = "var(--lm-cyan)";
+        const tone = "var(--lm-band)";
         const on = isPicked(l.from, l.to);
         const title = `${a.label} → ${b.label}: ${fmtBytes(l.bytes)} · ${fmtInt(l.count)} flows`;
         const select = () => onPick(on && pick?.kind === "link" ? null : { kind: "link", from: l.from, to: l.to });

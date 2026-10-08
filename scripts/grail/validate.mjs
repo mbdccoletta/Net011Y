@@ -278,6 +278,21 @@ const dc1 = Object.values(model.sites).find((s) => s.dc && fm?.sites[s.code]?.fa
 check("NetFlow places traffic between sites through exporters and site_cidr",
   fm && fm.exporters.every((e) => e.device) && fm.pairs.length > 0 && fm.pairs.every((p) => model.sites[p.a] && model.sites[p.b]),
   `${fm?.exporters.length} exporters · ${fm?.pairs.length} site pairs · top ${fm?.pairs[0] ? `${fm.pairs[0].a}↔${fm.pairs[0].b} ${(fm.pairs[0].bytes / 1e9).toFixed(1)} GB` : "none"} · ${needs.netflow.detail}`);
+// the map draws the routes between sites from these flows, so it has to name the source it draws from:
+// an environment whose flows arrive but whose addresses no site claims came up empty and said nothing
+check("The map declares NetFlow among the sources it needs",
+  VIEW_NEEDS.map.includes("netflow"), VIEW_NEEDS.map.join(", "));
+// The exporters are named by the conversations, not by the rate query: flowTs is read only where the
+// bandwidth and the falling-silent check are shown, and an environment that has not read it still knows
+// who its exporters are. It once reported "0/0 exporters tied to a device" with three of them sending.
+{
+  const noTs = buildRealModel({ ...R, flowTs: [] }, "simulated-grail");
+  const exp = new Set(R.flowNets.map((r) => r.exp));
+  check("The exporters are known without the rate query",
+    noTs.flowMap?.exporters.length === exp.size
+    && evaluateNeeds({ ...counts, flowTs: null }, noTs, "live").netflow.detail.startsWith(`${exp.size}/${exp.size} exporters`),
+    `${noTs.flowMap?.exporters.length} of ${exp.size} · ${evaluateNeeds({ ...counts, flowTs: null }, noTs, "live").netflow.detail}`);
+}
 check("Internet scan against a data center found as a fan-in, and only that one",
   !!dc1 && fm.sites[dc1.code].fanIn[0].sources === 1500 && fm.sites[dc1.code].fanIn[0].port === "23"
   && Object.values(fm.sites).flatMap((t) => t.fanIn).length === 1,

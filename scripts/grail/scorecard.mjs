@@ -26,12 +26,19 @@ async function run(name, q) {
   } catch (e) { return { rows: null, err: String(e.stderr ?? e).slice(0, 160), gb: 0, s: 0 }; }
 }
 
-const R = {}, counts = {}, cost = {};
+const R = {}, counts = {}, cost = {}, secs = {};
 for (const [name, q] of Object.entries(QUERIES)) {
   const r = await run(name, q);
-  R[name] = r.rows ?? []; counts[name] = r.rows ? r.rows.length : null; cost[name] = r.gb;
+  R[name] = r.rows ?? []; counts[name] = r.rows ? r.rows.length : null; cost[name] = r.gb; secs[name] = r.s;
   if (r.err) console.error(`  ${name}: ${r.err}`);
 }
+// which queries the load actually waits for. The total alone says an environment is expensive; this
+// says which read is paying for it, which is the only form of the answer anyone can act on.
+const heaviest = Object.keys(QUERIES)
+  .map((n) => ({ query: n, gb: +(cost[n] ?? 0).toFixed(2), s: +(secs[n] ?? 0).toFixed(1), rows: counts[n] }))
+  .filter((x) => x.gb > 0.01 || x.s > 1)
+  .sort((a, b) => b.s - a.s)
+  .slice(0, 15);
 const env = via === "proxy" ? "dev-server" : via.slice(6);
 const m = buildRealModel(R, env);
 const needs = evaluateNeeds(counts, m, "live");
@@ -41,6 +48,8 @@ const devs = m.devices;
 const card = {
   environment: env,
   logGbPerLoad: +Object.values(cost).reduce((a, b) => a + b, 0).toFixed(2),
+  secondsPerLoad: +Object.values(secs).reduce((a, b) => a + b, 0).toFixed(1),
+  heaviest,
   inventory: { devices: n(devs), extensionMonitored: n(devs.filter((d) => d.mode === "Extension")), discoveryOnly: n(devs.filter((d) => d.mode === "Discovery")), families: m.extensions },
   health: { withCpu: n(devs.filter((d) => d.cpuNow != null)), withMemory: n(devs.filter((d) => d.memNow != null)), withAvailability: n(devs.filter((d) => d.availPct != null)), portsWithTraffic: devs.reduce((a, d) => a + d.interfaces.filter((i) => i.in.length).length, 0), vlans: devs.reduce((a, d) => a + (d.vlans?.length ?? 0), 0) },
   sites: { sites: n(Object.keys(m.sites)), placedOnMap: n(Object.values(m.sites).filter((s) => s.lat != null)), approximate: n(Object.values(m.sites).filter((s) => s.approx)), withRegion: n(Object.values(m.sites).filter((s) => s.region)), fromTags: n(Object.values(m.sites).filter((s) => s.tags)), dataCenters: n(Object.values(m.sites).filter((s) => s.dc)) },

@@ -133,14 +133,23 @@ export function buildFlowMap(L: (k: string) => Rec[], devices: Device[], address
     })).filter((e) => e.bytes.some((v) => v != null)),
   } : undefined;
 
-  const exporters = L("flowTs").map((r) => {
+  // Who the exporters are is in the conversations themselves: every one of them was reported by a
+  // device, and that read is one every view that draws traffic already pays for. flowTs adds the rate
+  // and whether one is falling silent, which only the views that show them read — so an environment's
+  // exporters are named and placed even where that second read has not run, instead of counting zero.
+  const tsByIp = new Map(L("flowTs").map((r) => [String(r.exp ?? ""), r]));
+  const rateOf = (r: Rec | undefined) => {
+    if (!r) return { flows5m: null, usual5m: null, falling: false };
     const xs = (Array.isArray(r.flows) ? r.flows : []).map((v: unknown) => (v == null ? null : Number(v))) as (number | null)[];
     const last = xs.length - 2;
     const prior = xs.slice(Math.max(0, last - 12), last).filter((v): v is number => v != null).sort((p, q) => p - q);
     const usual = prior.length ? prior[Math.floor(prior.length / 2)] : null;
     const now = last >= 0 ? xs[last] ?? 0 : null;
-    const d = devByIp.get(String(r.exp ?? ""));
-    return { ip: String(r.exp ?? ""), device: d?.name ?? null, site: d?.site ?? null, flows5m: now, usual5m: usual, falling: now != null && usual != null && usual >= 10 && now < EXPORTER_FALL * usual };
+    return { flows5m: now, usual5m: usual, falling: now != null && usual != null && usual >= 10 && now < EXPORTER_FALL * usual };
+  };
+  const exporters = [...new Set([...conversations.map((c) => c.via), ...tsByIp.keys()])].filter(Boolean).map((ip) => {
+    const d = devByIp.get(ip);
+    return { ip, device: d?.name ?? null, site: d?.site ?? null, ...rateOf(tsByIp.get(ip)) };
   });
 
   return {

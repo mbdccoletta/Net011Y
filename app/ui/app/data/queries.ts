@@ -21,6 +21,14 @@ export interface NetQuery {
   detail?: boolean;
   /** a log query the browser reads incrementally: the next open asks only for what came after (logCache.ts) */
   incremental?: Incremental;
+  /**
+   * The views that read this query, for a query nobody else needs and nobody should pay for on a screen
+   * that cannot show it. Left out, the query runs on load like the rest: that is the right answer for
+   * anything the first screen judges a device by. It is worth naming views only for a read that is both
+   * expensive and used in one place — in an environment sending four million flows an hour, the fan-in
+   * read alone was a quarter of every load, on every page, including the ones that never draw it.
+   */
+  views?: readonly string[];
 }
 
 const CIRCUIT_TAGS = "primary_tags.site, primary_tags.circuit_id, primary_tags.circuit_role, primary_tags.carrier, primary_tags.circuit_tech, primary_tags.sla_ms, primary_tags.bandwidth_mbps";
@@ -179,6 +187,8 @@ export const QUERIES: Record<string, NetQuery> = {
     query: 'fetch logs, from:now()-70m | filter otel.scope.name == "otelcol/netflowreceiver" | makeTimeseries flows=count(), bytes=sum(toLong(flow.io.bytes)), by:{exp=flow.sampler_address}, interval:5m',
     maxResultRecords: 500,
     incremental: { kind: "series", windowMs: 70 * 60e3, stepMs: 5 * 60e3, fields: ["flows", "bytes"], keys: ["exp"] },
+    // the bandwidth over time and the falling-silent check; who the exporters are comes from flowNets
+    views: ["traffic", "site"],
   },
   // who talks to whom: the last hour of NetFlow by exporter and /24 at each end, heaviest first
   flowNets: {
@@ -190,6 +200,7 @@ export const QUERIES: Record<string, NetQuery> = {
   flowFanIn: {
     query: 'fetch logs, from:now()-1h | filter otel.scope.name == "otelcol/netflowreceiver" | filter not(ipIn(source.address, array("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10"))) | summarize srcs = countDistinct(source.address), dsts = countDistinct(destination.address), bytes = sum(toLong(flow.io.bytes)), flows = count(), by:{exp = flow.sampler_address, dst = ipMask(destination.address, 24), dport = destination.port} | filter srcs >= 100 | sort srcs desc | limit 20',
     maxResultRecords: 20,
+    views: ["traffic", "site"],
   },
   // SNMP interface index to port name, from the series metadata (no log scan): it ties a flow's
   // flow.in_if / flow.out_if to the port the app measures

@@ -42,7 +42,10 @@ const CATALOG: Record<NeedKey, { label: string; how: string; queries?: string[] 
 };
 
 export const VIEW_NEEDS: Record<string, NeedKey[]> = {
-  map: ["alerts", "devices", "sites", "wan", "icmp", "sessions", "requests", "syslog", "traps", "lldp", "appFlows", "assist"],
+  // the map draws the routes between sites from NetFlow, so it owes the reader the state of it: an
+  // environment whose flows arrive but whose addresses no site claims draws nothing, and the reason
+  // belongs on the view that came up empty rather than only on Traffic
+  map: ["alerts", "devices", "sites", "wan", "icmp", "sessions", "requests", "syslog", "traps", "lldp", "netflow", "appFlows", "assist"],
   sites: ["alerts", "devices", "sites", "wan", "icmp", "sessions", "requests", "appFlows", "assist"],
   devices: ["alerts", "devices", "interfaces", "traffic", "cpu", "availability", "syslog", "traps", "assist"],
   links: ["alerts", "wan", "icmp", "syslog", "assist"],
@@ -55,7 +58,12 @@ export const VIEW_NEEDS: Record<string, NeedKey[]> = {
 // sources the app stops reading once found empty (see SOURCE_GROUPS): which data type each one feeds
 const ABSENT_FEEDS: Partial<Record<NeedKey, string>> = { netflow: "netflow", syslog: "deviceLogs", traps: "deviceLogs", lldp: "neighbors", appFlows: "oneagentFlows" };
 
-export function evaluateNeeds(counts: Record<string, number | null>, model: NetworkModel | null, source: "live" | "example", absent: Record<string, number | undefined> = {}): Record<NeedKey, Need> {
+/**
+ * The state of every source this environment could send. `loading` matters: the queries run in waves,
+ * so between the first screen and the last wave a model exists while a source has not been read yet —
+ * and a source nobody has read is not a source that is missing.
+ */
+export function evaluateNeeds(counts: Record<string, number | null>, model: NetworkModel | null, source: "live" | "example", absent: Record<string, number | undefined> = {}, loading = false): Record<NeedKey, Need> {
   const out = {} as Record<NeedKey, Need>;
   (Object.keys(CATALOG) as NeedKey[]).forEach((key) => {
     const { label, how, queries = [] } = CATALOG[key];
@@ -87,7 +95,7 @@ export function evaluateNeeds(counts: Record<string, number | null>, model: Netw
       detail = sites.length ? `${located}/${sites.length} located · ${regions}/${sites.length} with region` : "no sites";
     } else {
       const values = queries.map((q) => counts[q]);
-      if (values.every((v) => v === null || v === undefined)) { status = model ? "missing" : "loading"; detail = model ? "not available" : "loading"; }
+      if (values.every((v) => v === null || v === undefined)) { const read = !!model && !loading; status = read ? "missing" : "loading"; detail = read ? "not available" : "loading"; }
       else {
         const rows = values.reduce<number>((a, v) => a + (v ?? 0), 0);
         const some = values.filter((v) => (v ?? 0) > 0).length;

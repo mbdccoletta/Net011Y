@@ -102,7 +102,7 @@ function tenantName(): string {
 const probeStore = new Map<string, number>();
 const useProbeRows = () => probeStore;
 
-export function useNetwork(source: Source, scale: "xl" | null = null): NetworkState {
+export function useNetwork(source: Source, scale: "xl" | null = null, views: readonly string[] = []): NetworkState {
   const live = source === "live";
   // The example network is generated on demand, in its own chunk (keeps main.js small).
   const [built, setBuilt] = useState<{ scale: "xl" | null; model: NetworkModel } | null>(null);
@@ -128,6 +128,18 @@ export function useNetwork(source: Source, scale: "xl" | null = null): NetworkSt
    */
   const [phase, setPhase] = useState(0);
   useEffect(() => { if (inventory.isSuccess && phase < 1) setPhase(1); }, [inventory.isSuccess, phase]);
+  /**
+   * A view that has been opened keeps its queries: leaving the page must not throw away what it read,
+   * and coming back must not pay for it again. So this grows and never shrinks for as long as the app
+   * is open — the saving is on the pages a reader never visits, which in most sessions is most of them.
+   */
+  const [opened, setOpened] = useState<readonly string[]>(views);
+  const viewKey = views.join(",");
+  useEffect(() => {
+    setOpened((had) => (views.every((v) => had.includes(v)) ? had : [...new Set([...had, ...views])]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewKey]);
+  const viewWants = (name: string) => { const v = QUERIES[name].views; return !v || v.some((x) => opened.includes(x)); };
   const waveOf = (name: string) => (REQUIRED.includes(name) || name === "families" ? 0 : CORE.includes(name) ? 1 : 2);
   const buckets = useLogBuckets();
   const [absent, setAbsent] = useState(readAbsent);
@@ -160,7 +172,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null): NetworkSt
     // eslint-disable-next-line react-hooks/rules-of-hooks
     return useDql(
       { query: plans[name]?.query ?? inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500 },
-      { enabled: live && !gated && !familyWaits(name) && !familyAbsent(name) && (!QUERIES[name].detail || detailOk) && waveOf(name) <= phase, staleTime: STALE_MS, runInBackground: true },
+      { enabled: live && !gated && !familyWaits(name) && !familyAbsent(name) && (!QUERIES[name].detail || detailOk) && viewWants(name) && waveOf(name) <= phase, staleTime: STALE_MS, runInBackground: true },
     );
   });
   // what the rest of the app sees of an incremental query is the whole window: the kept part and the new one
@@ -202,7 +214,8 @@ export function useNetwork(source: Source, scale: "xl" | null = null): NetworkSt
     const probes = SOURCE_GROUPS[g].probes.map((p) => results[NAMES.indexOf(p)]);
     return probes.every((r) => r.isSuccess || r.isError) && !probes.some((r) => (r.data?.records ?? []).length);
   };
-  const skipped = (i: number) => (!!QUERIES[NAMES[i]].detail && !detailOk) || skippedSource(i) || probeSaysNo(i) || familyAbsent(NAMES[i]);
+  // a query no open view reads is settled, not pending: the load is over when what is on screen is in
+  const skipped = (i: number) => (!!QUERIES[NAMES[i]].detail && !detailOk) || skippedSource(i) || probeSaysNo(i) || familyAbsent(NAMES[i]) || !viewWants(NAMES[i]);
   const settled = results.filter((r, i) => r.isSuccess || r.isError || skipped(i)).length;
   const failed = NAMES.filter((_, i) => results[i].isError);
   const requiredOk = REQUIRED.every((n) => { const i = NAMES.indexOf(n); return results[i].isSuccess || skipped(i); });

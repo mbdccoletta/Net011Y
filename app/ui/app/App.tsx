@@ -57,7 +57,15 @@ function useDelayed(active: boolean, ms: number) {
 
 export function App() {
   const [url, setUrl] = useUrlState();
-  const net = useNetwork(url.source, url.scale);
+  // Which views are open, in the names the query catalogue uses. A query that names its views is read
+  // when one of them is opened and not before: on an environment sending millions of flows an hour, the
+  // reads that only Traffic draws were a third of every load of every other page.
+  const views = useMemo(() => {
+    const open = [url.page === "causes" ? "map" : url.page];
+    if (url.sel) open.push(url.sel.startsWith("site:") ? "site" : "device");
+    return open;
+  }, [url.page, url.sel]);
+  const net = useNetwork(url.source, url.scale, views);
   const model = net.model;
   const [settingsOpen, setSettingsOpen] = useState(false);
   // a page can ask Settings to open on the data type it is missing, instead of repeating the steps itself
@@ -65,7 +73,7 @@ export function App() {
   const openSettings = (focus: NeedKey | null = null) => { setSettingsFocus(focus); setSettingsOpen(true); };
 
   const infos = useMemo(() => (model ? allSites(model) : []), [model]);
-  const needs = useMemo(() => evaluateNeeds(net.counts, model, url.source, net.absent), [JSON.stringify(net.counts), model, url.source, JSON.stringify(net.absent)]); // eslint-disable-line react-hooks/exhaustive-deps
+  const needs = useMemo(() => evaluateNeeds(net.counts, model, url.source, net.absent, net.loading), [JSON.stringify(net.counts), model, url.source, JSON.stringify(net.absent), net.loading]); // eslint-disable-line react-hooks/exhaustive-deps
   // what to do next to get more from the app, measured on this environment
   const buckets = useLogBuckets();
   const stepOpts = { cost: net.cost, bucketsSet: buckets.length > 0 };

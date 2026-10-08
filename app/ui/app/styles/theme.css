@@ -59,6 +59,11 @@
   --lm-accent-dim: rgba(99, 102, 241, 0.14);
   --lm-cyan: #06b6d4;
   --lm-violet: #8b5cf6;
+  /* Traffic itself has no colour: the journey's bands and the route bars are ink, so every hue on the
+     drawing belongs to a role — site, Internet, private, device, application. They were cyan, the same
+     cyan as the Internet box, and a drawing where the connection and one of its ends share a colour
+     says nothing with it. A slate carrying a little of the accent reads as drawn rather than left out. */
+  --lm-band: color-mix(in srgb, var(--lm-accent) 22%, var(--lm-neutral));
   --lm-land: rgba(173, 176, 255, 0.38);
   /* map drawing, read by the canvas: route colour, strength of the hotspot glow and the label halo */
   --lm-route: var(--lm-cyan);
@@ -107,6 +112,7 @@
   --lm-neutral: var(--dt-colors-theme-neutral-70, #5b5c81);
   --lm-accent: var(--dt-colors-text-primary-default, #474fcf); --lm-accent-dim: var(--dt-colors-background-container-primary-default, #e9ecf8);
   --lm-cyan: #0e7490; --lm-violet: #6d28d9;
+  --lm-band: color-mix(in srgb, var(--lm-accent) 22%, var(--lm-neutral));
   /* map: a dotted grid on a light stage needs both weight and size. The neutral scale is too pale here
      (#c6c7d5 measures 1.5:1 on the shell) and 45% of the subdued token still read as washed out, so the
      grid uses that token solid (4.5:1) with a 1.3x dot. */
@@ -890,9 +896,9 @@
 .rs-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
 .rs-row { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 7px 10px; border: 0; border-radius: 8px;
   background: transparent; color: var(--lm-ink); text-align: left; cursor: pointer; }
-.rs-bar { position: absolute; inset: 0 auto 0 0; border-radius: 8px; background: color-mix(in srgb, var(--lm-cyan) 22%, transparent); }
-.rs-row:hover .rs-bar { background: color-mix(in srgb, var(--lm-cyan) 32%, transparent); }
-.rs-row.is-on { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lm-cyan) 70%, transparent); }
+.rs-bar { position: absolute; inset: 0 auto 0 0; border-radius: 8px; background: color-mix(in srgb, var(--lm-band) 30%, transparent); }
+.rs-row:hover .rs-bar { background: color-mix(in srgb, var(--lm-band) 45%, transparent); }
+.rs-row.is-on { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lm-band) 85%, transparent); }
 .rs-path, .rs-val { position: relative; }
 .rs-path { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
 .rs-path b { font-weight: 600; color: var(--lm-ink-hi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
