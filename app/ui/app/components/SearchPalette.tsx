@@ -37,7 +37,7 @@ export function SearchPalette({ model, open, onClose, onOpen }: { model: Network
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLOListElement>(null);
   // built when the palette first opens, once per model
-  const index = useMemo(() => (open ? indexOf(model) : []), [model, open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const index = useMemo(() => (open ? indexOf(model) : []), [model, open]);  
 
   const results = useMemo(() => {
     const terms = q.toLowerCase().trim().split(/\s+/).filter(Boolean);

@@ -68,6 +68,9 @@ export const MAP_COLORS: Record<Verdict, string> = { Critical: "var(--lm-bad-fil
 
 interface Palette { status: Record<Verdict, string>; route: string; land: string; landDot: number; bg: string; ink: string; ink2: string; halo: string; glow: number; dim: number; calm: number; stroke: number; mark: number; siteDim: number }
 
+/** Any CSS colour with an alpha, via the canvas' own colour normalisation. */
+const alphaCtx = typeof document !== "undefined" ? document.createElement("canvas").getContext("2d") : null;
+
 /**
  * Canvas cannot read CSS variables, so the stage tokens are resolved per theme. A value the canvas does
  * not understand is ignored by it silently, and the next stroke then reuses the previous colour: a label
@@ -97,9 +100,6 @@ function readPalette(el: HTMLElement): Palette {
     stroke: Number(v("--lm-stroke", "1")) || 1,
   };
 }
-
-/** Any CSS colour with an alpha, via the canvas' own colour normalisation. */
-const alphaCtx = typeof document !== "undefined" ? document.createElement("canvas").getContext("2d") : null;
 function withAlpha(color: string, a: number) {
   if (!alphaCtx) return color;
   alphaCtx.fillStyle = "#000"; alphaCtx.fillStyle = color;

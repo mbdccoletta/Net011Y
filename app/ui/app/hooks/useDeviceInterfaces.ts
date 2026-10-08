@@ -3,7 +3,6 @@
 // thousands of rows); it reads the per-device summary and calls this hook for the device on screen.
 import { useDql } from "@dynatrace-sdk/react-hooks";
 import type { Device, Iface } from "../model/types";
-import { T } from "../model/verdict";
 
 const C = "`com.dynatrace.extension.snmp-generic-cisco-device";
 const G = "`com.dynatrace.extension.snmp-generic-device";

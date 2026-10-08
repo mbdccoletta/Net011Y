@@ -2,10 +2,9 @@
 // 24-hour strips and its WAN links against their SLA; a device as instruments; a link as
 // its SLA gauge. Explanations come from Dynatrace Assist; drill-downs open the native apps.
 import React, { useEffect, useMemo, useState } from "react";
-import { ExternalLinkIcon } from "@dynatrace/strato-icons";
 import type { Circuit, Device, E2EPath, Iface, NetworkModel } from "../model/types";
 import { ownsPath, ROLE_LABEL, type SiteInfo } from "../model/site";
-import { isBad, ORDER, T } from "../model/verdict";
+import { isBad, ORDER } from "../model/verdict";
 import { fmtInt, fmtNum, hhmm, unitOf } from "../utils/format";
 import { deviceContext, isolationContext, siteContext } from "../utils/assist";
 import { deviceQuestions, isolationQuestions, siteQuestions } from "../utils/prompts";

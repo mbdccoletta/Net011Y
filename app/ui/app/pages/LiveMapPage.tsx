@@ -23,7 +23,6 @@ import { suspicionFor, trafficDrop } from "../model/suspicion";
 import { useDropThreshold } from "../hooks/useDropThreshold";
 import { VIEW_NEEDS, type Need, type NeedKey } from "../data/requirements";
 import { CauseChain, EvidenceBadges, NetworkStatus } from "../components/CauseVisuals";
-import { ExternalLinkIcon } from "@dynatrace/strato-icons";
 
 interface Props {
   needs: Record<NeedKey, Need>;
@@ -85,14 +84,12 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   const schematic = chosen === "schematic";
   const states = chosen === "states";
   const placedCount = infos.filter((i) => i.site.lat != null && i.site.lon != null).length;
-  // Written by the layout below and read by the label layer after it. It is declared here, above the
-  // memo that fills it: a const read before its own line throws at the first render, and neither the
-  // type checker nor the build sees it — the page just dies.
-  const schemGroups = useRef<{ name: string; lon: number; lat: number; sites: number; bad: number; verdict: Verdict }[]>([]);
-
-  const mapSites = useMemo<MapSite[]>(() => {
+  // The layout returns both what it placed and the groups it placed them in. It used to hand the groups
+  // over through a ref, which is how the page came to read a const above its own declaration and die on
+  // every render: one value out of one memo cannot go out of step with itself.
+  const placed = useMemo<{ sites: MapSite[]; groups: { name: string; lon: number; lat: number; sites: number; bad: number; verdict: Verdict }[] }>(() => {
     const base = (i: SiteInfo) => ({ code: i.code, name: i.site.name, verdict: i.verdict, dc: i.site.dc, region: i.site.region, cause: i.cause ? i.cause : siteCause.get(i.code) ?? null });
-    if (!schematic) return infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({ ...base(i), lat: i.site.lat!, lon: i.site.lon! }));
+    if (!schematic) return { sites: infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({ ...base(i), lat: i.site.lat!, lon: i.site.lon! })), groups: [] };
     const dcs = infos.filter((i) => i.site.dc), rest = infos.filter((i) => !i.site.dc);
     const groups = [...new Set(rest.map((i) => i.site.region ?? "No region"))].sort();
     const ring = (n: number, k: number, r: number, cx = 0, cy = 0) => ({ lon: cx + r * Math.cos((2 * Math.PI * k) / Math.max(n, 1) - Math.PI / 2), lat: cy + r * 0.8 * Math.sin((2 * Math.PI * k) / Math.max(n, 1) - Math.PI / 2) });
@@ -108,16 +105,17 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
     const spread = groups.length > 1
       ? Math.max(18, (widest + 2.5) / Math.sin(Math.PI / groups.length))
       : 0;
-    schemGroups.current = [];
+    const placedGroups: { name: string; lon: number; lat: number; sites: number; bad: number; verdict: Verdict }[] = [];
     groups.forEach((g, gi) => {
       const list = members.get(g)!;
       const c = spread ? ring(groups.length, gi, spread) : { lat: 0, lon: 0 };
       const disc = discOf(list.length);
-      schemGroups.current.push({ name: g, lon: c.lon, lat: c.lat + disc * 0.8 + 1.6, sites: list.length, bad: list.filter((i) => isBad(i.verdict)).length, verdict: worst(list.map((i) => i.verdict)) });
+      placedGroups.push({ name: g, lon: c.lon, lat: c.lat + disc * 0.8 + 1.6, sites: list.length, bad: list.filter((i) => isBad(i.verdict)).length, verdict: worst(list.map((i) => i.verdict)) });
       list.forEach((i, k) => out.push({ ...base(i), ...(list.length > 1 ? ring(list.length, k, disc, c.lon, c.lat) : c) }));
     });
-    return out;
+    return { sites: out, groups: placedGroups };
   }, [infos, siteCause, schematic]);
+  const mapSites = placed.sites;
   // Only this view fetches them, and only for the countries the sites are in: one chunk per country.
   const [shapes, setShapes] = useState<RegionShape[] | null>(null);
   const regionSites = useRef(new Map<string, Set<string>>());
@@ -140,7 +138,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   // what stands in each region: the sites inside its outline, and the worst of them
   const mapRegions = useMemo<MapRegion[]>(() => {
     // in the schematic the groups have no shape, only a place and a name — the label layer draws them
-    if (schematic) return schemGroups.current.map((g) => ({ code: g.name, name: g.name, lon: g.lon, lat: g.lat, rings: [], verdict: g.verdict, sites: g.sites, bad: g.bad }));
+    if (schematic) return placed.groups.map((g) => ({ code: g.name, name: g.name, lon: g.lon, lat: g.lat, rings: [], verdict: g.verdict, sites: g.sites, bad: g.bad }));
     if (!states || !shapes) return [];
     const count = new Map<string, SiteInfo[]>();
     infos.forEach((i) => {
@@ -164,7 +162,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
         bad: members.filter((i) => isBad(i.verdict)).length,
       };
     });
-  }, [states, shapes, infos, schematic, mapSites]);
+  }, [states, shapes, infos, schematic, placed]);
 
   const mapLinks = useMemo<MapLink[]>(() => {
     const placed = new Set(mapSites.map((s) => s.code));

@@ -128,7 +128,6 @@ function entitiesOf(r: Rec): { ids: string[]; names: string[]; types: string[] }
   return { ids: [...new Set(ids)], names: [...new Set(names)], types: [...new Set(objs.map((o) => String(o.type ?? "")).filter(Boolean))] };
 }
 
-const net24 = (ip: string) => ip.split(".").slice(0, 3).join(".");
 
 /**
  * Sessions per hour, what that hour usually looks like, and which client subnets belong to a site.

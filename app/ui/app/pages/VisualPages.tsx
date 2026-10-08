@@ -2,10 +2,9 @@
 // honeycomb, devices are dots grouped by role, circuits sit on a ruler against their SLA.
 // A table view of each page stays one click away.
 import React, { useCallback, useMemo, useState } from "react";
-import { ExternalLinkIcon } from "@dynatrace/strato-icons";
 import type { Circuit, Device, NetworkModel, Verdict } from "../model/types";
 import { devicesAt, ROLE_LABEL, type SiteInfo } from "../model/site";
-import { isBad, ORDER, T } from "../model/verdict";
+import { isBad, ORDER } from "../model/verdict";
 import { bubbleRadius } from "../model/mapClusters";
 import { fmtInt, fmtNum, stripDevice } from "../utils/format";
 import { NativeDrill } from "../components/NativeDrill";
@@ -45,7 +44,6 @@ const STATUS_CHIPS = [
   { key: "Not monitored", label: "Not monitored", tone: TONE.neutral },
 ];
 const matches = (v: Verdict, status: string | null) => !status || (status === "issues" ? isBad(v) : v === status);
-const hash = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0) / 4294967295; };
 const shortDevice = (name: string) => name.replace(/^BR-[A-Z]{2}-[A-Z0-9]+-/, "");
 const count = <X,>(xs: X[], f: (x: X) => boolean) => xs.reduce((a, x) => a + (f(x) ? 1 : 0), 0);
 

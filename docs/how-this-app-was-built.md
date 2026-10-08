@@ -230,7 +230,7 @@ must hold whatever it contains; a scorecard that reports what the app can delive
 what is missing; a scale test that pushes twenty thousand devices through the model; and a check that
 reads the sources for the hook-order mistake.
 
-**Four lessons are baked into the suite**, each after the same bug happened more than once:
+**Five lessons are baked into the suite**, each after the same bug happened more than once:
 
 1. *A check anchored to the clock lies.* The restart check compared against "two hours ago" and failed
    every time the fixtures aged, which teaches people to ignore the suite. It reads the moment from the
@@ -244,7 +244,13 @@ reads the sources for the hook-order mistake.
 3. *A check that filters an empty list passes on nothing.* Half the example audit read the end-to-end
    path off the site, where it does not live, and reported a clean result over an empty array. Each group
    of checks now asserts first that what it is about is actually there.
-4. *A hook after a conditional return breaks the page at runtime,* and neither the type checker nor the
+4. *What breaks a React page is when code runs, not what its types are.* A hook after a conditional
+   return, and a value read above its own declaration, both compile and both throw on render — the
+   second killed the live map for a version. `npm run lint` carries exactly those two rules as errors
+   and almost nothing else, so neither can hide in a list of style opinions. A home-made scan for the
+   second one came first and was thrown away: without real scope analysis it flagged eleven places, ten
+   of them comments, and a check that cries wolf is how a suite stops being read.
+5. *A hook after a conditional return breaks the page at runtime,* and neither the type checker nor the
    build sees it. A small script reads the sources and names file, function and line.
 
 ---
@@ -276,6 +282,7 @@ npx dt-app deploy --skip-build --environment-url https://<env>.apps.dynatrace.co
 cd scripts/grail
 node build.mjs                         # bundle the app's model and queries for the checks
 node generate.mjs                      # regenerate the fixtures
+npm run lint                           # hooks order and use-before-declaration (in app/)
 node validate.mjs                      # the scenario checks
 node example_check.mjs                 # the bundled example, checked against itself
 node hooks_after_return.mjs            # the hook-order check

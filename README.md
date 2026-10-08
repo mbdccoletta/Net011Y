@@ -93,9 +93,14 @@ in a commit.
 Green before deploying — the suites take seconds and have caught every serious bug in this app:
 
 ```bash
-cd app/ui && npx tsc --noEmit
-cd scripts/grail && node build.mjs && node validate.mjs && node example_check.mjs && node hooks_after_return.mjs
+cd app && npm run typecheck && npm run lint
+cd scripts/grail && node build.mjs && node validate.mjs && node example_check.mjs
 ```
+
+`npm run lint` exists for the two mistakes a green type check and a clean build both miss, because both
+are about when code runs: a hook called after a conditional return, and a value read above its own
+declaration. Each one has shipped — the second killed the live map for a version. Everything else the
+lint could say is turned off, so those two are never buried.
 
 Two failures are worth one retry before investigating, because both happen on a healthy environment:
 `fetch failed`, and `Failed to install the app` on a version that was already raised. `dt-app` also warns

@@ -9,7 +9,8 @@
     "deploy": "dt-app deploy",
     "uninstall": "dt-app uninstall",
     "info": "dt-app info",
-    "typecheck": "tsc --noEmit -p ui"
+    "typecheck": "tsc --noEmit -p ui",
+    "lint": "eslint ui"
   },
   "engines": {
     "node": ">=20"
@@ -33,6 +34,9 @@
     "@types/react": "^18.3.20",
     "@types/react-dom": "^18.3.5",
     "dt-app": "^1.14.1",
-    "typescript": "^5.9.3"
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.1"
   }
 }

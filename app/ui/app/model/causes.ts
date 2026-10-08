@@ -57,6 +57,15 @@ export interface Cause {
 const earliest = (ts: (string | null | undefined)[]) => ts.filter((t): t is string => !!t).sort()[0] ?? null;
 const shortDevice = (name: string) => name.replace(/^BR-[A-Z]{2}-[A-Z0-9]+-/, "");
 
+const byCarrier = (cs: Circuit[]) => {
+  const map = new Map<string, Circuit[]>();
+  cs.forEach((c) => { const l = map.get(c.carrier); if (l) l.push(c); else map.set(c.carrier, [c]); });
+  return map;
+};
+
+const edgeDevices = (model: NetworkModel, cs: Circuit[]) =>
+  [...new Set(cs.map((c) => model.devices.find((d) => d.site === c.site && d.role === "edge")).filter((d): d is Device => !!d))];
+
 /** The layer a problem belongs to, from the entities it affects and the category Davis gave it. */
 function layerOf(kind: CauseKind, category?: string): string {
   if (kind === "carrier") return "Carrier";
@@ -170,14 +179,7 @@ export function buildCauses(model: NetworkModel, infos: SiteInfo[]): Cause[] {
     .sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || b.impact.sites - a.impact.sites || (a.since ?? "").localeCompare(b.since ?? ""));
 }
 
-const byCarrier = (cs: Circuit[]) => {
-  const map = new Map<string, Circuit[]>();
-  cs.forEach((c) => { const l = map.get(c.carrier); if (l) l.push(c); else map.set(c.carrier, [c]); });
-  return map;
-};
 
-const edgeDevices = (model: NetworkModel, cs: Circuit[]) =>
-  [...new Set(cs.map((c) => model.devices.find((d) => d.site === c.site && d.role === "edge")).filter((d): d is Device => !!d))];
 
 function kindOf(model: NetworkModel, scope: Scope): CauseKind {
   if (scope.circuits.length && new Set(scope.circuits.map((c) => c.carrier)).size === 1) return "carrier";

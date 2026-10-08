@@ -346,7 +346,6 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
     const net = `10.${20 + (i >> 8)}.${i & 255}`;
     const allDown = !!sc.circuitsDown;
     const offline = sc.circuitsDown ?? sc.routerDown;
-    const root = allDown ? "WAN links" : sc.routerDown ? `${P}-RTR1` : undefined;
     const active = circ.find((c) => c.status === "up" && c.latencyMs != null);
     const latMs = active?.latencyMs ?? null;
     const loss = circ[0].lossPct != null && circ[0].lossPct !== 100 ? circ[0].lossPct : 0;
