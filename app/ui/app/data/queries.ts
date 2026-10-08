@@ -194,6 +194,8 @@ export const QUERIES: Record<string, NetQuery> = {
   flowNets: {
     query: 'fetch logs, from:now()-1h | filter otel.scope.name == "otelcol/netflowreceiver" | fieldsAdd s24 = ipMask(source.address, 24), d24 = ipMask(destination.address, 24) | summarize bytes = sum(toLong(flow.io.bytes)), flows = count(), by:{exp = flow.sampler_address, s24, d24, proto = network.transport, dport = destination.port, in_if = flow.in_if, out_if = flow.out_if} | sort bytes desc | limit 5000',
     maxResultRecords: 5000,
+    // the routes the map draws, the journey on Traffic and a site's peers: the pages that draw traffic
+    views: ["map", "traffic", "site"],
   },
   // many talking to one: a range reached from an unusual number of distinct Internet sources (a busy
   // internal service reached by every branch is normal, so private sources are left out)

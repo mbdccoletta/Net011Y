@@ -71,6 +71,22 @@ export type SourceGroup = keyof typeof SOURCE_GROUPS;
 export const SOURCE_RECHECK_MS = 12 * 3600 * 1000;
 const groupOf = (name: string) => (Object.keys(SOURCE_GROUPS) as SourceGroup[]).find((g) => (SOURCE_GROUPS[g].probes as readonly string[]).includes(name) || (SOURCE_GROUPS[g].then as readonly string[]).includes(name));
 const ABSENT_KEY = () => { try { return `net-o11y.absent@${new URL(getEnvironmentUrl()).hostname}`; } catch { return "net-o11y.absent"; } };
+/**
+ * The other half of the same memory. A source found empty is not read again for a while; a source found
+ * sending is not made to prove it again either. Without this the companions of a probe wait a whole
+ * round trip for an answer this browser already had — on Traffic that was the probe's ten seconds
+ * before the bandwidth read could even start. Same horizon as the absence, and Check again clears both.
+ */
+const PRESENT_KEY = () => `${ABSENT_KEY()}.present`;
+function readPresent(): Partial<Record<SourceGroup, number>> {
+  try {
+    const v = JSON.parse(window.localStorage.getItem(PRESENT_KEY()) ?? "{}") as Record<string, number>;
+    return Object.fromEntries(Object.entries(v).filter(([, t]) => Date.now() - t < SOURCE_RECHECK_MS)) as Partial<Record<SourceGroup, number>>;
+  } catch { return {}; }
+}
+function writePresent(v: Partial<Record<SourceGroup, number>>) {
+  try { window.localStorage.setItem(PRESENT_KEY(), JSON.stringify(v)); } catch { /* per session only */ }
+}
 function readAbsent(): Partial<Record<SourceGroup, number>> {
   try {
     const v = JSON.parse(window.localStorage.getItem(ABSENT_KEY()) ?? "{}") as Record<string, number>;
@@ -140,9 +156,13 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewKey]);
   const viewWants = (name: string) => { const v = QUERIES[name].views; return !v || v.some((x) => opened.includes(x)); };
-  const waveOf = (name: string) => (REQUIRED.includes(name) || name === "families" ? 0 : CORE.includes(name) ? 1 : 2);
+  // What the open page draws goes with the core, not behind it. A query that names its views runs only
+  // where it is drawn, so it is already the shortest list there is — and queueing it in the last wave
+  // meant Traffic waited out the whole inventory before its first read even started.
+  const waveOf = (name: string) => (REQUIRED.includes(name) || name === "families" ? 0 : CORE.includes(name) || QUERIES[name].views ? 1 : 2);
   const buckets = useLogBuckets();
   const [absent, setAbsent] = useState(readAbsent);
+  const [answered, setAnswered] = useState(readPresent);
   // probe results decide the companions, so they are looked up by name before the hooks run
   const probeRows = useProbeRows();
   // the families the environment sends: a family query waits for this answer and runs only for a family
@@ -168,7 +188,8 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     if (i === familiesAt) return familiesQ;
     const g = groupOf(name);
     const isProbe = !!g && (SOURCE_GROUPS[g].probes as readonly string[]).includes(name);
-    const gated = !!g && (absent[g] != null || (!isProbe && !(SOURCE_GROUPS[g].probes as readonly string[]).some((p) => (probeRows.get(p) ?? 0) > 0)));
+    const gated = !!g && (absent[g] != null
+      || (!isProbe && answered[g] == null && !(SOURCE_GROUPS[g].probes as readonly string[]).some((p) => (probeRows.get(p) ?? 0) > 0)));
     // eslint-disable-next-line react-hooks/rules-of-hooks
     return useDql(
       { query: plans[name]?.query ?? inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500 },
@@ -194,15 +215,19 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   useEffect(() => {
     if (!live) return;
     const next = { ...readAbsent() };
-    let changed = false;
+    const yes = { ...readPresent() };
+    let changed = false, alsoChanged = false;
     (Object.keys(SOURCE_GROUPS) as SourceGroup[]).forEach((g) => {
       const rs = SOURCE_GROUPS[g].probes.map((p) => results[NAMES.indexOf(p)]);
       if (!rs.every((r) => r.isSuccess)) return;
       const empty = rs.every((r) => !(r.data?.records ?? []).length);
       if (empty && next[g] == null) { next[g] = Date.now(); changed = true; }
       if (!empty && next[g] != null) { delete next[g]; changed = true; }
+      if (!empty && yes[g] == null) { yes[g] = Date.now(); alsoChanged = true; }
+      if (empty && yes[g] != null) { delete yes[g]; alsoChanged = true; }
     });
     if (changed) { writeAbsent(next); setAbsent(next); }
+    if (alsoChanged) { writePresent(yes); setAnswered(yes); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, probeStamp]);
   const skippedSource = (i: number) => { const g = groupOf(NAMES[i]); return !!g && absent[g] != null; };
@@ -210,7 +235,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   // a query that will not run counts as settled: its source was found empty, or its probe brought nothing
   const probeSaysNo = (i: number) => {
     const g = groupOf(NAMES[i]);
-    if (!g || (SOURCE_GROUPS[g].probes as readonly string[]).includes(NAMES[i])) return false;
+    if (!g || (SOURCE_GROUPS[g].probes as readonly string[]).includes(NAMES[i]) || answered[g] != null) return false;
     const probes = SOURCE_GROUPS[g].probes.map((p) => results[NAMES.indexOf(p)]);
     return probes.every((r) => r.isSuccess || r.isError) && !probes.some((r) => (r.data?.records ?? []).length);
   };
@@ -298,7 +323,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
       setGen((g) => g + 1);
     },
     absent,
-    recheck: () => { writeAbsent({}); setAbsent({}); },
+    recheck: () => { writeAbsent({}); setAbsent({}); writePresent({}); setAnswered({}); },
     cost,
   };
 }
