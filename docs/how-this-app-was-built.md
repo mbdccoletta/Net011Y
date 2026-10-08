@@ -123,6 +123,15 @@ two views can never disagree.
 
 ## 4. What the screen does with it
 
+**Geometry the app ships is generated, split and fetched only where it is used.** The dotted continents
+are a bit per half-degree cell, built from Natural Earth by a script. The states, provinces and
+prefectures behind the States view are the same idea taken further: four thousand admin-1 outlines become
+one module per country — two and a half kilobytes for the median one — and the build gives each its own
+chunk, so opening that view fetches the countries the coordinates fall in and nobody else downloads any
+of it. Which countries those are is decided by bounding boxes in an index of sixteen kilobytes, and a
+country carries several boxes rather than one, because France reaches from French Guiana to Réunion and
+that single rectangle was fetching France for every site in Brazil.
+
 **The shape follows the data.** The traffic view draws ranked paths when there is nothing to cross, and a
 flow diagram when there is; the map draws geography when sites have coordinates and a schematic layout of
 regions when they do not; a page with nothing to show says what is missing instead of drawing an empty

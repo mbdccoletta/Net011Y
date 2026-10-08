@@ -33,7 +33,7 @@ reason.
 | Devices and ports | Any Dynatrace network extension, through Smartscape (`EXT_NETWORK_DEVICE`, `EXT_NETWORK_INTERFACE`) | — |
 | Health (CPU, memory, availability, traffic, errors, VLANs) | The common `network_device` metrics and the vendor families: Generic Cisco, generic SNMP, Juniper, Palo Alto, F5 (`app/ui/app/data/formats.ts`) | Vendor extensions (CRC, VLAN tables) |
 | Sites | sysLocation, the SNMP autodiscovery group, the management network | Primary tags `site`, `site_name`, `site_type`, `region`, `geo_lat`, `geo_lon`, `hub`, `site_cidr` |
-| Map | A schematic layout by region, when nothing can be placed | Coordinates (`geo_lat` / `geo_lon`, or a place the app recognises): geography is then the default, and the bar says how many sites it is drawing |
+| Map | A schematic layout by region, when nothing can be placed | Coordinates (`geo_lat` / `geo_lon`, or a place the app recognises): geography is then the default, and the bar says how many sites it is drawing. The States view adds the outlines of the admin-1 regions of the countries the sites are in, filled by what stands in each one — one lazily fetched chunk per country, nothing for a reader who does not open it |
 | WAN | Reachability per site from any ICMP monitor that pings a device (network coverage monitors included) | Circuit tags on the monitors: `circuit_id`, `circuit_role`, `carrier`, `circuit_tech`, `sla_ms` |
 | Topology | Smartscape `calls` between network devices and interfaces | SNMP autodiscovery neighbour discovery (CDP / LLDP) |
 | Status | `dt.davis.problems`, `dt.davis.events` (severity, maintenance, root cause); a week of problems says whether any alert watches the polled devices at all | Network alert templates in Infrastructure & Operations |

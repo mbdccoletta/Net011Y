@@ -12,7 +12,7 @@ import { fmtInt, hhmm } from "../utils/format";
 import { logsQuery, openLogs } from "../utils/drilldown";
 import { NativeDrill } from "../components/NativeDrill";
 import { SiteTree } from "../components/SiteTree";
-import { levelValue, useSiteHierarchy } from "../hooks/useSiteHierarchy";
+import { useSiteHierarchy } from "../hooks/useSiteHierarchy";
 import { causeContext, isolationContext, networkContext } from "../utils/assist";
 import { causeQuestions, isolationQuestions, networkQuestions } from "../utils/prompts";
 import { AssistPanel } from "../components/AssistPanel";
@@ -85,35 +85,8 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   const schematic = chosen === "schematic";
   const states = chosen === "states";
   const placedCount = infos.filter((i) => i.site.lat != null && i.site.lon != null).length;
-  const groupBy = useMemo(() => {
-    try { return new URLSearchParams(window.location.search).get("group"); } catch { return null; }
-  }, []);
   const mapSites = useMemo<MapSite[]>(() => {
     const base = (i: SiteInfo) => ({ code: i.code, name: i.site.name, verdict: i.verdict, dc: i.site.dc, region: i.site.region, cause: i.cause ? i.cause : siteCause.get(i.code) ?? null });
-    // PROTOTYPE (?group=<level>): the map drawn at a level of the site hierarchy instead of site by
-    // site — one mark per state, region or country, at the centre of the sites it holds. Hidden unless
-    // the flag is in the URL. What it is for is judging placement and labels on real data before this
-    // becomes a control: a group's mark sits where no site is, and that is the thing to look at.
-    if (groupBy && !schematic) {
-      const placed = infos.filter((i) => i.site.lat != null && i.site.lon != null);
-      const by = new Map<string, SiteInfo[]>();
-      placed.forEach((i) => {
-        const v = levelValue(i.site, groupBy) ?? "Not tagged";
-        const l = by.get(v); if (l) l.push(i); else by.set(v, [i]);
-      });
-      return [...by].map(([value, members]) => {
-        const bad = members.filter((i) => isBad(i.verdict)).length;
-        return {
-          code: `group:${value}`,
-          name: `${value} · ${members.length}`,
-          lat: members.reduce((a, i) => a + i.site.lat!, 0) / members.length,
-          lon: members.reduce((a, i) => a + i.site.lon!, 0) / members.length,
-          verdict: worst(members.map((i) => i.verdict)),
-          region: value,
-          cause: bad ? `${bad} of ${members.length} sites alerting · ${members.filter((i) => isBad(i.verdict)).slice(0, 3).map((i) => i.site.name).join(", ")}` : `${members.length} sites, none alerting`,
-        };
-      });
-    }
     if (!schematic) return infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({ ...base(i), lat: i.site.lat!, lon: i.site.lon! }));
     const dcs = infos.filter((i) => i.site.dc), rest = infos.filter((i) => !i.site.dc);
     const groups = [...new Set(rest.map((i) => i.site.region ?? "No region"))].sort();
@@ -125,9 +98,10 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
       members.forEach((i, k) => out.push({ ...base(i), ...(members.length > 1 ? ring(members.length, k, Math.min(9, 2 + members.length * 0.6), c.lon, c.lat) : c) }));
     });
     return out;
-  }, [infos, siteCause, schematic, groupBy]);
+  }, [infos, siteCause, schematic]);
   // Only this view fetches them, and only for the countries the sites are in: one chunk per country.
   const [shapes, setShapes] = useState<RegionShape[] | null>(null);
+  const regionSites = useRef(new Map<string, Set<string>>());
   useEffect(() => {
     if (!states || shapes) return;
     let live = true;
@@ -150,6 +124,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
     // A box is not a country: France reaches from Guiana to Réunion, so a Brazilian site used to fetch
     // it and draw its hundred and one regions over Europe. Only countries that hold a site are drawn,
     // and inside one the regions without sites stay as outlines, which is the context worth having.
+    regionSites.current = new Map([...count].map(([k, v]) => [k.split("|").slice(1).join("|"), new Set(v.map((i) => i.code))]));
     const held = new Set([...count.keys()].map((k) => k.split("|")[0]));
     return shapes.filter((r) => held.has(r.cc)).map((r) => {
       const members = count.get(`${r.cc}|${r.code}|${r.name}`) ?? [];
@@ -302,12 +277,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
             onClick={() => setLayout("states")}>States</button>
           <button type="button" className={schematic ? "is-on" : ""} aria-pressed={schematic} onClick={() => setLayout("schematic")}>Schematic</button>
         </span>
-        {groupBy && !schematic && (
-          <span className="lm-pill lm-pill--warn" title="Prototype: the map drawn at a level of the site hierarchy. Each mark sits at the centre of the sites it holds, which is a place where no site is. Remove ?group= from the URL to go back.">
-            Prototype · grouped by {groupBy.replace(/^primary_tags\./, "")}
-          </span>
-        )}
-        {!groupBy && !schematic && placedShare < 1 && (
+        {!schematic && placedShare < 1 && (
           <button type="button" className="lm-pill lm-pill--warn lm-pill--btn" onClick={() => setLayout("schematic")}
             title="Sites without geo_lat / geo_lon tags, and whose location the app could not recognise, cannot be drawn on a map. The schematic layout holds every site.">
             {fmtInt(placedCount)} of {fmtInt(infos.length)} sites on the map · see all
@@ -323,7 +293,13 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
       <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.map} needs={needs} compact next={next} /></div>
       <div ref={stage} className={`lm-stage${wide ? " is-wide" : ""}`}>
         {mapSites.length ? (
-          <LiveMap sites={mapSites} links={mapLinks} focus={focus} insets={insets} onSite={onSite} schematic={schematic} regions={mapRegions} />
+          <LiveMap sites={mapSites} links={mapLinks} focus={focus} insets={insets} onSite={onSite} schematic={schematic} regions={mapRegions}
+            onRegion={(r) => {
+              const codes = regionSites.current.get(`${r.code}|${r.name}`);
+              if (!codes?.size) return;
+              chooseTab("sites");
+              setGroup({ id: `state:${r.code}`, codes });
+            }} />
         ) : (
           // no coordinates: the steps live in Settings › Data, so this points there instead of repeating them
           <div className="lm-map lm-map--empty">

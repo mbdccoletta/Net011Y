@@ -56,6 +56,8 @@ interface Props {
   schematic?: boolean;
   /** the state layer: outlines drawn under the sites, filled by what stands in each one */
   regions?: MapRegion[];
+  /** a click inside a region that holds sites */
+  onRegion?: (r: MapRegion) => void;
 }
 
 /** Status colours for DOM and SVG: the Delivery Chain tokens (Strato status fills). */
@@ -116,6 +118,16 @@ const land = (() => {
   };
 })();
 
+/** Ray casting over a flat ring of lon/lat pairs. */
+function pointInRing(ring: Float64Array, lon: number, lat: number): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) {
+    const xi = ring[i], yi = ring[i + 1], xj = ring[j], yj = ring[j + 1];
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 // Web Mercator in degree units: x = longitude, y grows southwards.
 const projY = (lat: number) => -Math.log(Math.tan(Math.PI / 4 + (Math.max(-85, Math.min(85, lat)) * Math.PI) / 360)) * (180 / Math.PI);
 const invY = (y: number) => ((2 * Math.atan(Math.exp((-y * Math.PI) / 180)) - Math.PI / 2) * 180) / Math.PI;
@@ -138,7 +150,7 @@ const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 
 /** How many names the map tries to place per frame. Past this the pruning below would be the cost. */
 const LABEL_TRIES = 240;
 
-export function LiveMap({ sites, links, focus, insets, onSite, schematic = false, regions }: Props) {
+export function LiveMap({ sites, links, focus, insets, onSite, schematic = false, regions, onRegion }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const landLayer = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null);
@@ -149,7 +161,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
   const dirty = useRef(true);
   /** the wheel zooms once the user clicks the map; leaving it at the default zoom releases the page scroll again */
   const armed = useRef(false);
-  const [hover, setHover] = useState<{ site: MapSite; x: number; y: number; cluster?: Cluster } | null>(null);
+  const [hover, setHover] = useState<{ site: MapSite; x: number; y: number; cluster?: Cluster; region?: MapRegion } | null>(null);
   const clusters = useRef<Cluster[]>([]);
   const hoverCode = useRef<string | null>(null);
   const reduce = prefersReducedMotion();
@@ -541,7 +553,9 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
     return () => cancelAnimationFrame(raf);
   }, [reduce]);
 
-  const siteAt = (clientX: number, clientY: number) => {
+  type Hit = { site: MapSite; x: number; y: number; cluster?: Cluster; region?: MapRegion };
+
+  const siteAt = (clientX: number, clientY: number): Hit | null => {
     const c = canvas.current;
     if (!c) return null;
     const rect = c.getBoundingClientRect();
@@ -561,7 +575,23 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
       const d = Math.hypot(ox + (s.lon - v.cx) * v.k - px, oy + (projY(s.lat) - v.cy) * v.k - py);
       if (d < dist) { dist = d; best = s; }
     });
-    return best ? { site: best as MapSite, x: px, y: py } as { site: MapSite; x: number; y: number; cluster?: Cluster } : null;
+    if (best) return { site: best as MapSite, x: px, y: py };
+    // no site under the pointer: the region it is over answers instead, so the shape is readable too
+    const RG = props.current.regions;
+    if (RG?.length) {
+      const lon = v.cx + (px - ox) / v.k, lat = invY(v.cy + (py - oy) / v.k);
+      for (const rg of RG) {
+        if (!rg.rings.some((ring) => pointInRing(ring, lon, lat))) continue;
+        return {
+          site: {
+            code: `region:${rg.code}`, name: rg.name, lat: rg.lat, lon: rg.lon, verdict: rg.verdict,
+            cause: rg.sites ? `${rg.sites} site${rg.sites === 1 ? "" : "s"} here · click to see them` : "no site here",
+          },
+          x: px, y: py, region: rg,
+        };
+      }
+    }
+    return null;
   };
 
   const zoomBy = (f: number, px?: number, py?: number) => {
@@ -614,6 +644,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
             const hit = siteAt(e.clientX, e.clientY);
             // a group opens up: fly to its sites (not their data centers) until they stand apart
             if (hit?.cluster) fitTo(new Set(hit.cluster.codes), true, false, true);
+            else if (hit?.region) { if (hit.region.sites) onRegion?.(hit.region); }
             else if (hit) onSite(hit.site.code);
           }
         }} />
