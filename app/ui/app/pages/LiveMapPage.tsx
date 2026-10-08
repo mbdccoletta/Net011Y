@@ -85,6 +85,11 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   const schematic = chosen === "schematic";
   const states = chosen === "states";
   const placedCount = infos.filter((i) => i.site.lat != null && i.site.lon != null).length;
+  // Written by the layout below and read by the label layer after it. It is declared here, above the
+  // memo that fills it: a const read before its own line throws at the first render, and neither the
+  // type checker nor the build sees it — the page just dies.
+  const schemGroups = useRef<{ name: string; lon: number; lat: number; sites: number; bad: number; verdict: Verdict }[]>([]);
+
   const mapSites = useMemo<MapSite[]>(() => {
     const base = (i: SiteInfo) => ({ code: i.code, name: i.site.name, verdict: i.verdict, dc: i.site.dc, region: i.site.region, cause: i.cause ? i.cause : siteCause.get(i.code) ?? null });
     if (!schematic) return infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({ ...base(i), lat: i.site.lat!, lon: i.site.lon! }));
@@ -116,8 +121,6 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   // Only this view fetches them, and only for the countries the sites are in: one chunk per country.
   const [shapes, setShapes] = useState<RegionShape[] | null>(null);
   const regionSites = useRef(new Map<string, Set<string>>());
-  // the schematic names its groups through the same label layer the states use
-  const schemGroups = useRef<{ name: string; lon: number; lat: number; sites: number; bad: number; verdict: Verdict }[]>([]);
   // Loaded once was wrong: the first load answered whichever estate was on screen then, and switching
   // data source — this environment to the example, or the example to the extra-large one — brought
   // sites in countries the first answer never covered. A whole continent stayed blank because the map
