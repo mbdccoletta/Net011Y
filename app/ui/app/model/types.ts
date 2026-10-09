@@ -211,7 +211,8 @@ export interface Device {
   cpuNow: number | null;
   availPct: number | null;
   availTs?: number[] | null;
-  syslog: { ERROR: number; WARN: number; INFO: number };
+  /** NONE holds the lines no pipeline classified and whose text carries no protocol severity: still lines. */
+  syslog: { ERROR: number; WARN: number; INFO: number; NONE: number };
   syslogErrTs: number[];
   /** memory in use, percent, as the device's extension reports it */
   memNow?: number | null;
@@ -439,6 +440,12 @@ export interface NetworkModel {
   users?: Users;
   /** Alerts Dynatrace raised that name no network entity (for example a metric event bound to the environment) */
   unmappedAlerts?: DeviceProblem[];
+  /**
+   * Addresses that send syslog and answer to no device in the inventory, with how many lines they sent
+   * in the window. Either nothing polls them over SNMP, or they source their logs from an interface
+   * other than the one the extension polls — and the app says which, rather than dropping the lines.
+   */
+  syslogSenders?: { unknown: number; lines: number; top: { ip: string; lines: number }[] };
   /** the window the per-hour SNMP answers (Device.availTs) cover: start of the first bucket, and its length */
   availWindow?: { start: number; stepMs: number };
   /**

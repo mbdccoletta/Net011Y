@@ -135,10 +135,18 @@ export function evaluateNeeds(counts: Record<string, number | null>, model: Netw
         if (key === "lldp" && status === "partial") status = "ok";
         // syslog and traps share one read: each is judged by what reached the devices
         if ((key === "syslog" || key === "traps") && model) {
-          const n = key === "syslog" ? model.devices.reduce((a, d) => a + d.syslog.ERROR + d.syslog.WARN + d.syslog.INFO, 0) : model.devices.reduce((a, d) => a + d.traps, 0);
-          const withIt = model.devices.filter((d) => (key === "syslog" ? d.syslog.ERROR + d.syslog.WARN + d.syslog.INFO : d.traps) > 0).length;
+          const lines = (d: typeof model.devices[number]) => d.syslog.ERROR + d.syslog.WARN + d.syslog.INFO + d.syslog.NONE;
+          const n = key === "syslog" ? model.devices.reduce((a, d) => a + lines(d), 0) : model.devices.reduce((a, d) => a + d.traps, 0);
+          const withIt = model.devices.filter((d) => (key === "syslog" ? lines(d) : d.traps) > 0).length;
           status = n ? "ok" : "missing";
           detail = n ? `${n.toLocaleString("en-US")} in the last 6 h from ${withIt} device${withIt === 1 ? "" : "s"}` : "nothing received from a monitored device";
+          // the senders nobody polls are the actionable half of this: they are sending, and the app
+          // can place none of their lines on a device
+          const un = key === "syslog" ? model.syslogSenders : undefined;
+          if (un) {
+            detail = `${detail} · ${un.lines.toLocaleString("en-US")} more from ${un.unknown} address${un.unknown === 1 ? "" : "es"} that answer to no monitored device`;
+            if (!n) status = "partial";
+          }
         }
         if (key === "netflow" && model?.flowMap) {
           const f = model.flowMap, tied = f.exporters.filter((e) => e.device).length;

@@ -2,6 +2,7 @@
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
+import { QUERIES } from "./out/queries.mjs";
 import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, deviceVerdict, portCounts, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, buildJourney, asRoutes, nextSteps, coverage } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
@@ -293,6 +294,25 @@ check("Flat retransmissions stated as counter-evidence", !fS.app?.rising && fS.f
   const shut = withPorts.map((x) => portCounts(x)).reduce((a, p) => a + p.unused, 0);
   check("Ports are counted in three states that add up", ok && withPorts.length > 0,
     `${withPorts.length} devices with ports · ${shut} shut or empty`);
+}
+// A road that classifies nothing still carries lines. An environment collecting its syslog server's
+// files through a OneAgent delivers every line as loglevel NONE, the app counted only ERROR, WARN and
+// INFO, and a hundred and fifty thousand lines an hour showed up as "0 syslog errors" on every device.
+{
+  const q = QUERIES.deviceLogs.query;
+  const lvl = /loglevel = if\(loglevel == "ERROR"/.test(q) && /INT:sev/.test(q);
+  const counted = model.devices.every((d) => typeof d.syslog.NONE === "number");
+  check("Syslog reads the protocol's own severity when the pipeline set none",
+    lvl && counted, `derived in the query: ${lvl} · fourth bucket on every device: ${counted}`);
+}
+// and an address that sends but answers to no device is reported rather than skipped
+{
+  const rows = [{ ip: "203.0.113.7", kind: "syslog", loglevel: "INFO", n: [5, 5] }];
+  const m2 = buildRealModel({ ...R, deviceLogs: [...(R.deviceLogs ?? []), ...rows] }, "simulated-grail");
+  const n2 = evaluateNeeds({ ...counts, deviceLogs: 1 }, m2, "live").syslog;
+  check("Syslog from an address the inventory does not know is still reported",
+    (m2.syslogSenders?.unknown ?? 0) >= 1 && /answer to no monitored device/.test(n2.detail),
+    `${m2.syslogSenders?.unknown} unknown · ${n2.detail.slice(0, 110)}`);
 }
 // NetFlow: exporters place traffic at sites, site_cidr places the far end, findings are measurements
 const fm = model.flowMap;

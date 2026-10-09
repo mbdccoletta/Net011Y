@@ -370,7 +370,11 @@ export function EntityDetails(props: Props) {
               <Gauge value={d.availPct} label="Availability" />
               <div className="vz-chipline vz-chipline--col">
                 <PortLine d={d} />
-                <span className="vz-stat"><b>{fmtInt(d.syslog.ERROR)}</b>syslog errors · 6 h</span>
+                {/* "0 syslog errors" on a device sending fourteen thousand lines an hour reads as no
+                    syslog at all. The count it is out of belongs beside it. */}
+                <span className="vz-stat" title={`${d.syslog.ERROR} error · ${d.syslog.WARN} warning · ${d.syslog.INFO} information · ${d.syslog.NONE} unclassified`}>
+                  <b>{fmtInt(d.syslog.ERROR)}</b>of {fmtInt(d.syslog.ERROR + d.syslog.WARN + d.syslog.INFO + d.syslog.NONE)} syslog lines · 6 h
+                </span>
                 <span className="vz-stat"><b>{fmtInt(d.traps)}</b>traps</span>
                 {d.memNow != null && <span className="vz-stat"><b>{Math.round(d.memNow)}%</b>memory in use</span>}
                 {(d.vlans?.length ?? 0) > 0 && <span className="vz-stat"><b>{d.vlans!.length}</b>VLANs</span>}

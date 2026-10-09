@@ -197,7 +197,7 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
       desc: `${hw} · simulated device`, location: o.location ?? null, ifCount: ifs.length, cpu: [], cpuNow: null, availPct: null, availTs: null,
       // the error counter is the sum of the series it stores, as it is on live data, where both come out
       // of the same query: drawn apart, the bars and the number contradicted each other on screen
-      syslog: { ERROR: errTs.reduce((a, b) => a + b, 0), WARN: int(1, 12), INFO: int(30, 140) }, syslogErrTs: errTs,
+      syslog: { ERROR: errTs.reduce((a, b) => a + b, 0), WARN: int(1, 12), INFO: int(30, 140), NONE: 0 }, syslogErrTs: errTs,
       traps: 0, events: o.events ?? [], interfaces: o.blind ? [] : ifs, reasons: [], verdict: "Healthy", impact: 0, icmp: null,
     };
     const down = o.downMin;

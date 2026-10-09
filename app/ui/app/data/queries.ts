@@ -50,10 +50,25 @@ export const DETAIL_MAX_DEVICES = 3000;
  */
 export const SYSLOG_SOURCE = '(dt.openpipeline.source == "extension:syslog" or custom.openpipeline.source == "extension:syslog")';
 export const SOURCE_IP = "coalesce(dt.ingest.source.ip, custom.ingest.source.ip, device.address)";
+/**
+ * The severity of a syslog line, when the pipeline that carried it did not set one.
+ *
+ * An environment collecting its syslog server's files through a OneAgent gets every line with
+ * `loglevel = "NONE"` — the road carries the text and the source address, and classifies nothing.
+ * The app counted ERROR, WARN and INFO and dropped the rest, so a hundred and fifty thousand lines an
+ * hour arrived and every device read "0 syslog errors". The number used here is not the app's: it is
+ * the severity the syslog protocol defines, written by the device itself in its own mnemonic
+ * (%ASA-4-106023, %CDP-4-NATIVE_VLAN_MISMATCH). 0 to 3 is an error, 4 a warning, the rest information.
+ * A platform-assigned level still wins, because that one is the customer's pipeline talking.
+ */
+export const SYSLOG_LEVEL = 'if(loglevel == "ERROR" or loglevel == "WARN" or loglevel == "INFO", loglevel,'
+  + ' else: if(sev <= 3, "ERROR", else: if(sev == 4, "WARN", else: if(isNotNull(sev), "INFO", else: "NONE"))))';
+/** The device's own mnemonic, where the protocol severity lives. */
+export const SYSLOG_PARSE = `parse content, "LD '%' UPPER:fac '-' INT:sev '-'"`;
 
 /** The 24 h of one device, run only on request: it scans 24 h of logs like the load used to. */
 export const deviceLogs24h = (ip: string) =>
-  `fetch logs, from:now()-24h | filter ${SYSLOG_SOURCE} or log.source == "snmptraps" | fieldsAdd kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = ${SOURCE_IP} | filter ip == "${ip.replace(/[^0-9a-fA-F.:]/g, "")}" | makeTimeseries n = count(), by:{kind, loglevel}, interval:1h`;
+  `fetch logs, from:now()-24h | filter ${SYSLOG_SOURCE} or log.source == "snmptraps" | ${SYSLOG_PARSE} | fieldsAdd kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = ${SOURCE_IP} | filter ip == "${ip.replace(/[^0-9a-fA-F.:]/g, "")}" | fieldsAdd loglevel = ${SYSLOG_LEVEL} | makeTimeseries n = count(), by:{kind, loglevel}, interval:1h`;
 
 export const QUERIES: Record<string, NetQuery> = {
   // Open Davis problems, matched to devices by their Smartscape or classic entity id (drill-down to Problems)
@@ -147,7 +162,7 @@ export const QUERIES: Record<string, NetQuery> = {
   // over 3 h for the latest records themselves. Grail bills the whole window whatever the filter, so the
   // 24 h view of one device is read only when someone asks for it (deviceLogs24h).
   deviceLogs: {
-    query: `fetch logs, from:now()-6h | filter ${SYSLOG_SOURCE} or log.source == "snmptraps" | fieldsAdd kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = ${SOURCE_IP} | makeTimeseries n = count(), by:{ip, kind, loglevel}, interval:15m`,
+    query: `fetch logs, from:now()-6h | filter ${SYSLOG_SOURCE} or log.source == "snmptraps" | ${SYSLOG_PARSE} | fieldsAdd kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = ${SOURCE_IP}, loglevel = ${SYSLOG_LEVEL} | makeTimeseries n = count(), by:{ip, kind, loglevel}, interval:15m`,
     maxResultRecords: 10000,
     incremental: { kind: "series", windowMs: DEVICE_LOG_HOURS * 3600e3, stepMs: 15 * 60e3, fields: ["n"], keys: ["ip", "kind", "loglevel"] },
   },
@@ -155,7 +170,7 @@ export const QUERIES: Record<string, NetQuery> = {
   // the rows it asked for, so the limit is the cost: on a busy environment 2,000 lines scanned 24 GB and
   // 500 scanned 10 GB, while the timeline shows 30 events per device. 600 keeps what the app can show.
   deviceLogsRecent: {
-    query: `fetch logs, from:now()-3h | filter (${SYSLOG_SOURCE} and ${SOURCE_IP} != "127.0.0.1") or log.source == "snmptraps" | sort timestamp desc | fields timestamp, kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = ${SOURCE_IP}, loglevel, app = syslog.appname, oid = snmp.trap_oid, content | limit 600`,
+    query: `fetch logs, from:now()-3h | filter (${SYSLOG_SOURCE} and ${SOURCE_IP} != "127.0.0.1") or log.source == "snmptraps" | sort timestamp desc | ${SYSLOG_PARSE} | fields timestamp, kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = ${SOURCE_IP}, loglevel = ${SYSLOG_LEVEL}, app = syslog.appname, oid = snmp.trap_oid, content | limit 600`,
     maxResultRecords: 600,
     incremental: { kind: "newest", windowMs: 3 * 3600e3, time: "timestamp", limit: 600 },
   },

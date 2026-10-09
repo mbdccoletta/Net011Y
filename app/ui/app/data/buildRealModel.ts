@@ -314,7 +314,7 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
       ip: (Array.isArray(d.ip) ? d.ip[0] : d.ip) ?? d["snmp.ip"] ?? "", ips: Array.isArray(d.ip) ? d.ip.filter((x: unknown) => isIpv4(String(x))) : undefined, mode: d.monitoring_mode, desc: String(d.description ?? "").slice(0, 160),
       location, ifCount: num(d.interface_count) ?? 0,
       cpu: [], cpuNow: null, availPct: null, availTs: null,
-      syslog: { ERROR: 0, WARN: 0, INFO: 0 }, syslogErrTs: new Array(24).fill(0), traps: 0, events: [], interfaces: [],
+      syslog: { ERROR: 0, WARN: 0, INFO: 0, NONE: 0 }, syslogErrTs: new Array(24).fill(0), traps: 0, events: [], interfaces: [],
       reasons: [], verdict: "Healthy", impact: 0, icmp: null,
     });
   }
@@ -445,9 +445,21 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
 
   // ---------- syslog and traps ----------
   // 24 h counted per device, kind and level per hour; the records themselves only for the last 3 h
+  //
+  // Addresses that send and are nobody in the inventory are counted rather than skipped. In one
+  // environment 158 of the 194 addresses sending syslog answered to no monitored device — the firewalls
+  // and the appliances nothing polls over SNMP — and they carried 99% of the volume. The app cannot
+  // place their lines on a device and will not guess one, but a hundred and fifty thousand lines an
+  // hour arriving at a screen that says nothing arrived is the worse answer.
+  const unknownSenders = new Map<string, number>();
   for (const row of L("deviceLogs")) {
     const d = devices.get(ipToName.get(row.ip) ?? "");
-    if (!d) continue;
+    if (!d) {
+      const ip = String(row.ip ?? "");
+      const n = (Array.isArray(row.n) ? row.n : []).reduce((a: number, v: unknown) => a + (num(v) ?? 0), 0);
+      if (ip && n) unknownSenders.set(ip, (unknownSenders.get(ip) ?? 0) + n);
+      continue;
+    }
     const hours = (Array.isArray(row.n) ? row.n : []).slice(-24).map((v: unknown) => num(v) ?? 0);
     const total = hours.reduce((a: number, b: number) => a + b, 0);
     if (row.kind === "trap") {
@@ -936,6 +948,11 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     sites, siteVerdicts,
     devices: devList.sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || b.impact - a.impact || a.name.localeCompare(b.name)),
     circuits, links, peers, traps, unmappedAlerts, alerting, availWindow,
+    syslogSenders: unknownSenders.size ? {
+      unknown: unknownSenders.size,
+      lines: [...unknownSenders.values()].reduce((a, b) => a + b, 0),
+      top: [...unknownSenders].map(([ip, lines]) => ({ ip, lines })).sort((x, y) => y.lines - x.lines).slice(0, 10),
+    } : undefined,
     extensions: [...new Set(["ifTraffic", "ifSummary", "cpu", "memory", "uptime"].flatMap((k) => LF(k).map((row) => String(row.family ?? ""))).filter(Boolean))],
     flows: {
       exporters,
