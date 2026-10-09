@@ -138,7 +138,8 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   // what stands in each region: the sites inside its outline, and the worst of them
   const mapRegions = useMemo<MapRegion[]>(() => {
     // in the schematic the groups have no shape, only a place and a name — the label layer draws them
-    if (schematic) return placed.groups.map((g) => ({ code: g.name, name: g.name, lon: g.lon, lat: g.lat, rings: [], verdict: g.verdict, sites: g.sites, bad: g.bad }));
+    const split = (xs: { verdict: Verdict }[]) => xs.reduce<Partial<Record<Verdict, number>>>((a, i) => ({ ...a, [i.verdict]: (a[i.verdict] ?? 0) + 1 }), {});
+    if (schematic) return placed.groups.map((g) => ({ code: g.name, name: g.name, lon: g.lon, lat: g.lat, rings: [], verdict: g.verdict, sites: g.sites, bad: g.bad, counts: {} }));
     if (!states || !shapes) return [];
     const count = new Map<string, SiteInfo[]>();
     infos.forEach((i) => {
@@ -160,6 +161,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
         verdict: members.length ? worst(members.map((i) => i.verdict)) : ("Not monitored" as const),
         sites: members.length,
         bad: members.filter((i) => isBad(i.verdict)).length,
+        counts: split(members),
       };
     });
   }, [states, shapes, infos, schematic, placed]);

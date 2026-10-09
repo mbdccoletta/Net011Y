@@ -20,6 +20,9 @@ export interface MapSite {
 }
 
 /** A state, province or prefecture to draw: its outline, and what the sites inside it add up to. */
+/** The order the outline is painted in, worst first, so the red sliver always starts at the same point. */
+const SHARE_ORDER: Verdict[] = ["Critical", "Warning", "Healthy", "Not monitored"];
+
 export interface MapRegion {
   code: string;
   name: string;
@@ -31,6 +34,8 @@ export interface MapRegion {
   sites: number;
   /** how many of those sites are red or amber */
   bad: number;
+  /** how the sites standing here divide by status, which the outline is drawn in proportion to */
+  counts: Partial<Record<Verdict, number>>;
 }
 
 export interface MapLink {
@@ -347,6 +352,40 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
           ctx.strokeStyle = withAlpha(P.ink, rg.sites ? 0.38 : 0.16);
           ctx.lineWidth = rg.sites ? 1.1 : 0.7;
           ctx.stroke();
+          // ...and the outline carries the shares. Washing the shape in the colour of its worst site
+          // said "Rio de Janeiro is critical" of three sites in a hundred and ninety-seven; drawing
+          // three hundredths of its border red says the true thing instead, and leaves the inside of
+          // the state as the context it is. Each ring is stroked once per status, as a single dash as
+          // long as that status's share of the perimeter.
+          if (rg.sites) {
+            for (const ring of rg.rings) {
+              let per = 0;
+              for (let i = 2; i < ring.length; i += 2) per += Math.hypot(sx(ring[i]) - sx(ring[i - 2]), sy(ring[i + 1]) - sy(ring[i - 1]));
+              if (per < 8) continue;
+              ctx.beginPath();
+              for (let i = 0; i < ring.length; i += 2) { const px = sx(ring[i]), py = sy(ring[i + 1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
+              ctx.closePath();
+              ctx.lineWidth = 2;
+              let at = 0;
+              for (const v of SHARE_ORDER) {
+                const n = rg.counts[v] ?? 0;
+                if (!n) continue;
+                // a single alerting site in a large state is a sliver: it never falls below two pixels
+                const len = Math.max(2, (n / rg.sites) * per);
+                ctx.strokeStyle = COL[v];
+                // the share that is fine is the quiet one: it is the default state of the world, and
+                // drawn at the weight of an alert it turns every border into decoration. What the eye
+                // should find on a green outline is the sliver that is not green.
+                ctx.globalAlpha = v === "Critical" ? 0.95 : v === "Warning" ? 0.9 : v === "Healthy" ? 0.3 : 0.2;
+                ctx.setLineDash([len, Math.max(1, per - len)]);
+                ctx.lineDashOffset = -at;
+                ctx.stroke();
+                at += len;
+              }
+              ctx.setLineDash([]);
+              ctx.globalAlpha = 1;
+            }
+          }
         }
       }
 
