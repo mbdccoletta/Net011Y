@@ -145,6 +145,16 @@ export function StatusShape({ verdict }: { verdict: Verdict }) {
  * data colour, however high it is. A ring painted amber by a threshold announced a warning nobody raised,
  * and one painted green called a device well when all it knew was that its CPU was low.
  */
+/**
+ * The largest font at which a string still fits inside a circle of radius `r`, in SVG user units.
+ *
+ * A reading drawn at a fixed size spills over its ring as soon as it grows a digit — "206.9 ms" ran
+ * clean out of a 44-pixel circle on the end-to-end path. The caller keeps the text short (the unit
+ * belongs in the caption, where it has the width of the tile); this keeps what is left inside.
+ */
+export const fitInCircle = (text: string, r: number, max = 15, min = 9) =>
+  Math.max(min, Math.min(max, (2 * r - 10) / (Math.max(1, text.length) * 0.62)));
+
 export function Gauge({ value, label, size = 110, verdict }: { value: number | null; label: string; warn?: number; crit?: number; size?: number; verdict?: Verdict }) {
   const R = 44, C = 2 * Math.PI * R, pct = value == null ? 0 : Math.max(0, Math.min(100, value));
   const tone = verdict ? verdictTone(verdict) : value == null ? TONE.neutral : TONE.cyan;
@@ -155,7 +165,11 @@ export function Gauge({ value, label, size = 110, verdict }: { value: number | n
       <svg viewBox="0 0 110 110" width={size} height={size} role="img" aria-label={`${label} ${value == null ? "not measured" : `${Math.round(pct)}%`}`}>
         <circle cx={55} cy={55} r={R} fill="none" stroke="var(--lm-line)" strokeWidth={11} />
         <circle cx={55} cy={55} r={R} fill="none" stroke={tone} strokeWidth={11} strokeLinecap="round" strokeDasharray={`${(pct / 100) * C} ${C}`} transform="rotate(-90 55 55)" />
-        <text x={55} y={64} textAnchor="middle" fill="var(--lm-ink-hi)" fontSize={24} fontWeight={700} style={{ fontFamily: "var(--lm-sans)" }}>{value == null ? "—" : `${Math.round(pct)}%`}</text>
+        {(() => {
+          // the ring's own radius less half its stroke is the room the reading has
+          const txt = value == null ? "—" : `${Math.round(pct)}%`;
+          return <text x={55} y={64} textAnchor="middle" fill="var(--lm-ink-hi)" fontSize={fitInCircle(txt, R - 6, 24)} fontWeight={700} style={{ fontFamily: "var(--lm-sans)" }}>{txt}</text>;
+        })()}
       </svg>
       <figcaption>{label}</figcaption>
     </figure>

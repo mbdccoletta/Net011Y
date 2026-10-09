@@ -10,6 +10,7 @@ import type { SiteInfo } from "../model/site";
 import { isBad } from "../model/verdict";
 import { fmtInt } from "../utils/format";
 import { MAP_COLORS } from "./LiveMap";
+import { fitInCircle } from "./Visual";
 
 const compact = (n: number) => (Math.abs(n) >= 10000 ? `${(n / 1000).toFixed(0)}k` : fmtInt(n));
 
@@ -102,8 +103,9 @@ export function NetworkStatus({ infos, onRegion }: { infos: SiteInfo[]; onRegion
           offset += len;
           return el;
         })}
-        <text x={60} y={58} textAnchor="middle" fontSize={24} fontWeight={700} fill="var(--lm-ink)">{bad}</text>
-        <text x={60} y={76} textAnchor="middle" fontSize={12} fill="var(--lm-muted)">of {fmtInt(infos.length)}</text>
+        {/* an estate of thousands puts four digits where two were drawn: both lines are sized to the room */}
+        <text x={60} y={58} textAnchor="middle" fontSize={fitInCircle(String(bad), R - 6, 24)} fontWeight={700} fill="var(--lm-ink)">{bad}</text>
+        <text x={60} y={76} textAnchor="middle" fontSize={fitInCircle(`of ${fmtInt(infos.length)}`, R - 6, 12)} fill="var(--lm-muted)">of {fmtInt(infos.length)}</text>
       </svg>
       <div className="lm-regions">
         {regions.map(({ r, list }) => (

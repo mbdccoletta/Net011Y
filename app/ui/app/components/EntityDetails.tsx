@@ -14,7 +14,7 @@ import { SuspicionStrip } from "./Suspicion";
 import { suspicionFor } from "../model/suspicion";
 import { useDropThreshold } from "../hooks/useDropThreshold";
 import { AssistPanel } from "./AssistPanel";
-import { Gauge, LimitLine, StatusShape, Tile, TONE, verdictTone } from "./Visual";
+import { fitInCircle, Gauge, LimitLine, StatusShape, Tile, TONE, verdictTone } from "./Visual";
 import { DeviceDetails, HopDetails } from "./Details";
 import { DataNeeds } from "./DataNeeds";
 import { VIEW_NEEDS, type Need, type NeedKey } from "../data/requirements";
@@ -59,11 +59,11 @@ function Head({ title, verdict, subtitle, onClose, back }: {
 function Trail({ path, selected, onSelect }: { path: E2EPath; selected: number | null; onSelect: (i: number) => void }) {
   const n = path.hops.length;
   const [box, boxW] = useElementWidth<HTMLDivElement>(560);
-  const W = Math.max(n * 112, boxW), Y = 46, R = 22;
+  const W = Math.max(n * 112, boxW), Y = 46, R = 22, H = 134;
   const x = (i: number) => 50 + (i * (W - 100)) / Math.max(1, n - 1);
   return (
     <div className="vz-scroll" ref={box}>
-      <svg viewBox={`0 0 ${W} 120`} width={W} height={120} className="vz-trail" role="group" aria-label={path.name}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="vz-trail" role="group" aria-label={path.name}>
         <defs><filter id="vz-glow"><feGaussianBlur stdDeviation="4" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs>
         {path.hops.slice(1).map((h, k) => {
           const bad = isBad(h.verdict) || isBad(path.hops[k].verdict);
@@ -72,11 +72,15 @@ function Trail({ path, selected, onSelect }: { path: E2EPath; selected: number |
         })}
         {path.hops.map((h, i) => {
           const cause = i === path.summary.firstBad, cons = false;
-          // the unit belongs to the number: "0.4" on its own was read as seconds, a hundred times the
-          // round trip it actually is. Long readings drop a size so "0.4 ms" still fits the circle.
+          // The unit used to sit beside the number inside the ring, because "0.4" on its own was read
+          // as seconds — a hundred times the round trip it actually is. But "206.9 ms" does not fit a
+          // forty-four pixel circle at any size a person can read, and it spilled over the stroke. The
+          // number stays inside, sized to fit; the unit moves to the caption directly under it, which
+          // has the width of the tile and still answers "0.4 of what".
           const none = h.headline.value == null || h.headline.value === "—";
-          const v = none ? "—" : `${typeof h.headline.value === "number" ? fmtNum(h.headline.value, 1) : h.headline.value}${unitOf(h.headline.unit)}`;
-          const tip = `${h.layer} · ${h.title}: ${none ? `no ${h.headline.label.toLowerCase()} measured` : `${v} ${h.headline.label}`} · ${h.verdict}${cause ? " · probable cause" : ""}`;
+          const v = none ? "—" : `${typeof h.headline.value === "number" ? fmtNum(h.headline.value, 1) : h.headline.value}`;
+          const unit = none ? "" : unitOf(h.headline.unit).trim();
+          const tip = `${h.layer} · ${h.title}: ${none ? `no ${h.headline.label.toLowerCase()} measured` : `${v}${unit ? ` ${unit}` : ""} ${h.headline.label}`} · ${h.verdict}${cause ? " · probable cause" : ""}`;
           const tone = none && !isBad(h.verdict) ? "var(--lm-neutral)" : verdictTone(h.verdict);
           return (
             <g key={`${h.layer}-${i}`} className="vz-trail__hop" role="button" tabIndex={0} aria-pressed={selected === i}
@@ -86,14 +90,15 @@ function Trail({ path, selected, onSelect }: { path: E2EPath; selected: number |
               <circle cx={x(i)} cy={Y} r={cause ? R + 6 : R} fill="none"
                 stroke={tone} strokeWidth={cause ? 3 : 2.5} strokeDasharray={cons ? "4 3" : undefined} filter={cause ? "url(#vz-glow)" : undefined} />
               <title>{tip}</title>
-              <text x={x(i)} y={Y + 5} textAnchor="middle" className="vz-trail__val" style={v.length > 5 ? { fontSize: 13 } : undefined}>{v}</text>
+              <text x={x(i)} y={Y + 5} textAnchor="middle" className="vz-trail__val" style={{ fontSize: fitInCircle(v, cause ? R + 6 : R, 16) }}>{v}</text>
               <text x={x(i)} y={Y + 48} textAnchor="middle" className="vz-svg-label" fill={cause ? "var(--lm-bad)" : undefined}>{h.layer.toUpperCase()}</text>
               {/* The ring is the status of the alerts on this layer; the number inside it is a
                   measurement, and fused into one mark the colour reads as a verdict on the number —
                   "180.2 ms" in green. Naming the measure under the layer separates the two. */}
-              {cause || cons
-                ? <text x={x(i)} y={Y + 63} textAnchor="middle" className="vz-svg-cap" fill={cause ? "var(--lm-bad)" : "var(--lm-warn)"}>{cause ? "probable cause" : "consequence"}</text>
-                : !none && <text x={x(i)} y={Y + 62} textAnchor="middle" className="vz-svg-cap vz-svg-cap--measure">{h.headline.short ?? h.headline.label.replace(/^(max|min|p90) /, "")}</text>}
+              {!none && <text x={x(i)} y={Y + 62} textAnchor="middle" className="vz-svg-cap vz-svg-cap--measure">
+                {(h.headline.short ?? h.headline.label.replace(/^(max|min|p90) /, "")) + (unit ? ` · ${unit}` : "")}
+              </text>}
+              {(cause || cons) && <text x={x(i)} y={none ? Y + 62 : Y + 76} textAnchor="middle" className="vz-svg-cap" fill={cause ? "var(--lm-bad)" : "var(--lm-warn)"}>{cause ? "probable cause" : "consequence"}</text>}
             </g>
           );
         })}
