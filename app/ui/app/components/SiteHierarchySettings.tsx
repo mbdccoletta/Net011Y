@@ -66,6 +66,13 @@ export function SiteHierarchySettings({ model }: { model: NetworkModel | null })
                 ? `From the ${plural(suggestion.considered.length, "primary tag")} your devices carry (${suggestion.considered.map(tagLabel).join(", ")}). Each level covers most sites and fits inside the one before it, so tagging the devices differently changes the suggestion.`
                 : "No primary tags on the sites yet, so these levels come from what the app derives from the site codes. As soon as the devices carry primary tags, the suggestion is built from them."}
             </Text>
+            {/* Two levels out of nine tags reads as a bug until the screen says what happened to the
+                other seven. Each one was dropped for a reason, and the reason is the reader's to judge. */}
+            {suggestion.rejected.length > 0 && (
+              <Text textStyle="small" className="sh-rejected">
+                Left out: {suggestion.rejected.map((r) => `${tagLabel(r.key)} (${r.why})`).join("; ")}.
+              </Text>
+            )}
           </span>
           <Button onClick={() => setDraft(suggestion.levels)}>Use suggestion</Button>
         </div>

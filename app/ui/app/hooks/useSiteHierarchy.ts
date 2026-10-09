@@ -85,6 +85,14 @@ export const levelValue = (site: Site, key: string): string | undefined =>
   key.startsWith("primary_tags.") ? site.tags?.[key] : DERIVED[key]?.(site);
 
 /** Levels available in this environment: primary tags on the sites plus the fields the app derives. */
+/**
+ * Tags that are facts about a site but never a level above it: where it is on the globe, which
+ * addresses it owns, what its circuit promises, and its own display name. The picker offered all of
+ * them as groupings — "group the sites by latitude" is not a hierarchy anybody wants, and grouping by
+ * site_name is the site itself under another word.
+ */
+const NOT_A_LEVEL = /^primary_tags\.(geo_lat|geo_lon|site_cidr|site_name|sla_ms|bandwidth_mbps|circuit_id)$/;
+
 export function availableTagKeys(model: NetworkModel | null): { key: string; sites: number; values: number }[] {
   if (!model) return [];
   const stats = new Map<string, { sites: number; values: Set<string> }>();
@@ -98,7 +106,8 @@ export function availableTagKeys(model: NetworkModel | null): { key: string; sit
       st.sites++; st.values.add(v); stats.set(k, st);
     });
   });
-  return [...stats].map(([key, st]) => ({ key, sites: st.sites, values: st.values.size }))
+  return [...stats].filter(([key]) => !NOT_A_LEVEL.test(key))
+    .map(([key, st]) => ({ key, sites: st.sites, values: st.values.size }))
     .sort((a, b) => a.values - b.values || a.key.localeCompare(b.key));
 }
 
@@ -145,19 +154,29 @@ export interface HierarchySuggestion {
   source: "primary-tags" | "derived" | "none";
   /** the keys that were considered, so Settings can say what the suggestion was built from */
   considered: string[];
+  /**
+   * The keys that were not, and why. "It only suggests two levels" is a fair complaint when an
+   * environment carries nine tags and the screen does not say what happened to the other seven.
+   */
+  rejected: { key: string; why: string }[];
 }
 
 export function suggestHierarchyDetail(model: NetworkModel | null, maxLevels = 4): HierarchySuggestion {
   const sites = model ? Object.values(model.sites) : [];
-  const none: HierarchySuggestion = { levels: [], source: "none", considered: [] };
+  const none: HierarchySuggestion = { levels: [], source: "none", considered: [], rejected: [] };
   if (sites.length < 2) return none;
 
   // A level is worth suggesting when it splits the sites into more than one group and is present on most
   // of them. A level with one value per site groups nothing, so it is dropped — except in a small
   // environment, where two sites in two regions is still the grouping the customer wants to see.
   const dropOnePerSite = sites.length > 4;
-  const usable = availableTagKeys(model)
-    .filter((k) => k.values > 1 && (dropOnePerSite ? k.values < sites.length : k.values <= sites.length) && k.sites >= sites.length * 0.6);
+  const rejected: { key: string; why: string }[] = [];
+  const usable = availableTagKeys(model).filter((k) => {
+    if (k.values <= 1) { rejected.push({ key: k.key, why: "one value across every site — it groups nothing" }); return false; }
+    if (dropOnePerSite && k.values >= sites.length) { rejected.push({ key: k.key, why: `${k.values} values for ${sites.length} sites — that is the site itself` }); return false; }
+    if (k.sites < sites.length * 0.6) { rejected.push({ key: k.key, why: `only on ${k.sites} of ${sites.length} sites` }); return false; }
+    return true;
+  });
   const tagged = usable.filter((k) => isPrimaryTag(k.key));
   const pool = tagged.length ? tagged : usable; // the customer's own tags win whenever there are any
   if (!pool.length) return none;
@@ -176,7 +195,11 @@ export function suggestHierarchyDetail(model: NetworkModel | null, maxLevels = 4
   const unique = pool
     .slice()
     .sort((a, b) => a.values - b.values || b.sites - a.sites || a.key.localeCompare(b.key)) // broadest first
-    .filter((k) => { const sig = signature(k.key); if (seen.has(sig)) return false; seen.add(sig); return true; });
+    .filter((k) => {
+      const sig = signature(k.key);
+      if (seen.has(sig)) { rejected.push({ key: k.key, why: "splits the sites exactly as a level already kept" }); return false; }
+      seen.add(sig); return true;
+    });
 
   // search the best chain instead of taking the first fit: more levels first, then finer detail at the end
   const score = (chain: string[]) => {
@@ -192,6 +215,7 @@ export function suggestHierarchyDetail(model: NetworkModel | null, maxLevels = 4
     });
   };
   grow([], unique);
-  if (!best.length) return none;
-  return { levels: best, source: tagged.length ? "primary-tags" : "derived", considered: unique.map((k) => k.key) };
+  unique.forEach((k) => { if (!best.includes(k.key)) rejected.push({ key: k.key, why: "does not nest inside the levels above it" }); });
+  if (!best.length) return { ...none, rejected };
+  return { levels: best, source: tagged.length ? "primary-tags" : "derived", considered: unique.map((k) => k.key), rejected };
 }

@@ -3,13 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ahead · Order by</title>
+<title>Ahead · Capacity</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
-  --bg:#0e0e14; --panel:#15151f; --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.16);
+  --bg:#0e0e14; --panel:#15151f; --metal:#1d1f2b; --metal-2:#262937;
+  --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.16);
   --ink-hi:#fff; --ink:#e4e9f2; --ink-3:#a8b0c0; --muted:#757d91;
   --good:#00bb7b; --warn:#f0b429; --bad:#e0384f; --cyan:#22d3ee; --violet:#8b5cf6;
   --sans:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -18,84 +19,81 @@
 *{box-sizing:border-box}
 html{color-scheme:dark}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 14px/1.5 var(--sans)}
-.wrap{max-width:1320px;margin:0 auto;padding:26px 20px 90px}
-.top{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:20px}
-h1{font:700 26px/1.15 var(--sans);margin:0;color:var(--ink-hi);letter-spacing:-.02em}
-h1 small{display:block;font:500 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
-.lede{margin:7px 0 0;color:var(--ink-3);max-width:68ch;font-size:14px}
+.wrap{max-width:1340px;margin:0 auto;padding:22px 20px 80px}
+
+/* ---------------------------------------------------------------- chrome */
+.crumbs{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font:500 12px var(--mono);margin-bottom:14px}
+.crumbs button{background:none;border:0;padding:0;font:inherit;color:var(--cyan);cursor:pointer}
+.crumbs button:hover{text-decoration:underline}
+.crumbs i{font-style:normal;color:var(--muted)}
+.crumbs b{color:var(--ink-hi);font-weight:600}
+h1{font:700 24px/1.15 var(--sans);margin:0;color:var(--ink-hi);letter-spacing:-.02em}
+h1 small{display:block;font:500 10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.lede{margin:7px 0 18px;color:var(--ink-3);max-width:74ch;font-size:13.5px}
 .lede b{color:var(--ink-hi);font-weight:600}
 .lede em{font-style:normal;color:var(--warn);font-weight:600}
-.tabs{display:flex;gap:8px;flex-wrap:wrap}
-.tabs button{font:500 12.5px var(--sans);color:var(--ink);background:none;cursor:pointer;
-  border:1px solid var(--line);border-radius:8px;padding:6px 13px}
-.tabs button[aria-pressed="true"]{color:var(--ink-hi);border-color:var(--line-2);box-shadow:inset 0 -2px 0 var(--warn)}
 
-.grid{display:grid;gap:14px;grid-template-columns:1.25fr 1fr 1fr}
-@media (max-width:1100px){.grid{grid-template-columns:1fr}}
-.card{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:15px 17px 13px;min-width:0;
-  display:grid;grid-template-rows:auto 1fr auto;gap:9px;margin:0}
-.card h2{margin:0;font:600 13.5px var(--sans);color:var(--ink-hi)}
-.card h2 span{float:right;font:500 11px var(--mono);color:var(--muted)}
-.card figcaption{font-size:11.5px;color:var(--muted);margin:0}
-.card svg{display:block;width:100%;height:auto;overflow:visible}
+.grid3{display:grid;gap:13px;grid-template-columns:1.2fr 1fr 1fr}
+.grid2{display:grid;gap:13px;grid-template-columns:1fr 1fr}
+.cols{display:grid;gap:13px;grid-template-columns:minmax(0,1fr) 340px;align-items:start}
+@media (max-width:1120px){.grid3,.grid2,.cols{grid-template-columns:1fr}}
+.card{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:14px 16px;min-width:0}
+.card h2{margin:0 0 10px;font:600 13px var(--sans);color:var(--ink-hi)}
+.card h2 span{float:right;font:500 10.5px var(--mono);color:var(--muted);font-weight:500}
+.card figcaption{font-size:11.5px;color:var(--muted);margin:9px 0 0}
+svg{display:block;width:100%;height:auto;overflow:visible}
 .ax{font:500 10px var(--mono);fill:var(--muted)}
 .axb{font:600 10.5px var(--mono);fill:var(--ink-3)}
-.pick{cursor:pointer}.pick:hover{opacity:.82}.dim{opacity:.2}
+.pick{cursor:pointer}.pick:hover{opacity:.84}
 
-.lower{display:grid;gap:14px;grid-template-columns:1.14fr 1fr;margin-top:14px;align-items:start}
-@media (max-width:1100px){.lower{grid-template-columns:1fr}}
-.filter{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 10px;font-size:12.5px;color:var(--muted)}
-.chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line-2);border-radius:999px;
-  padding:3px 10px;font:500 12px var(--mono);color:var(--ink-hi);background:none;cursor:pointer}
-.chip b{color:var(--warn)}
+/* ---------------------------------------------------------------- rows */
 table{width:100%;border-collapse:collapse}
 th{font:600 10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;
   padding:0 9px 7px;border-bottom:1px solid var(--line);white-space:nowrap}
 th.n,td.n{text-align:right}
 td{padding:9px;border-bottom:1px solid var(--line);font-size:13px}
 tr.pick:hover td{background:rgba(255,255,255,.035)}
-tr.on td{background:color-mix(in srgb,var(--warn) 9%,transparent)}
 .sub2{font-size:11px;color:var(--muted);display:block}
 .mono{font:500 12.5px var(--mono);color:var(--ink-hi)}
 .kind{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:7px;vertical-align:1px}
-.order{font:700 13.5px var(--mono);color:var(--warn);font-variant-numeric:tabular-nums}
-.order.past{color:var(--bad)}
-.order.none{color:var(--muted);font-weight:500;font-size:12px}
-.conf{display:inline-flex;gap:2px;vertical-align:-1px}
+.days{font:700 13.5px var(--mono);color:var(--warn);font-variant-numeric:tabular-nums}
+.days.bad{color:var(--bad)}.days.none{color:var(--muted);font-weight:500;font-size:12px}
+.conf{display:inline-flex;gap:2px}
 .conf i{width:4px;height:9px;border-radius:1px;background:var(--line-2)}
 .conf i.on{background:var(--cyan)}
 
-.detail{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:17px 19px;position:sticky;top:18px}
-.detail h3{margin:0;font:600 15px var(--mono);color:var(--ink-hi)}
-.detail .where{margin:3px 0 0;font-size:12px;color:var(--muted)}
-.detail .facts{display:flex;gap:20px;flex-wrap:wrap;margin:14px 0 2px}
-.detail .fact{display:grid;gap:1px}
-.detail .fact b{font:700 19px var(--sans);color:var(--ink-hi);font-variant-numeric:tabular-nums}
-.detail .fact b.warn{color:var(--warn)}
-.detail .fact span{font:500 10px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
-.detail .empty{color:var(--muted);font-size:13px;padding:34px 0;text-align:center}
-.detail p.why{margin:12px 0 0;font-size:12.5px;color:var(--ink-3)}
-.detail p.why b{color:var(--ink-hi);font-weight:600}
-.chain{display:grid;gap:5px;margin:13px 0 0}
-.chain .lnk{display:grid;grid-template-columns:86px 1fr auto;gap:10px;align-items:center;font-size:12px}
-.chain .lnk span{color:var(--muted);font:500 11px var(--mono)}
-.chain .lnk .t{height:7px;border-radius:4px;background:rgba(255,255,255,.07);position:relative}
-.chain .lnk .t i{position:absolute;inset:0 auto 0 0;border-radius:4px}
-.chain .lnk b{font:600 11.5px var(--mono);color:var(--ink-3)}
-.chain .lnk.first b{color:var(--warn)}
+.facts{display:flex;gap:18px;flex-wrap:wrap;margin:2px 0 10px}
+.fact{display:grid;gap:1px}
+.fact b{font:700 18px var(--sans);color:var(--ink-hi);font-variant-numeric:tabular-nums}
+.fact b.warn{color:var(--warn)} .fact b.bad{color:var(--bad)}
+.fact span{font:500 9.5px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.why{margin:10px 0 0;font-size:12.5px;color:var(--ink-3)}
+.why b{color:var(--ink-hi);font-weight:600}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:28px 0}
+.rail{display:grid;gap:6px;margin-top:11px}
+.rail .r{display:grid;grid-template-columns:96px 1fr auto;gap:9px;align-items:center;font-size:11.5px}
+.rail .r span{color:var(--muted);font:500 10.5px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rail .r .t{height:7px;border-radius:4px;background:rgba(255,255,255,.07);position:relative}
+.rail .r .t i{position:absolute;inset:0 auto 0 0;border-radius:4px}
+.rail .r b{font:600 11px var(--mono);color:var(--ink-3)}
+.rail .r.first b{color:var(--warn)}
+.rail .r.pick{cursor:pointer}
 
-/* the same forecast where the subject already lives */
-.inline{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));margin-top:16px}
-.mock{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:14px 16px}
-.mock .cap{font:600 10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:9px}
-.strip{display:flex;align-items:center;gap:12px;border:1px solid var(--line-2);border-radius:10px;padding:9px 12px}
-.strip .lead{font:700 15px var(--mono);color:var(--warn);white-space:nowrap}
-.strip .txt{font-size:12px;color:var(--ink-3);min-width:0}
-.strip .txt b{color:var(--ink-hi);font-weight:600}
-.strip svg{width:76px;height:26px;flex:none}
+/* faceplate */
+.plate{background:linear-gradient(180deg,var(--metal-2),var(--metal));border:1px solid var(--line-2);
+  border-radius:10px;padding:13px 15px 11px;position:relative;overflow:hidden}
+.plate::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.055),transparent 38%)}
+.plate .badge{display:flex;align-items:center;gap:10px;margin-bottom:11px}
+.plate .badge b{font:600 12.5px var(--mono);color:var(--ink-hi)}
+.plate .badge span{font:500 10.5px var(--mono);color:var(--muted)}
+.plate .leds{margin-left:auto;display:flex;gap:5px}
+.plate .leds i{width:6px;height:6px;border-radius:50%;background:var(--good);box-shadow:0 0 6px var(--good)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 15px;margin-top:10px;font-size:11.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:11px;height:8px;border-radius:2px;display:inline-block}
 
-.foot{margin-top:34px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px;
-  display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.foot{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px;
+  display:grid;gap:13px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
 .foot b{display:block;color:var(--ink-3);margin-bottom:3px}
 .foot p{margin:0}
 code{font:500 12px var(--mono);color:var(--ink)}
@@ -104,71 +102,29 @@ code{font:500 12px var(--mono);color:var(--ink)}
 </head>
 <body>
 <div class="wrap">
-  <div class="top">
-    <div><h1><small>Prototype · Ahead</small>Order by</h1><p class="lede" id="lede"></p></div>
-    <div class="tabs" role="group" aria-label="Which environment">
-      <button type="button" data-env="demo" aria-pressed="true">An environment with trends</button>
-      <button type="button" data-env="real" aria-pressed="false">This environment (eob · real)</button>
-    </div>
-  </div>
-
-  <div class="grid">
-    <figure class="card">
-      <h2>When the order has to leave<span id="hz-n"></span></h2>
-      <div id="orderwave"></div>
-      <figcaption>Not the day it saturates — the day the order has to be placed to beat it. A circuit
-        takes weeks to provision, and the carrier's own lead time is subtracted from the forecast.
-        Click a month.</figcaption>
-    </figure>
-    <figure class="card">
-      <h2>What gives first, per site<span>contract · uplink · device</span></h2>
-      <div id="chain"></div>
-      <figcaption>A path is as wide as its narrowest link. The bar is the days until the first of the
-        three crosses, and its colour says which. Click a site.</figcaption>
-    </figure>
-    <figure class="card">
-      <h2>Where the slack is<span>money back</span></h2>
-      <div id="slack"></div>
-      <figcaption>The same forecast read the other way: contracted capacity that nothing is predicted
-        to need. Nobody builds this one, and it is the bigger cheque.</figcaption>
-    </figure>
-  </div>
-
-  <div class="lower">
-    <div><div class="filter" id="filter"></div><div id="list"></div></div>
-    <aside class="detail" id="detail"></aside>
-  </div>
-
-  <section>
-    <h2 style="font:600 17px var(--sans);color:var(--ink-hi);margin:34px 0 0">And in the pages you already use</h2>
-    <p style="margin:6px 0 0;color:var(--muted);font-size:12.5px;max-width:70ch">The page above is for
-      the question that spans the estate. The forecast of one subject belongs where that subject already
-      lives — one strip, the same model, no new tab to remember.</p>
-    <div class="inline" id="inline"></div>
-  </section>
-
+  <nav class="crumbs" id="crumbs"></nav>
+  <h1><small id="kicker">Prototype · Ahead</small><span id="title"></span></h1>
+  <p class="lede" id="lede"></p>
+  <div id="body"></div>
   <div class="foot">
-    <p><b>Every number here is a forecast</b>Nothing reports the present except as the last point of a
-      series. The dates are predictions and each carries the band around it; the confidence bars say how
-      many days of record the prediction rests on.</p>
-    <p><b>Where it comes from</b>The platform's analyzer, <code>dt.statistics.forecast</code>. On eob the
-      endpoint answers <code>403 · davis:analyzers:read</code> and the SDK client is installed: one
-      scope. In this prototype a least-squares fit with the standard error of its slope stands in, so
-      the shapes are honest even though the engine is not.</p>
-    <p><b>What it cannot do yet</b>Seasonality. This customer's traffic follows the harvest, and a line
-      fitted through thirty days of it will read a season as a trend. That needs a year of record;
-      there are sixteen days. The page says so rather than pretending, and every date carries how much
-      record is behind it.</p>
+    <p><b>Every number is a forecast</b>Nothing reports the present except as the last point of a
+      series. Each date carries the band around it and how many days of record it rests on.</p>
+    <p><b>Where it comes from</b><code>dt.statistics.forecast</code> over the daily peak. A
+      least-squares fit with the standard error of its slope stands in for it here.</p>
+    <p><b>What it cannot do yet</b>Seasonality. This customer's traffic follows the harvest, and a
+      line through thirty days reads a season as a trend. That needs a year of record.</p>
   </div>
 </div>
 
 <script>
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const MONTHS = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr"];
-const HZ = 180;
-const monthOf = (d) => Math.min(MONTHS.length - 1, Math.max(0, Math.floor(d / 30)));
-const KIND = { circuit: ["var(--warn)", "contract"], uplink: ["var(--cyan)", "uplink"], device: ["var(--violet)", "device"] };
-
+const HZ = 180, MONTHS = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr"];
+const monthOf = (d) => Math.min(5, Math.max(0, Math.floor(d / 30)));
+const rnd = (seed) => () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+const series = (from, to, n, noise, r) => Array.from({ length: n }, (_, i) => {
+  const t = i / (n - 1), week = (i % 7 === 5 || i % 7 === 6) ? -noise * 1.6 : 0;
+  return Math.max(0, +(from + (to - from) * t + (r() - 0.5) * noise * 2 + week).toFixed(1));
+});
 function fit(hist) {
   const pts = hist.map((v, i) => [i, v]).filter(([, v]) => v != null);
   if (pts.length < 8) return null;
@@ -179,262 +135,374 @@ function fit(hist) {
   const resid = pts.reduce((a, [x, y]) => a + (y - (intercept + slope * x)) ** 2, 0);
   const se = Math.sqrt(resid / Math.max(1, n - 2)) / Math.sqrt(sxx - (sx * sx) / n);
   const last = pts[pts.length - 1][0];
-  const at = (d) => intercept + slope * (last + d);
-  const band = (d) => 1.96 * se * d;
+  const at = (d) => intercept + slope * (last + d), band = (d) => 1.96 * se * d;
   const cross = (s) => (s <= 0 ? null : (100 - at(0)) / s);
   const ok = (v) => (v != null && Number.isFinite(v) && v > 0 && v <= HZ ? Math.round(v) : null);
-  return { slope, se, at, band, days: n, mid: ok(cross(slope)), lo: ok(cross(slope + 1.96 * se)) ?? 0,
-    hi: ok(cross(slope - 1.96 * se)) ?? HZ, certain: ok(cross(slope)) != null };
+  return { slope, se, at, band, days: n, now: at(0), mid: ok(cross(slope)),
+    lo: ok(cross(slope + 1.96 * se)) ?? 0, hi: ok(cross(slope - 1.96 * se)) ?? HZ };
 }
-const rnd = (seed) => () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
-const series = (from, to, n, noise, r) => Array.from({ length: n }, (_, i) => {
-  const t = i / (n - 1), week = (i % 7 === 5 || i % 7 === 6) ? -noise * 1.6 : 0;
-  return Math.max(0, +(from + (to - from) * t + (r() - 0.5) * noise * 2 + week).toFixed(1));
+
+// ---------------------------------------------------------------- the estate
+const SITE_DEFS = [
+  ["Rio Grande", "RS", 11], ["DC TIVIT Transamerica", "SP", 29], ["Rondonópolis", "MT", 43],
+  ["Urucuí", "PI", 61], ["LEM", "BA", 83], ["Gaspar", "SC", 97],
+];
+// site, carrier, role, contracted, lead days, SLA ms, bandwidth from→today, latency from→today
+const LINK_DEFS = [
+  ["Rio Grande", "Vivo", "primary", "100 Mb/s", 60, 40, 58.6, 78, 54, 61],
+  ["Rio Grande", "Claro", "backup", "50 Mb/s", 60, 60, 12, 14, 38, 40],
+  ["DC TIVIT Transamerica", "Claro", "primary", "1 Gb/s", 75, 20, 58.8, 66, 46, 72],
+  ["Rondonópolis", "Oi", "primary", "30 Mb/s", 60, 50, 63.0, 74, 51, 55],
+  ["Urucuí", "Vivo", "primary", "20 Mb/s", 90, 80, 65.7, 77, 60, 66],
+  ["LEM", "Claro", "primary", "50 Mb/s", 60, 45, 52.8, 64, 44, 48],
+  ["Gaspar", "Oi", "primary", "20 Mb/s", 60, 50, 48.6, 59, 41, 43],
+];
+function makeDevice(id, name, site, model, seed, hot) {
+  const r = rnd(seed), ports = [];
+  for (let i = 1; i <= 52; i++) {
+    const up = i <= 4 ? true : r() < 0.42, shut = !up && r() < 0.62;
+    let hist = null;
+    if (up) {
+      const to = 8 + r() * 46, from = Math.max(1, to - (r() < 0.3 ? 4 + r() * 22 : r() * 5));
+      hist = series(from, to, 30, 1.4 + r() * 2.4, rnd(seed + i * 13));
+    }
+    ports.push({ n: i, name: i > 48 ? `Te1/1/${i - 48}` : `Gi1/0/${i}`, speed: i > 48 ? 10000 : 1000,
+      up, shut, hist, f: hist ? fit(hist) : null, uplink: i > 48 });
+  }
+  const star = ports.find((p) => p.n === hot);
+  if (star) { star.up = true; star.shut = false; star.hist = series(54, 81, 30, 2.1, rnd(seed + 999)); star.f = fit(star.hist); }
+  const cpu = series(44 + r() * 10, 58 + r() * 14, 30, 2.2, rnd(seed + 5));
+  const mem = series(38 + r() * 8, 46 + r() * 10, 30, 1.6, rnd(seed + 6));
+  return { id, name, site, model, ports, cpu: { hist: cpu, f: fit(cpu) }, mem: { hist: mem, f: fit(mem) } };
+}
+const DEVICES = [
+  makeDevice(0, "BR-RS-RGR-SWA-013", "Rio Grande", "Catalyst 9300 · 48T-4X", 11, 17),
+  makeDevice(1, "BR-RS-RGR-RTR-001", "Rio Grande", "ISR 4451 · edge", 13, 50),
+  makeDevice(2, "BR-SP-DCT1-SPN-001", "DC TIVIT Transamerica", "Nexus 93180YC · 48-6Q", 29, 42),
+  makeDevice(3, "BR-MT-RON1-SWI-045", "Rondonópolis", "Catalyst 9200 · 48P-4G", 43, 8),
+  makeDevice(4, "BR-PI-URU1-SWA-003", "Urucuí", "Catalyst 9300 · 48T-4X", 61, 24),
+  makeDevice(5, "BR-BA-LEM1-SWA-022", "LEM", "Catalyst 9300 · 48U-4X", 83, 31),
+  makeDevice(6, "BR-SC-GSP-SWA-004", "Gaspar", "Catalyst 9200 · 48P-4G", 97, 12),
+];
+const LINKS = LINK_DEFS.map(([site, carrier, role, contracted, lead, sla, bwFrom, bwTo, rtFrom, rtTo], i) => {
+  const bw = series(bwFrom, bwTo, 30, 2.1, rnd(i * 17 + 3));
+  const rt = series(rtFrom, rtTo, 30, 3.4, rnd(i * 23 + 9));
+  return { id: i, site, carrier, role, contracted, lead, sla,
+    bw: { hist: bw, f: fit(bw) }, rtt: { hist: rt, f: fit(rt) } };
 });
-
-// site, kind, name, limit, carrier lead time in days, start, today, noise
-const SEEDS = [
-  ["Rio Grande", "circuit", "WAN · Vivo MPLS", "100 Mb/s contracted", 60, 58.6, 78, 2.0],
-  ["Rio Grande", "uplink", "Te1/1/1 · edge uplink", "1 Gb/s · the port", 21, 63.9, 71, 2.8],
-  ["Rio Grande", "device", "CPU · br-rs-rgr-rtr-001", "100% · the processor", 45, 55.0, 62, 2.2],
-  ["DC TIVIT Transamerica", "uplink", "port-channel1", "10 Gb/s · the port", 21, 74.2, 83, 1.8],
-  ["DC TIVIT Transamerica", "circuit", "WAN · Claro", "1 Gb/s contracted", 75, 58.8, 66, 1.9],
-  ["DC TIVIT Transamerica", "device", "CPU · br-sp-dct1-spn-001", "100% · the processor", 45, 46.0, 55, 1.7],
-  ["Rondonópolis", "circuit", "WAN · Oi", "30 Mb/s contracted", 60, 63.0, 74, 2.2],
-  ["Rondonópolis", "uplink", "Gi1/0/48", "1 Gb/s · the port", 21, 68.1, 81, 2.4],
-  ["Urucuí", "circuit", "WAN · Vivo", "20 Mb/s contracted", 90, 65.7, 77, 2.6],
-  ["Urucuí", "uplink", "Gi1/0/3", "1 Gb/s · the port", 21, 57.1, 68, 2.1],
-  ["LEM", "circuit", "WAN · Claro", "50 Mb/s contracted", 60, 52.8, 64, 2.3],
-  ["LEM", "device", "CPU · br-ba-lem1-fwc-001", "100% · the processor", 45, 65.4, 69, 4.6],
-  ["Gaspar", "uplink", "Gi1/0/22", "1 Gb/s · the port", 21, 61.1, 72, 3.0],
-  ["Gaspar", "circuit", "WAN · Oi", "20 Mb/s contracted", 60, 48.6, 59, 2.5],
-  ["Placas", "uplink", "Gi1/0/7", "1 Gb/s · the port", 21, 49.5, 51, 5.4],
-];
-const SLACK = [
-  ["Placas", "WAN · Oi 20 Mb/s", 8, 7], ["Currais de Laranjeiras", "WAN · Vivo 20 Mb/s", 11, 6],
-  ["Nova Mutum", "WAN · Claro 30 Mb/s", 9, 8], ["Viterra Remote", "WAN · Oi 10 Mb/s", 14, 5],
-  ["Bahia Blanca", "WAN · Claro 50 Mb/s", 6, 9],
-];
-const DEMO = {
-  real: false, slack: SLACK,
-  rows: SEEDS.map(([site, kind, name, limit, lead, from, to, noise], i) => {
-    const hist = series(from, to, 30, noise, rnd(i * 41 + 7));
-    return { id: i, site, kind, name, limit, lead, hist, f: fit(hist) };
-  }),
+// the first of a link's two ways out
+const linkFirst = (l) => {
+  const a = l.bw.f && l.bw.f.mid, b = l.rtt.f && l.rtt.f.mid;
+  if (a != null && (b == null || a <= b)) return { kind: "bandwidth", days: a, o: l.bw };
+  if (b != null) return { kind: "latency", days: b, o: l.rtt };
+  return null;
 };
-const REAL_HIST = [
-  [null,null,null,null,null,null,null,null,null,null,null,null,3.5,5.4,5.7,6.4,4.4,1.8,6.1,7.6,7.4,12.2,49.5,45.6,2.4,1.9,8.8,1.4],
-  [null,null,null,null,null,null,null,null,null,null,null,null,2.7,11.1,10.8,10.4,12,4.4,15.2,10.6,11.8,10,33.3,37.9,8.3,4,12,7.4],
-  [null,null,null,null,null,null,null,null,null,null,null,null,0.5,0.3,1.4,1.2,1.8,0.6,2.2,2.6,2.4,1.8,1.6,3,2.2,1.9,13.8,7.2],
-];
-const REAL = {
-  real: true, slack: [],
-  rows: REAL_HIST.map((h, i) => ({
-    id: i, site: ["DC TIVIT Transamerica", "DC TIVIT Transamerica", "LEM"][i], kind: "uplink",
-    name: ["Ethernet1/31", "Ethernet1/31", "Gi1/1/2"][i],
-    limit: ["10 Gb/s · the port", "10 Gb/s · the port", "1 Gb/s · the port"][i],
-    lead: 21, hist: h, f: fit(h),
-  })),
-};
+const devUplink = (d) => d.ports.filter((p) => p.uplink && p.f && p.f.mid != null).sort((a, b) => a.f.mid - b.f.mid)[0] ?? null;
 
-let DATA = DEMO, filter = { month: null, site: null }, picked = null;
-const orderBy = (r) => (r.f && r.f.certain ? r.f.mid - r.lead : null);
-const dated = (rows) => rows.filter((r) => orderBy(r) != null);
-
-// ---------------------------------------------------------------- charts
-function orderwave(rows) {
-  const W = 470, H = 170, L = 26, B = 26;
-  const ds = dated(rows);
-  const bw = (W - L - 12) / MONTHS.length;
-  const per = MONTHS.map((_, m) => ds.filter((r) => monthOf(Math.max(0, orderBy(r))) === m).length);
-  const late = ds.filter((r) => orderBy(r) <= 0).length;
-  const max = Math.max(1, ...per);
-  const X = (m) => L + m * bw, Y = (v) => H - B - (v / max) * (H - B - 22);
-  const bars = MONTHS.map((mo, m) => {
-    const on = filter.month == null || filter.month === m;
-    return `<g class="pick${on ? "" : " dim"}" data-month="${m}">
-      <rect x="${(X(m) + 4).toFixed(1)}" y="${Y(per[m]).toFixed(1)}" width="${(bw - 8).toFixed(1)}"
-        height="${Math.max(1, H - B - Y(per[m])).toFixed(1)}" rx="4" fill="${m === 0 ? "var(--bad)" : "var(--warn)"}" opacity=".85"/>
-      <text class="axb" x="${(X(m) + bw / 2).toFixed(1)}" y="${(Y(per[m]) - 7).toFixed(1)}" text-anchor="middle">${per[m] || ""}</text>
-      <text class="ax" x="${(X(m) + bw / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">${mo}</text></g>`;
-  }).join("");
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="when each order must be placed">
-    <line x1="${L}" y1="${H - B}" x2="${W - 10}" y2="${H - B}" stroke="var(--line-2)"/>
-    <text class="ax" x="4" y="${Y(max).toFixed(1)}">${max}</text><text class="ax" x="4" y="${H - B}">0</text>
-    ${bars}
-    ${late ? `<text class="ax" x="${L}" y="12" fill="var(--bad)">${late} already late</text>` : ""}</svg>`;
-}
-
-function chainChart(rows) {
-  const sites = [...new Set(rows.map((r) => r.site))];
-  const first = sites.map((s) => {
-    const list = dated(rows.filter((r) => r.site === s)).sort((a, b) => a.f.mid - b.f.mid);
-    return list.length ? { site: s, r: list[0] } : null;
-  }).filter(Boolean).sort((a, b) => a.r.f.mid - b.r.f.mid);
-  if (!first.length) return `<svg viewBox="0 0 330 120"><text class="ax" x="165" y="62" text-anchor="middle">no site has a link with a date</text></svg>`;
-  const W = 330, rowH = 18, H = first.length * rowH + 10, max = Math.max(...first.map((f) => f.r.f.mid), HZ);
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="what gives first at each site">
-    ${first.map(({ site, r }, i) => {
-      const y = i * rowH + 6, w = (r.f.mid / max) * (W - 150), on = filter.site == null || filter.site === site;
-      return `<g class="pick${on ? "" : " dim"}" data-site="${esc(site)}">
-        <text class="ax" x="118" y="${y + 8}" text-anchor="end" fill="var(--ink-3)">${esc(site.length > 17 ? site.slice(0, 16) + "…" : site)}</text>
-        <rect x="124" y="${y + 1}" width="${Math.max(3, w).toFixed(1)}" height="8" rx="4" fill="${KIND[r.kind][0]}" opacity=".9"/>
-        <text class="ax" x="${(130 + w).toFixed(1)}" y="${y + 8}">${r.f.mid}d · ${KIND[r.kind][1]}</text></g>`;
-    }).join("")}</svg>`;
-}
-
-function slackChart(items) {
-  if (!items.length) return `<svg viewBox="0 0 330 120"><text class="ax" x="165" y="62" text-anchor="middle">no circuit states a contracted bandwidth</text></svg>`;
-  const W = 330, rowH = 20, H = items.length * rowH + 10;
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="contracted capacity nothing is predicted to need">
-    ${items.map(([site, what, pct, months], i) => {
-      const y = i * rowH + 6, full = W - 150;
-      return `<g>
-        <text class="ax" x="118" y="${y + 9}" text-anchor="end" fill="var(--ink-3)">${esc(site.length > 17 ? site.slice(0, 16) + "…" : site)}</text>
-        <rect x="124" y="${y + 2}" width="${full}" height="9" rx="4.5" fill="var(--good)" opacity=".18"/>
-        <rect x="124" y="${y + 2}" width="${((pct / 100) * full).toFixed(1)}" height="9" rx="4.5" fill="var(--good)" opacity=".9"/>
-        <text class="ax" x="${(130 + full).toFixed(1)}" y="${y + 9}" fill="var(--good)">${pct}% · ${months} mo</text></g>`;
-    }).join("")}</svg>`;
-}
-
-// ---------------------------------------------------------------- list + detail
-const visible = () => DATA.rows.filter((r) =>
-  (filter.site == null || r.site === filter.site)
-  && (filter.month == null || (orderBy(r) != null && monthOf(Math.max(0, orderBy(r))) === filter.month)))
-  .sort((a, b) => ((orderBy(a) ?? 1e9) - (orderBy(b) ?? 1e9)));
-
-const confBars = (days) => `<span class="conf" title="${days} days of record">${
-  [7, 14, 21, 30].map((t) => `<i class="${days >= t ? "on" : ""}"></i>`).join("")}</span>`;
-
-function list(rows) {
-  if (!rows.length) return `<p style="color:var(--muted);font-size:13px">Nothing to order in that selection.</p>`;
-  return `<table><thead><tr><th>What</th><th class="n">Reaches its limit</th><th class="n">Order by</th><th class="n">Record</th></tr></thead><tbody>
-    ${rows.map((r) => {
-      const ob = orderBy(r);
-      return `<tr class="pick${picked === r.id ? " on" : ""}" data-id="${r.id}">
-        <td><span class="mono"><i class="kind" style="background:${KIND[r.kind][0]}"></i>${esc(r.name)}</span>
-            <span class="sub2">${esc(r.site)} · ${esc(r.limit)}</span></td>
-        <td class="n">${r.f && r.f.certain
-          ? `<span class="mono">${r.f.mid}d</span><span class="sub2">between ${r.f.lo} and ${r.f.hi}</span>`
-          : `<span class="sub2">no date</span>`}</td>
-        <td class="n">${ob != null
-          ? `<span class="order${ob <= 0 ? " past" : ""}">${ob <= 0 ? "now" : MONTHS[monthOf(ob)] + " · " + ob + "d"}</span><span class="sub2">${r.lead}-day lead time</span>`
-          : `<span class="order none">—</span>`}</td>
-        <td class="n">${confBars(r.f ? r.f.days : 0)}</td></tr>`;
-    }).join("")}</tbody></table>`;
-}
-
-function detail(r) {
-  if (!r) return `<p class="empty">Pick a month, a site or a row to open its forecast.</p>`;
-  const W = 450, H = 170, L = 32, B = 24, HP = 0.3;
-  const vals = r.hist.filter((v) => v != null), f = r.f;
-  const peak = Math.max(120, ...vals, f ? f.at(HZ) + f.band(HZ) : 0);
-  const todayX = L + HP * (W - L - 12);
-  const X = (d) => d <= 0 ? L + ((d + 30) / 30) * (todayX - L) : todayX + Math.min(1, d / HZ) * (W - 12 - todayX);
-  const Y = (v) => (H - B) - (Math.min(Math.max(v, 0), peak) / peak) * (H - B - 14);
-  let d = "", open = false;
-  r.hist.forEach((v, k) => {
-    if (v == null) { open = false; return; }
-    const px = X(-30 + (k / (r.hist.length - 1)) * 30);
-    d += (open ? "L" : "M") + px.toFixed(1) + "," + Y(v).toFixed(1) + " "; open = true;
+/** everything in the estate that has a date, as one list */
+function subjects() {
+  const out = [];
+  LINKS.forEach((l) => { const f = linkFirst(l); if (f) out.push({ kind: "link", ref: l, site: l.site, name: `WAN · ${l.carrier} ${l.contracted}`, sub: `${l.role} · ${f.kind}`, days: f.days, o: f.o, lead: l.lead }); });
+  DEVICES.forEach((d) => {
+    const u = devUplink(d);
+    if (u) out.push({ kind: "port", ref: d, port: u, site: d.site, name: `${u.name} · uplink`, sub: d.name, days: u.f.mid, o: u, lead: 21 });
+    if (d.cpu.f && d.cpu.f.mid != null) out.push({ kind: "device", ref: d, site: d.site, name: `CPU · ${d.name}`, sub: d.model, days: d.cpu.f.mid, o: d.cpu, lead: 45 });
   });
-  let cone = "", line = "", ob = orderBy(r), mark = "";
+  return out.sort((a, b) => a.days - b.days);
+}
+const KINDC = { link: "var(--warn)", port: "var(--cyan)", device: "var(--violet)" };
+const orderBy = (s) => s.days - s.lead;
+
+let view = { at: "estate", site: null, link: null, dev: null, port: null };
+
+// ---------------------------------------------------------------- drawing
+function cone(o, W, H, limitLabel) {
+  const L = 30, B = 20, HP = 0.3;
+  const vals = o.hist.filter((v) => v != null), f = o.f;
+  const peak = Math.max(115, ...vals, f ? f.at(HZ) + f.band(HZ) : 0);
+  const todayX = L + HP * (W - L - 12);
+  const X = (dd) => dd <= 0 ? L + ((dd + 30) / 30) * (todayX - L) : todayX + Math.min(1, dd / HZ) * (W - 12 - todayX);
+  const Y = (v) => (H - B) - (Math.min(Math.max(v, 0), peak) / peak) * (H - B - 13);
+  let d = "", open = false;
+  o.hist.forEach((v, k) => {
+    if (v == null) { open = false; return; }
+    d += (open ? "L" : "M") + X(-30 + (k / (o.hist.length - 1)) * 30).toFixed(1) + "," + Y(v).toFixed(1) + " "; open = true;
+  });
+  let cn = "", ln = "", hit = "";
   if (f) {
-    const steps = Array.from({ length: 25 }, (_, i) => (i / 24) * HZ);
+    const steps = Array.from({ length: 21 }, (_, i) => (i / 20) * HZ);
     const up = steps.map((t) => `${X(t).toFixed(1)},${Y(f.at(t) + f.band(t)).toFixed(1)}`);
     const dn = steps.map((t) => `${X(t).toFixed(1)},${Y(Math.max(0, f.at(t) - f.band(t))).toFixed(1)}`).reverse();
-    cone = `<polygon points="${up.concat(dn).join(" ")}" fill="var(--warn)" opacity=".15"/>`;
-    line = `<path d="M${steps.map((t) => `${X(t).toFixed(1)},${Y(f.at(t)).toFixed(1)}`).join(" L")}" fill="none" stroke="var(--warn)" stroke-width="2.2" stroke-dasharray="5 4"/>`;
+    cn = `<polygon points="${up.concat(dn).join(" ")}" fill="var(--warn)" opacity=".15"/>`;
+    ln = `<path d="M${steps.map((t) => `${X(t).toFixed(1)},${Y(f.at(t)).toFixed(1)}`).join(" L")}" fill="none" stroke="var(--warn)" stroke-width="2" stroke-dasharray="5 4"/>`;
+    if (f.mid != null) hit = `<circle cx="${X(f.mid).toFixed(1)}" cy="${Y(100).toFixed(1)}" r="4.5" fill="var(--warn)"/>`;
   }
-  if (ob != null && ob > 0) mark = `<line x1="${X(ob).toFixed(1)}" y1="8" x2="${X(ob).toFixed(1)}" y2="${H - B}" stroke="var(--bad)" stroke-width="1.5"/>
-    <text class="ax" x="${X(ob).toFixed(1)}" y="6" text-anchor="middle" fill="var(--bad)">ORDER</text>`;
-  // the chain this subject stands in: what gives first at its site
-  const peers = dated(DATA.rows.filter((x) => x.site === r.site)).sort((a, b) => a.f.mid - b.f.mid);
-  const chain = peers.length ? `<div class="chain">${peers.map((p, i) => `
-    <div class="lnk${i === 0 ? " first" : ""}"><span>${KIND[p.kind][1]}</span>
-      <div class="t"><i style="width:${Math.min(100, (1 - p.f.mid / HZ) * 100).toFixed(0)}%;background:${KIND[p.kind][0]}"></i></div>
-      <b>${p.f.mid}d</b></div>`).join("")}</div>` : "";
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="forecast">
+    <line x1="${L}" y1="${Y(100).toFixed(1)}" x2="${W - 12}" y2="${Y(100).toFixed(1)}" stroke="var(--bad)" stroke-dasharray="3 4" opacity=".72"/>
+    <text class="ax" x="${W - 12}" y="${(Y(100) - 5).toFixed(1)}" text-anchor="end" fill="var(--bad)">${esc(limitLabel)}</text>
+    <line x1="${L}" y1="${H - B}" x2="${W - 12}" y2="${H - B}" stroke="var(--line-2)"/>
+    <line x1="${todayX.toFixed(1)}" y1="6" x2="${todayX.toFixed(1)}" y2="${H - B}" stroke="var(--line-2)"/>
+    <text class="ax" x="${todayX.toFixed(1)}" y="${H - 6}" text-anchor="middle">TODAY</text>
+    <text class="ax" x="${W - 12}" y="${H - 6}" text-anchor="end">+180d</text>
+    ${cn}${ln}${hit}
+    <path d="${d}" fill="none" stroke="var(--cyan)" stroke-width="2.2" stroke-linejoin="round"/></svg>`;
+}
+const confBars = (days) => `<span class="conf" title="${days} days of record">${[7, 14, 21, 30].map((t) => `<i class="${days >= t ? "on" : ""}"></i>`).join("")}</span>`;
+
+// ---------------------------------------------------------------- level 1
+function estate() {
+  const subs = subjects(), W = 460, H = 160, L = 26, B = 26;
+  const bw = (W - L - 12) / MONTHS.length;
+  const per = MONTHS.map((_, m) => subs.filter((s) => monthOf(Math.max(0, orderBy(s))) === m).length);
+  const late = subs.filter((s) => orderBy(s) <= 0).length, max = Math.max(1, ...per);
+  const Y = (v) => H - B - (v / max) * (H - B - 20);
+  const bars = MONTHS.map((mo, m) => `<g>
+      <rect x="${(L + m * bw + 4).toFixed(1)}" y="${Y(per[m]).toFixed(1)}" width="${(bw - 8).toFixed(1)}"
+        height="${Math.max(1, H - B - Y(per[m])).toFixed(1)}" rx="4" fill="${m === 0 ? "var(--bad)" : "var(--warn)"}" opacity=".85"/>
+      <text class="axb" x="${(L + m * bw + bw / 2).toFixed(1)}" y="${(Y(per[m]) - 6).toFixed(1)}" text-anchor="middle">${per[m] || ""}</text>
+      <text class="ax" x="${(L + m * bw + bw / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">${mo}</text></g>`).join("");
+
+  const sitesList = SITE_DEFS.map(([name]) => {
+    const mine = subs.filter((s) => s.site === name);
+    return { name, first: mine[0] ?? null, n: mine.length };
+  }).filter((s) => s.first).sort((a, b) => a.first.days - b.first.days);
+  const SW = 330, rowH = 19, SH = sitesList.length * rowH + 8;
+  const smax = Math.max(...sitesList.map((s) => s.first.days), HZ);
+  const siteBars = sitesList.map((s, i) => {
+    const y = i * rowH + 6, w = (s.first.days / smax) * (SW - 160);
+    return `<g class="pick" data-site="${esc(s.name)}">
+      <text class="ax" x="124" y="${y + 8}" text-anchor="end" fill="var(--ink-3)">${esc(s.name.length > 18 ? s.name.slice(0, 17) + "…" : s.name)}</text>
+      <rect x="130" y="${y + 1}" width="${Math.max(3, w).toFixed(1)}" height="8" rx="4" fill="${KINDC[s.first.kind]}" opacity=".9"/>
+      <text class="ax" x="${(136 + w).toFixed(1)}" y="${y + 8}">${s.first.days}d · ${s.first.kind === "link" ? "WAN" : s.first.kind === "port" ? "uplink" : "device"}</text></g>`;
+  }).join("");
+
+  const links = LINKS.map((l) => ({ l, f: linkFirst(l) })).filter((x) => x.f).sort((a, b) => a.f.days - b.f.days);
+  const LW = 330, LH = links.length * rowH + 8;
+  const linkBars = links.map(({ l, f }, i) => {
+    const y = i * rowH + 6, w = (f.days / HZ) * (LW - 170);
+    return `<g class="pick" data-link="${l.id}">
+      <text class="ax" x="128" y="${y + 8}" text-anchor="end" fill="var(--ink-3)">${esc(l.site.length > 15 ? l.site.slice(0, 14) + "…" : l.site)} · ${esc(l.carrier)}</text>
+      <rect x="134" y="${y + 1}" width="${Math.max(3, w).toFixed(1)}" height="8" rx="4"
+        fill="${f.kind === "latency" ? "var(--violet)" : "var(--warn)"}" opacity=".9"/>
+      <text class="ax" x="${(140 + w).toFixed(1)}" y="${y + 8}">${f.days}d · ${f.kind}</text></g>`;
+  }).join("");
+
   return `
-    <h3>${esc(r.name)}</h3><p class="where">${esc(r.site)} · ${esc(r.limit)}</p>
-    <div class="facts">
-      <div class="fact"><b>${f ? Math.round(f.at(90)) + "%" : "—"}</b><span>in 90 days</span></div>
-      <div class="fact"><b class="${f && f.certain ? "warn" : ""}">${f && f.certain ? f.mid + "d" : "—"}</b><span>to the limit</span></div>
-      <div class="fact"><b>${ob != null ? (ob <= 0 ? "now" : ob + "d") : "—"}</b><span>order by</span></div>
-      <div class="fact"><b>${r.lead}d</b><span>lead time</span></div>
-      <div class="fact"><b>${f ? f.days : 0}d</b><span>of record</span></div>
+    <div class="grid3">
+      <div class="card"><h2>When the order has to leave<span>${subs.length} to order</span></h2>
+        <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="orders by month">
+          <line x1="${L}" y1="${H - B}" x2="${W - 10}" y2="${H - B}" stroke="var(--line-2)"/>
+          ${bars}${late ? `<text class="ax" x="${L}" y="12" fill="var(--bad)">${late} already late</text>` : ""}</svg>
+        <figcaption>The carrier's lead time is already subtracted from the forecast.</figcaption></div>
+      <div class="card"><h2>What gives first, per site<span>click one</span></h2>
+        <svg viewBox="0 0 ${SW} ${SH}">${siteBars}</svg>
+        <figcaption>A path is as wide as its narrowest link: WAN, uplink or device.</figcaption></div>
+      <div class="card"><h2>WAN links<span>bandwidth or latency</span></h2>
+        <svg viewBox="0 0 ${LW} ${LH}">${linkBars}</svg>
+        <figcaption>A circuit runs out two ways. The colour says which comes first.</figcaption></div>
     </div>
-    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(r.name)} forecast">
-      <line x1="${L}" y1="${Y(100).toFixed(1)}" x2="${W - 12}" y2="${Y(100).toFixed(1)}" stroke="var(--bad)" stroke-dasharray="3 4" opacity=".75"/>
-      <text class="ax" x="${W - 12}" y="${(Y(100) - 6).toFixed(1)}" text-anchor="end" fill="var(--bad)">its limit</text>
-      <line x1="${L}" y1="${H - B}" x2="${W - 12}" y2="${H - B}" stroke="var(--line-2)"/>
-      <line x1="${todayX.toFixed(1)}" y1="8" x2="${todayX.toFixed(1)}" y2="${H - B}" stroke="var(--line-2)"/>
-      <text class="ax" x="${todayX.toFixed(1)}" y="${H - 7}" text-anchor="middle">TODAY</text>
-      ${cone}${line}${mark}
-      <path d="${d}" fill="none" stroke="var(--cyan)" stroke-width="2.4" stroke-linejoin="round"/>
-    </svg>
-    ${chain}
-    <p class="why">${f && f.certain
-      ? `The middle of the cone crosses in <b>${r.f.mid} days</b>, the band puts it between ${r.f.lo} and ${r.f.hi}, and the carrier wants <b>${r.lead} days</b>. ${ob <= 0 ? "Which means the order is already late." : `So the order leaves by <b>${MONTHS[monthOf(ob)]}</b>, in ${ob} days.`}`
-      : f ? `The cone reaches past the horizon before its middle meets the limit: no date, and nothing to order.`
-          : `Fewer than eight days of record: nothing to fit.`}
-      ${f && f.days < 30 ? ` This rests on <b>${f.days} days</b> of record — a season could still be reading as a trend.` : ""}</p>`;
+    <div class="card" style="margin-top:13px"><h2>Everything with a date<span>soonest first</span></h2>
+      <table><thead><tr><th>What</th><th>Where</th><th class="n">Limit in</th><th class="n">Order by</th><th class="n">Record</th></tr></thead><tbody>
+      ${subs.map((s) => {
+        const ob = orderBy(s), nav = s.kind === "link" ? `data-link="${s.ref.id}"` : `data-dev="${s.ref.id}"`;
+        return `<tr class="pick" ${nav}>
+          <td><span class="mono"><i class="kind" style="background:${KINDC[s.kind]}"></i>${esc(s.name)}</span><span class="sub2">${esc(s.sub)}</span></td>
+          <td><span class="sub2" style="font-size:12px;color:var(--ink-3)">${esc(s.site)}</span></td>
+          <td class="n"><span class="days${s.days < 30 ? " bad" : ""}">${s.days}d</span><span class="sub2">between ${s.o.f.lo} and ${s.o.f.hi}</span></td>
+          <td class="n"><span class="days${ob <= 0 ? " bad" : ""}">${ob <= 0 ? "now" : MONTHS[monthOf(ob)] + " · " + ob + "d"}</span><span class="sub2">${s.lead}-day lead</span></td>
+          <td class="n">${confBars(s.o.f.days)}</td></tr>`;
+      }).join("")}</tbody></table></div>`;
 }
 
-function inlineMocks() {
-  const r = DATA.rows.find((x) => orderBy(x) != null) ?? DATA.rows[0];
-  const spark = (hist, col) => {
-    const v = hist.filter((x) => x != null), max = Math.max(...v, 1);
-    const pts = v.map((x, i) => `${(2 + (i / (v.length - 1)) * 72).toFixed(1)},${(23 - (x / max) * 20).toFixed(1)}`).join(" ");
-    return `<svg viewBox="0 0 76 26"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2"/></svg>`;
+// ---------------------------------------------------------------- level 2
+function siteView(name) {
+  const subs = subjects().filter((s) => s.site === name);
+  const links = LINKS.filter((l) => l.site === name), devs = DEVICES.filter((d) => d.site === name);
+  const rail = subs.length ? `<div class="rail">${subs.map((s, i) => `
+    <div class="r pick${i === 0 ? " first" : ""}" ${s.kind === "link" ? `data-link="${s.ref.id}"` : `data-dev="${s.ref.id}"`}>
+      <span>${esc(s.name)}</span>
+      <div class="t"><i style="width:${Math.min(100, (1 - s.days / HZ) * 100).toFixed(0)}%;background:${KINDC[s.kind]}"></i></div>
+      <b>${s.days}d</b></div>`).join("")}</div>` : `<p class="empty">Nothing here has a date.</p>`;
+  return `<div class="cols">
+    <div class="card"><h2>What gives first at ${esc(name)}<span>click a row to open it</span></h2>${rail}
+      <figcaption>The whole path, in the order it will give: contract, uplink, processor.</figcaption></div>
+    <div>
+      <div class="card"><h2>WAN links<span>${links.length}</span></h2>
+        ${links.map((l) => { const f = linkFirst(l);
+          return `<div class="r pick" style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)" data-link="${l.id}">
+            <span class="mono" style="font-size:12px">${esc(l.carrier)} ${esc(l.contracted)}<span class="sub2">${esc(l.role)} · SLA ${l.sla} ms</span></span>
+            <b class="days${f && f.days < 30 ? " bad" : ""}" style="font-size:13px">${f ? f.days + "d" : "—"}</b></div>`;
+        }).join("")}</div>
+      <div class="card" style="margin-top:13px"><h2>Devices<span>${devs.length}</span></h2>
+        ${devs.map((d) => { const u = devUplink(d);
+          return `<div class="r pick" style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)" data-dev="${d.id}">
+            <span class="mono" style="font-size:12px">${esc(d.name)}<span class="sub2">${esc(d.model)} · ${d.ports.filter((p) => p.up).length} of 52 up</span></span>
+            <b class="days" style="font-size:13px">${u ? u.f.mid + "d" : "—"}</b></div>`;
+        }).join("")}</div>
+    </div></div>`;
+}
+
+// ---------------------------------------------------------------- level 3a: the WAN link
+function linkView(l) {
+  const f = linkFirst(l), ob = f ? f.days - l.lead : null;
+  const one = (o, title, limit, unit) => {
+    const ff = o.f;
+    return `<div class="card"><h2>${title}<span>${esc(limit)}</span></h2>
+      <div class="facts">
+        <div class="fact"><b>${Math.round(ff ? ff.now : 0)}%</b><span>of it now</span></div>
+        <div class="fact"><b>${ff ? Math.round(ff.at(90)) + "%" : "—"}</b><span>in 90 days</span></div>
+        <div class="fact"><b class="${ff && ff.mid != null ? "warn" : ""}">${ff && ff.mid != null ? ff.mid + "d" : "no date"}</b><span>to the limit</span></div>
+        <div class="fact"><b>${ff && ff.mid != null ? ff.hi - ff.lo + "d" : "—"}</b><span>band</span></div>
+      </div>${cone(o, 420, 150, unit)}</div>`;
   };
-  const ob = orderBy(r);
-  const mk = (cap, lead, txt) => `<div class="mock"><p class="cap">${cap}</p>
-    <div class="strip"><span class="lead">${lead}</span>${spark(r.hist, "var(--cyan)")}<span class="txt">${txt}</span></div></div>`;
-  return [
-    mk("WAN links · the circuit panel", ob == null ? "—" : ob <= 0 ? "now" : MONTHS[monthOf(ob)],
-       r.f && r.f.certain
-         ? `limit in <b>${r.f.mid} d</b> · ${ob <= 0 ? "<b>order already late</b>" : `order by <b>${ob}d</b>`} · ${r.lead}-day lead`
-         : "no date yet"),
-    mk("Devices · the device panel", r.f ? Math.round(r.f.at(90)) + "%" : "—",
-       `CPU forecast at <b>90 days</b> · ${r.f ? r.f.days : 0} days of record`),
-    mk("Sites · the site panel", r.f && r.f.certain ? r.f.mid + "d" : "—",
-       `first to give here is the <b>${KIND[r.kind][1]}</b>`),
-  ].join("");
+  return `
+    <div class="card" style="margin-bottom:13px">
+      <div class="facts" style="margin:0">
+        <div class="fact"><b>${esc(l.carrier)}</b><span>carrier</span></div>
+        <div class="fact"><b>${esc(l.contracted)}</b><span>contracted</span></div>
+        <div class="fact"><b>${l.sla} ms</b><span>SLA</span></div>
+        <div class="fact"><b>${l.lead}d</b><span>lead time</span></div>
+        <div class="fact"><b class="${ob != null && ob <= 0 ? "bad" : "warn"}">${ob == null ? "—" : ob <= 0 ? "now" : MONTHS[monthOf(ob)] + " · " + ob + "d"}</b><span>order by</span></div>
+      </div>
+      <p class="why">${f
+        ? `This circuit reaches a limit by <b>${f.kind}</b> first, in <b>${f.days} days</b>. ${ob <= 0
+            ? `The carrier wants ${l.lead} days, so <b>the order is already late</b>.`
+            : `Subtracting the carrier's ${l.lead} days, the order leaves in ${ob}.`}`
+        : "Neither the bandwidth nor the latency reaches its limit inside the horizon."}</p>
+    </div>
+    <div class="grid2">
+      ${one(l.bw, "Bandwidth", `against ${l.contracted} contracted`, "contracted")}
+      ${one(l.rtt, "Latency", `against the ${l.sla} ms SLA`, "the SLA")}
+    </div>
+    <p class="lede" style="margin-top:12px">A WAN link runs out two ways, and they are not the same
+      conversation: bandwidth is an upgrade you buy, latency against the SLA is a call you make to the
+      carrier. The page gives both their own axis rather than folding them into one score.</p>`;
 }
 
-function chips() {
-  const n = visible().length, parts = [];
-  if (filter.month != null) parts.push(`<button class="chip" data-clear="month">order in <b>${MONTHS[filter.month]}</b> ✕</button>`);
-  if (filter.site) parts.push(`<button class="chip" data-clear="site">at <b>${esc(filter.site)}</b> ✕</button>`);
-  return `<span>${n} of ${DATA.rows.length} shown</span>${parts.join("")}`;
+// ---------------------------------------------------------------- level 3b/4: the device
+const colourOf = (p) => {
+  if (!p.up) return p.shut ? "#12141c" : "#272c3c";
+  if (!p.f || p.f.mid == null) return "#5a6378";
+  return p.f.mid < 30 ? "var(--bad)" : p.f.mid < 90 ? "var(--warn)" : "var(--cyan)";
+};
+function plate(d) {
+  const PW = 17, PH = 20, GAP = 3, GROUP = 10, COLS = 24;
+  const W = 40 + COLS * (PW + GAP) + 3 * GROUP + 92, H = 2 * (PH + 7) + 34;
+  const px = (i) => 34 + i * (PW + GAP) + Math.floor(i / 6) * GROUP;
+  const ports = d.ports.slice(0, 48).map((p, k) => {
+    const row = k % 2, x = px(Math.floor(k / 2)), y = 22 + row * (PH + 7), on = view.port === p.n;
+    return `<g class="pick" data-port="${p.n}">
+      <rect x="${x}" y="${y}" width="${PW}" height="${PH}" rx="2.5" fill="${colourOf(p)}"
+        stroke="${on ? "#fff" : p.up ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.1)"}" stroke-width="${on ? 1.8 : 1}"/>
+      <rect x="${x + 3}" y="${y + PH - 5}" width="${PW - 6}" height="2.5" rx="1.2" fill="rgba(0,0,0,.42)"/>
+      ${p.up ? `<circle cx="${x + PW - 3.5}" cy="${y + 3.5}" r="1.7" fill="var(--good)"/>` : ""}
+      <title>${esc(p.name)} · ${p.up ? (p.f && p.f.mid != null ? `limit in ${p.f.mid} d` : "no date") : p.shut ? "shut or empty" : "enabled, not up"}</title></g>`;
+  }).join("");
+  const uplinks = d.ports.slice(48).map((p, k) => {
+    const x = 34 + COLS * (PW + GAP) + 3 * GROUP + 16 + k * 18, on = view.port === p.n;
+    return `<g class="pick" data-port="${p.n}"><rect x="${x}" y="22" width="15" height="${2 * PH + 7}" rx="2.5"
+      fill="${colourOf(p)}" stroke="${on ? "#fff" : "rgba(255,255,255,.28)"}" stroke-width="${on ? 1.8 : 1}"/>
+      <title>${esc(p.name)} · 10 Gb/s</title></g>`;
+  }).join("");
+  const nums = Array.from({ length: 12 }, (_, i) => `<text class="ax" x="${px(i * 2) + PW}" y="16" text-anchor="middle">${i * 4 + 1}</text>`).join("");
+  return `<div class="plate">
+    <div class="badge"><b>${esc(d.name)}</b><span>${esc(d.model)}</span><span class="leds"><i></i><i style="background:var(--cyan);box-shadow:0 0 6px var(--cyan)"></i></span></div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="front panel of ${esc(d.name)}">
+      <rect x="8" y="14" width="${W - 16}" height="${H - 20}" rx="6" fill="rgba(0,0,0,.28)" stroke="rgba(255,255,255,.07)"/>
+      ${nums}${ports}${uplinks}
+      <text class="ax" x="${34 + COLS * (PW + GAP) + 3 * GROUP + 16}" y="16">UPLINK</text></svg></div>`;
+}
+function devView(d) {
+  const p = d.ports.find((x) => x.n === view.port);
+  const live = d.ports.filter((x) => x.f && x.f.mid != null).sort((a, b) => a.f.mid - b.f.mid);
+  const items = [
+    live[0] ? { label: live[0].name, days: live[0].f.mid, col: "var(--cyan)" } : null,
+    d.cpu.f && d.cpu.f.mid != null ? { label: "CPU", days: d.cpu.f.mid, col: "var(--violet)" } : null,
+    d.mem.f && d.mem.f.mid != null ? { label: "memory", days: d.mem.f.mid, col: "var(--violet)" } : null,
+  ].filter(Boolean).sort((a, b) => a.days - b.days);
+  const side = !p ? `<p class="empty">Click a port on the panel.</p>`
+    : !p.up ? `<h2>${esc(p.name)}</h2><p class="empty">${p.shut ? "Shut by an operator, or no module." : "Enabled and not up: nothing passing, nothing to forecast."}</p>`
+    : `<h2>${esc(p.name)}<span>${p.speed >= 10000 ? "10 Gb/s" : "1 Gb/s"} · the port</span></h2>
+       <div class="facts">
+         <div class="fact"><b>${Math.round(p.hist.slice(-1)[0])}%</b><span>last peak</span></div>
+         <div class="fact"><b>${p.f ? Math.round(p.f.at(90)) + "%" : "—"}</b><span>in 90 days</span></div>
+         <div class="fact"><b class="${p.f && p.f.mid != null ? (p.f.mid < 30 ? "bad" : "warn") : ""}">${p.f && p.f.mid != null ? p.f.mid + "d" : "—"}</b><span>to the limit</span></div>
+       </div>${cone(p, 320, 140, "the port")}
+       <p class="why">${p.f && p.f.mid != null
+         ? `Crosses the port's own speed in <b>${p.f.mid} days</b>, band between ${p.f.lo} and ${p.f.hi}, at ${p.f.slope.toFixed(2)} points a day.`
+         : "Climbing too slowly to reach the port's speed inside the horizon."}</p>`;
+  return `<div class="cols">
+    <div>
+      <div class="card">${plate(d)}
+        <div class="legend">
+          <span><i style="background:var(--bad)"></i>under 30 days</span>
+          <span><i style="background:var(--warn)"></i>30 to 90</span>
+          <span><i style="background:var(--cyan)"></i>90 to 180</span>
+          <span><i style="background:#5a6378"></i>up, no date</span>
+          <span><i style="background:#272c3c;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)"></i>down, enabled</span>
+          <span><i style="background:#12141c;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)"></i>shut or empty</span>
+        </div></div>
+      <div class="card" style="margin-top:13px"><h2>The device itself<span>processor and memory, against 100%</span></h2>
+        <div class="grid2">
+          <div><div class="facts" style="margin-bottom:5px">
+            <div class="fact"><b>${Math.round(d.cpu.hist.slice(-1)[0])}%</b><span>CPU now</span></div>
+            <div class="fact"><b class="${d.cpu.f && d.cpu.f.mid != null ? "warn" : ""}">${d.cpu.f && d.cpu.f.mid != null ? d.cpu.f.mid + "d" : "no date"}</b><span>to 100%</span></div>
+          </div>${cone(d.cpu, 300, 110, "100%")}</div>
+          <div><div class="facts" style="margin-bottom:5px">
+            <div class="fact"><b>${Math.round(d.mem.hist.slice(-1)[0])}%</b><span>memory now</span></div>
+            <div class="fact"><b class="${d.mem.f && d.mem.f.mid != null ? "warn" : ""}">${d.mem.f && d.mem.f.mid != null ? d.mem.f.mid + "d" : "no date"}</b><span>to 100%</span></div>
+          </div>${cone(d.mem, 300, 110, "100%")}</div>
+        </div>
+        ${items.length ? `<div class="rail">${items.map((i, k) => `<div class="r${k === 0 ? " first" : ""}">
+          <span>${esc(i.label)}</span><div class="t"><i style="width:${Math.min(100, (1 - i.days / HZ) * 100).toFixed(0)}%;background:${i.col}"></i></div>
+          <b>${i.days}d</b></div>`).join("")}</div>` : ""}
+      </div>
+    </div>
+    <div class="card">${side}</div></div>`;
 }
 
+// ---------------------------------------------------------------- shell
 function render() {
-  const ds = dated(DATA.rows), late = ds.filter((r) => orderBy(r) <= 0).length;
-  document.getElementById("lede").innerHTML = DATA.real
-    ? 'Nothing here can be forecast yet, and the page says so rather than drawing an empty frame: <b>sixteen days of counter</b>, traffic arriving in spikes rather than trends, and no circuit stating a contracted bandwidth to measure against.'
-    : `${ds.length} of ${DATA.rows.length} things are predicted to reach a limit someone else stated. Each date below is <b>when the order has to leave</b>, not when the link fills — the carrier's lead time is already subtracted.${late ? ` <em>${late} of them are already late.</em>` : ""}`;
-  document.getElementById("hz-n").textContent = `${ds.length} to order`;
-  document.getElementById("orderwave").innerHTML = orderwave(DATA.rows);
-  document.getElementById("chain").innerHTML = chainChart(DATA.rows);
-  document.getElementById("slack").innerHTML = slackChart(DATA.slack);
-  document.getElementById("filter").innerHTML = chips();
-  document.getElementById("list").innerHTML = list(visible());
-  document.getElementById("detail").innerHTML = detail(DATA.rows.find((r) => r.id === picked));
-  document.getElementById("inline").innerHTML = inlineMocks();
+  const crumbs = [`<button data-go="estate">Estate</button>`];
+  let title = "Capacity ahead", kicker = "Prototype · Ahead", lede = "", body = "";
+  if (view.at === "estate") {
+    const subs = subjects(), late = subs.filter((s) => orderBy(s) <= 0).length;
+    lede = `${subs.length} things are measured against a limit someone else stated, and every date below is <b>when the order has to leave</b>, not when the thing fills.${late ? ` <em>${late} are already late.</em>` : ""} Start here, open a site, then the link or the box inside it.`;
+    body = estate();
+  } else if (view.at === "site") {
+    crumbs.push(`<i>›</i><b>${esc(view.site)}</b>`);
+    title = view.site; kicker = "Site";
+    lede = "The whole path at this site, in the order it will give. The WAN contract, the uplinks that carry it and the processors behind them.";
+    body = siteView(view.site);
+  } else if (view.at === "link") {
+    const l = LINKS.find((x) => x.id === view.link);
+    crumbs.push(`<i>›</i><button data-site="${esc(l.site)}">${esc(l.site)}</button>`, `<i>›</i><b>WAN · ${esc(l.carrier)}</b>`);
+    title = `WAN · ${l.carrier} ${l.contracted}`; kicker = "WAN link";
+    lede = `${l.site} · ${l.role} circuit.`;
+    body = linkView(l);
+  } else if (view.at === "device") {
+    const d = DEVICES.find((x) => x.id === view.dev);
+    crumbs.push(`<i>›</i><button data-site="${esc(d.site)}">${esc(d.site)}</button>`, `<i>›</i><b>${esc(d.name)}</b>`);
+    title = d.name; kicker = "Device";
+    lede = "The front panel as the device reports it. The colour on a live port is how long its forecast gives it — not how full it is today.";
+    body = devView(d);
+  }
+  document.getElementById("crumbs").innerHTML = crumbs.join(" ");
+  document.getElementById("kicker").textContent = kicker;
+  document.getElementById("title").textContent = title;
+  document.getElementById("lede").innerHTML = lede;
+  document.getElementById("body").innerHTML = body;
+  window.scrollTo(0, 0);
 }
 document.addEventListener("click", (e) => {
-  const m = e.target.closest("[data-month]"), s = e.target.closest("[data-site]"),
-        row = e.target.closest("[data-id]"), cl = e.target.closest("[data-clear]");
-  if (cl) { filter[cl.dataset.clear] = null; return render(); }
-  if (m) { const v = Number(m.dataset.month); filter.month = filter.month === v ? null : v; return render(); }
-  if (s) { filter.site = filter.site === s.dataset.site ? null : s.dataset.site; return render(); }
-  if (row) { const v = Number(row.dataset.id); picked = picked === v ? null : v; return render(); }
+  const go = e.target.closest("[data-go]"), s = e.target.closest("[data-site]"),
+        l = e.target.closest("[data-link]"), d = e.target.closest("[data-dev]"), p = e.target.closest("[data-port]");
+  if (p) { const v = Number(p.dataset.port); view.port = view.port === v ? null : v; return render(); }
+  if (go) { view = { at: "estate", site: null, link: null, dev: null, port: null }; return render(); }
+  if (s) { view = { at: "site", site: s.dataset.site, link: null, dev: null, port: null }; return render(); }
+  if (l) { const li = LINKS.find((x) => x.id === Number(l.dataset.link)); view = { at: "link", site: li.site, link: li.id, dev: null, port: null }; return render(); }
+  if (d) { const dv = DEVICES.find((x) => x.id === Number(d.dataset.dev)); view = { at: "device", site: dv.site, link: null, dev: dv.id, port: null }; return render(); }
 });
-document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
-  document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-  DATA = b.dataset.env === "real" ? REAL : DEMO; filter = { month: null, site: null }; picked = null; render();
-}));
 render();
 </script>
 </body>

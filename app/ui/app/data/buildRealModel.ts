@@ -336,7 +336,15 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     // the role: the customer's tag, the naming convention when it matched, else what the device says it is
     const described = DESCR_ROLES.find(([re]) => re.test(`${d.device_type ?? ""} ${d.description ?? ""}`))?.[1];
     const role = tag(d, "device_role") ?? (derived.matched || !described ? derived.role : described);
-    if (!siteTags.has(site) && tagSite) siteTags.set(site, d);
+    // A site-level tag is a fact about the site, and any device standing there may state it. Reading
+    // them off one representative device meant that tagging part of a fleet — which is what anyone
+    // does, a configuration at a time — left the site with whichever half the loop happened to meet
+    // first. The record a site is read from is the merge of its devices', first value wins per key.
+    if (tagSite) {
+      const merged = siteTags.get(site) ?? {};
+      for (const k of Object.keys(d)) if (k.startsWith("primary_tags.") && merged[k] == null && d[k] != null && d[k] !== "") merged[k] = d[k];
+      siteTags.set(site, merged);
+    }
     const cidr = tag(d, "site_cidr");
     if (cidr) { const set = siteCidrs.get(site) ?? new Set<string>(); cidr.split(/[,;\s]+/).filter(Boolean).forEach((c) => set.add(c)); siteCidrs.set(site, set); }
     const hint = siteHints.get(site) ?? { cities: [] };
@@ -904,10 +912,14 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     for (const [k, v] of Object.entries(d)) {
       if (!k.startsWith("primary_tags.") || v == null || v === "") continue;
       const value = String(Array.isArray(v) ? v[0] : v);
+      // one spelling: geo.lat and geo_lat are the same tag, and listing both offered the hierarchy
+      // picker two levels of the same thing — one with nine values, one with the single device that
+      // had already been renamed
+      const key = `primary_tags.${k.slice(13).replace(/\./g, "_")}`;
       const perSite = tagVotes.get(code) ?? new Map<string, Map<string, number>>();
-      const perKey = perSite.get(k) ?? new Map<string, number>();
+      const perKey = perSite.get(key) ?? new Map<string, number>();
       perKey.set(value, (perKey.get(value) ?? 0) + 1);
-      perSite.set(k, perKey); tagVotes.set(code, perSite);
+      perSite.set(key, perKey); tagVotes.set(code, perSite);
     }
   }
   tagVotes.forEach((perSite, code) => {

@@ -906,6 +906,7 @@
 .vz-port--up { background: var(--lm-good-fill); }
 .vz-port--down { background: var(--lm-bad-fill); }
 .vz-port--off { background: color-mix(in srgb, var(--lm-ink) 38%, transparent); }
+.sh-rejected { display: block; margin-top: 6px; color: var(--lm-ink-3); opacity: .85; }
 /* Why a device carries the status it carries: the first thing the panel says, one line per reason. */
 .vz-why { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .vz-why li { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 8px; font-size: 13px; line-height: 1.45; color: var(--lm-ink-hi); }

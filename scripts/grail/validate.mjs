@@ -375,6 +375,25 @@ check("Flat retransmissions stated as counter-evidence", !fS.app?.rising && fS.f
     exact(m2) === exact(model) && exact(model) > 0,
     `${exact(model)} sites placed exactly with underscores, ${exact(m2)} with dots`);
 }
+// The display name of a site is primary_tags.site_name, and like every other site-level tag it is a
+// fact about the site: tagging part of a fleet, a configuration at a time, used to leave the site
+// reading whichever half the loop met first.
+{
+  const withName = R.devices.filter((d) => d["primary_tags.site"]);
+  const target = withName[withName.length - 1];
+  if (target) {
+    const only = R.devices.map((d) => {
+      const o = { ...d };
+      delete o["primary_tags.site_name"];
+      return d === target ? { ...o, "primary_tags.site_name": "Named By One Device" } : o;
+    });
+    const m2 = buildRealModel({ ...R, devices: only }, "simulated-grail");
+    const code = m2.devices.find((x) => x.name === target.name)?.site;
+    check("A site takes its name from any device that states it",
+      m2.sites[code]?.name === "Named By One Device",
+      `${code} reads "${m2.sites[code]?.name}" from the last of ${withName.length} tagged devices`);
+  } else check("A site takes its name from any device that states it", false, "no tagged device in the fixture");
+}
 // NetFlow: exporters place traffic at sites, site_cidr places the far end, findings are measurements
 const fm = model.flowMap;
 const dc1 = Object.values(model.sites).find((s) => s.dc && fm?.sites[s.code]?.fanIn.length);
