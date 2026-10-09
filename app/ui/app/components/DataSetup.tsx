@@ -1,6 +1,7 @@
 // Settings content: what each page of the app reads, how to send each kind of data to Dynatrace,
 // and the configuration the app itself needs. Status per data type comes from the app's own queries.
 import React from "react";
+import { getAppName, getAppVersion } from "@dynatrace-sdk/app-environment";
 import { Accordion, CodeSnippet, HealthIndicator } from "@dynatrace/strato-components/content";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Select, TextInput } from "@dynatrace/strato-components/forms";
@@ -415,9 +416,18 @@ export function ExtensionsSection({ model }: { model: NetworkModel | null }) {
 }
 
 export function AppConfigSection() {
+  // The version of the build actually running, from the platform, not from a file the bundle carries:
+  // confirming which version a tenant holds took a deploy log and a guess, and the one place a reader
+  // would look for it had everything about the app except its name and number.
+  let name = "NetO11y", version = "unknown";
+  try { name = getAppName() || name; version = getAppVersion() || version; } catch { /* outside the platform shell */ }
   return (
       <section className="ds-block" aria-labelledby="ds-app">
         <Heading level={5} id="ds-app">App configuration</Heading>
+        <div>
+          <Text textStyle="base-emphasized">{name}</Text>
+          <Text textStyle="small">Version <code className="ds-code">{version}</code> · this is the build answering right now, as the platform reports it.</Text>
+        </div>
         <div>
           <Text textStyle="base-emphasized">Permissions the app requests</Text>
           <Text textStyle="small">An administrator accepts them when installing the app. Users also need the matching storage and Dynatrace Assist permissions in their policies.</Text>
