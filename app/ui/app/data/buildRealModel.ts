@@ -286,6 +286,15 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   }
   const devices = new Map<string, Device>();
   const siteTags = new Map<string, Rec>();
+  /**
+   * Every address range tagged at a site, from every device that carries one.
+   *
+   * This used to read site_cidr off one device per site — whichever happened to be seen first with a
+   * site tag — so tagging a single router per site, which is what anyone would do, silently did
+   * nothing unless that router was the one the loop met first. A range is a fact about the site; any
+   * device standing at it may state it, and two devices stating different ranges both count.
+   */
+  const siteCidrs = new Map<string, Set<string>>();
   // what each site is known by, beyond its code: the city in sysLocation and the UF in the device name
   const siteHints = new Map<string, { cities: string[]; uf?: string; country?: string; dc?: boolean }>();
   for (const [name, d] of byName) {
@@ -303,6 +312,8 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     const described = DESCR_ROLES.find(([re]) => re.test(`${d.device_type ?? ""} ${d.description ?? ""}`))?.[1];
     const role = tag(d, "device_role") ?? (derived.matched || !described ? derived.role : described);
     if (!siteTags.has(site) && tagSite) siteTags.set(site, d);
+    const cidr = tag(d, "site_cidr");
+    if (cidr) { const set = siteCidrs.get(site) ?? new Set<string>(); cidr.split(/[,;\s]+/).filter(Boolean).forEach((c) => set.add(c)); siteCidrs.set(site, set); }
     const hint = siteHints.get(site) ?? { cities: [] };
     if (loc) hint.cities.push(loc.city);
     hint.uf ??= derived.uf ?? tag(d, "federativeunit") ?? tag(d, "state") ?? tag(d, "uf") ?? undefined;
@@ -942,7 +953,7 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   // site_cidr tag, or the /24 of a device at that site. A looser match (the /16 of a corporate range)
   // would spread one site's users over a whole region, so it is not attempted.
   const addressing = buildAddressing(
-    [...siteTags].map(([site, rec]) => ({ site, cidr: tag(rec, "site_cidr") ?? "" })),
+    [...siteCidrs].map(([site, set]) => ({ site, cidr: [...set].join(" ") })),
     devList.map((d) => ({ site: d.site, ips: [d.ip, ...(d.ips ?? [])].filter(Boolean) })),
   );
   const users = buildUsers(L, addressing, unmappedAlerts);

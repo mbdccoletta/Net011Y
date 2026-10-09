@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ahead · NetO11y prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* NetO11y's own dark tokens, so the prototype is judged in the app's clothes. */
+:root{
+  --bg:#141419; --surface:#111122; --surface-2:#212135;
+  --ink-hi:#ffffff; --ink:#e2e8f0; --ink-3:#b9c0cd; --muted:#8a90a0;
+  --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.16);
+  --good:#00bb7b; --warn:#d7b43b; --bad:#c82d40; --neutral:#7c7f9e;
+  --accent:#6366f1; --cyan:#06b6d4; --violet:#8b5cf6;
+  --band:color-mix(in srgb, var(--accent) 22%, var(--neutral));
+  --sans:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 14px/1.5 var(--sans);
+  padding:28px 16px 72px}
+.wrap{max-width:1180px;margin:0 auto}
+
+h1{font:700 26px/1.2 var(--sans);margin:0 0 6px;color:var(--ink-hi);text-wrap:balance}
+.lede{color:var(--ink-3);margin:0 0 4px;max-width:70ch}
+.proto{display:inline-block;font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);border:1px solid var(--line-2);border-radius:999px;padding:2px 9px;margin-bottom:14px}
+
+/* the one sentence the page exists to produce */
+.verdict{border:1px solid var(--line-2);border-radius:12px;padding:16px 18px;margin:18px 0 22px;
+  background:var(--surface)}
+.verdict b{color:var(--ink-hi);font-weight:600}
+.verdict .big{display:block;font:600 19px/1.35 var(--sans);color:var(--ink-hi);margin-bottom:4px;text-wrap:balance}
+.verdict .sub{color:var(--ink-3);font-size:13px}
+
+.switcher{display:flex;gap:8px;align-items:center;margin:0 0 20px;flex-wrap:wrap}
+.switcher span{font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-right:4px}
+.switcher button{font:500 12px var(--sans);color:var(--ink);background:none;cursor:pointer;
+  border:1px solid var(--line);border-radius:8px;padding:5px 11px}
+.switcher button[aria-pressed="true"]{border-color:var(--line-2);color:var(--ink-hi);box-shadow:inset 0 -2px 0 var(--accent)}
+.switcher button:hover{border-color:var(--line-2)}
+
+section{margin:0 0 26px}
+.head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin:0 0 10px;flex-wrap:wrap}
+.head h2{font:600 15px var(--sans);color:var(--ink-hi);margin:0}
+.head .right{font:400 12px var(--mono);color:var(--muted)}
+
+table{width:100%;border-collapse:collapse}
+th{font:600 11px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+  text-align:left;padding:0 10px 7px;border-bottom:1px solid var(--line);white-space:nowrap}
+th.n,td.n{text-align:right}
+td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+tbody tr:hover{background:color-mix(in srgb,var(--ink-hi) 3%,transparent)}
+.subject{display:grid;gap:1px;min-width:0}
+.subject b{font:600 13px var(--mono);color:var(--ink-hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.subject i{font-style:normal;font-size:11.5px;color:var(--muted)}
+.limit{font:500 12px var(--mono);color:var(--ink-3);white-space:nowrap}
+.num{font:600 14px var(--mono);color:var(--ink-hi);font-variant-numeric:tabular-nums;white-space:nowrap}
+.num small{display:block;font:400 11px var(--sans);color:var(--muted)}
+.when{font:600 13px var(--sans);color:var(--ink-hi);white-space:nowrap}
+.when i{display:block;font-style:normal;font:400 11.5px var(--mono);color:var(--muted)}
+.when.soon{color:var(--warn)}
+.none{color:var(--muted);font-weight:400}
+
+/* the evidence: 27 daily peaks and the band the forecast allows */
+.spark{display:block}
+
+.why{border:1px dashed var(--line-2);border-radius:12px;padding:16px 18px;color:var(--ink-3);background:none}
+.why b{color:var(--ink-hi);font-weight:600}
+.why ul{margin:10px 0 0;padding-left:18px}
+.why li{margin:4px 0}
+
+.foot{margin-top:34px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px;max-width:78ch}
+.foot b{color:var(--ink-3);font-weight:600}
+.foot code{font:500 12px var(--mono);color:var(--ink-3)}
+.foot p{margin:0 0 9px}
+
+@media (max-width:760px){
+  th.hide,td.hide{display:none}
+  body{padding:20px 16px 60px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="proto">Prototype · not wired to the app</span>
+  <h1>Ahead</h1>
+  <p class="lede">One question: <b>what runs out, and when.</b> Every limit on this page is stated by
+    something other than the app — the speed the port reports, the bandwidth the contract names, the
+    hundred per cent of a processor. The app supplies no threshold of its own and raises no status here:
+    it reports dates, and every date is a range.</p>
+
+  <div class="switcher" role="group" aria-label="Which environment to show">
+    <span>Showing</span>
+    <button type="button" data-env="real" aria-pressed="true">This environment (eob, real data)</button>
+    <button type="button" data-env="demo" aria-pressed="false">An environment with trends</button>
+  </div>
+
+  <div class="verdict" id="verdict"></div>
+
+  <section id="s-runs">
+    <div class="head">
+      <h2>Runs out</h2>
+      <span class="right">soonest first · the limit is the device's own, never the app's</span>
+    </div>
+    <div id="runs"></div>
+  </section>
+
+  <section id="s-turn">
+    <div class="head">
+      <h2>Changed its mind</h2>
+      <span class="right">what the last week says against what the month said</span>
+    </div>
+    <div id="turn"></div>
+  </section>
+
+  <section id="s-blind">
+    <div class="head">
+      <h2>Cannot be forecast yet</h2>
+      <span class="right">counted, not hidden</span>
+    </div>
+    <div id="blind"></div>
+  </section>
+
+  <div class="foot">
+    <p><b>Where the forecast comes from.</b> Not from a regression written here — that would be the app
+      inventing the judgement it refuses to make everywhere else. It asks the platform's own forecast
+      analyzer, <code>dt.statistics.forecast</code>. Checked on eob today: the endpoint answers
+      <code>403 · davis:analyzers:read</code>, so it exists and the app simply lacks the scope. One line
+      in <code>app.config.json</code>, approved at install.</p>
+    <p><b>What it costs.</b> Nothing beyond what is already paid for. Every series this page reads is a
+      metric, and Grail bills logs, events and sessions — not metrics. The rest of the app spends 14 to
+      32 GB of scan per load on this environment; this page can look back thirty days for none of it.</p>
+    <p><b>What the dates are not.</b> A single day. The analyzer returns a band, and the page shows the
+      band: "between 14 Feb and 2 Apr". A row whose band is wider than the horizon says so instead of
+      naming a day nobody should plan against.</p>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------- the data
+// REAL: 27 daily peaks of interface utilisation, pulled from eob today (metric
+// queries, no log scan). The nulls are real too: the counters only go back 16 days.
+const REAL_PORTS = [
+  {name:"10.175.96.36",site:"DC TIVIT Transamerica",port:"Ethernet1/31",speed:10000,util:[null,null,null,null,null,null,null,null,null,null,null,null,3.5,5.4,5.7,6.4,4.4,1.8,6.1,7.6,7.4,12.2,49.5,45.6,2.4,1.9,8.8,1.4]},
+  {name:"10.175.96.35",site:"DC TIVIT Transamerica",port:"Ethernet1/31",speed:10000,util:[null,null,null,null,null,null,null,null,null,null,null,null,2.7,11.1,10.8,10.4,12,4.4,15.2,10.6,11.8,10,33.3,37.9,8.3,4,12,7.4]},
+  {name:"10.172.13.5",site:"LEM",port:"Gi1/1/2",speed:1000,util:[null,null,null,null,null,null,null,null,null,null,null,null,0.5,0.3,1.4,1.2,1.8,0.6,2.2,2.6,2.4,1.8,1.6,3,2.2,1.9,13.8,7.2]},
+  {name:"10.174.53.2",site:"Rio Grande",port:"Te3/1/1",speed:1000,util:[null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,0,0,0,1.5,9.8,9.9,9.5,9.1,9.4,8.8,1.4,5.5,0]},
+  {name:"10.175.96.36",site:"DC TIVIT Transamerica",port:"port-channel15",speed:50000,util:[null,null,null,null,null,null,null,null,null,null,null,null,0.3,0.8,1.3,1.2,1,1.1,1.4,1,1.1,4.4,9.2,10.5,0.9,0.3,1.1,0.7]},
+  {name:"10.174.53.9",site:"Rio Grande",port:"Gi1/0/18",speed:100,util:[null,null,null,null,null,null,null,null,null,null,null,null,1.7,1.3,3.3,3.2,2.9,1.1,3.7,3.6,3.4,7.5,6.7,4.9,4.9,0.6,3.4,1.9]},
+];
+const REAL_FACTS = {ports:6910, d7:5794, d21:2412, maxDays:27, realDays:16, circuits:0, tagged:0};
+
+// DEMO: the same page where the series do trend. Shapes are plausible, not pulled.
+const ramp = (from,to,n,noise)=>Array.from({length:n},(_,i)=>{
+  const t=i/(n-1), v=from+(to-from)*t;
+  return Math.max(0,+(v+Math.sin(i*1.7)*noise+((i%7===5||i%7===6)?-noise*1.6:0)).toFixed(1));
+});
+const DEMO_RUNS = [
+  {name:"br-rs-rgr-rtr-001",site:"Rio Grande",port:"WAN · Vivo MPLS 100 Mb",kind:"circuit",speed:100,
+   limitText:"100 Mb/s contracted",util:ramp(41,78,30,3),from:"14 Feb",to:"2 Apr",days:30},
+  {name:"br-sp-dct1-spn-001",site:"DC TIVIT Transamerica",port:"port-channel1",kind:"port",speed:10000,
+   limitText:"10 Gb/s · the port's own",util:ramp(52,83,30,4),from:"26 Feb",to:"19 Mar",days:30},
+  {name:"br-mt-ron1-swi-045",site:"Rondonópolis",port:"Te1/1/1",kind:"port",speed:1000,
+   limitText:"1 Gb/s · the port's own",util:ramp(38,71,30,5),from:"11 Apr",to:"6 Jun",days:30},
+  {name:"br-ba-lem1-fwc-001",site:"LEM",port:"CPU",kind:"cpu",speed:100,
+   limitText:"100% · the processor",util:ramp(44,69,30,4),from:"3 May",to:"—",days:30,wide:true},
+];
+const DEMO_TURN = [
+  {name:"br-pi-uru1-swa-003",site:"Urucuí",port:"Gi1/0/24",was:"18 months",now:"7 weeks",
+   why:"flat for three weeks, then 6 points a day since the 2nd",util:[8,9,8,9,8,9,8,9,10,9,8,9,9,8,9,10,9,8,22,29,36,41,49,55,61,68,74,80,86,92]},
+  {name:"br-sp-dct1-fwc-001",site:"DC TIVIT Transamerica",port:"WAN · Claro 200 Mb",was:"5 weeks",now:"no date",
+   why:"the climb stopped on the 6th and gave back nine points",util:[44,47,51,54,58,61,65,68,72,75,78,81,84,86,88,89,90,88,86,84,82,81,80,80,79,80,79,80,80,79]},
+];
+
+// ---------------------------------------------------------------- drawing
+const esc = (s)=>String(s).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+
+/** 27 daily peaks: the history solid, the forecast band behind it. */
+function spark(util, limitPct, band){
+  const W=168,H=34,pad=2;
+  const pts = util.map((v,i)=>({v,i}));
+  const known = pts.filter(p=>p.v!=null);
+  if(!known.length) return "";
+  const max = Math.max(limitPct??0, ...known.map(p=>p.v), 1);
+  const x = (i)=>pad+(i/(util.length-1))*(W-pad*2);
+  const y = (v)=>H-pad-(v/max)*(H-pad*2);
+  let d="", open=false;
+  for(const p of pts){ if(p.v==null){open=false;continue;} d += (open?"L":"M")+x(p.i).toFixed(1)+","+y(p.v).toFixed(1)+" "; open=true; }
+  const limitLine = limitPct!=null
+    ? `<line x1="${pad}" y1="${y(limitPct).toFixed(1)}" x2="${W-pad}" y2="${y(limitPct).toFixed(1)}" stroke="var(--bad)" stroke-width="1" stroke-dasharray="3 3" opacity=".65"/>` : "";
+  const bandRect = band
+    ? `<rect x="${x(band[0]).toFixed(1)}" y="${pad}" width="${(x(band[1])-x(band[0])).toFixed(1)}" height="${H-pad*2}" fill="var(--band)" opacity=".22"/>` : "";
+  const gap = known.length < util.length
+    ? `<rect x="${pad}" y="${pad}" width="${(x(util.length-known.length-1)-pad).toFixed(1)}" height="${H-pad*2}" fill="var(--ink-hi)" opacity=".04"/>` : "";
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="daily peak, last ${util.length} days">
+    ${gap}${bandRect}${limitLine}
+    <path d="${d}" fill="none" stroke="var(--band)" stroke-width="1.6" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+function runsTable(rows){
+  if(!rows.length) return "";
+  return `<table><thead><tr>
+    <th>What</th><th class="hide">Its limit</th><th class="n">Peak now</th>
+    <th class="n hide">Climbing</th><th>Meets its limit</th><th class="hide">Last 30 days</th>
+  </tr></thead><tbody>${rows.map((r)=>{
+    const last = r.util.filter(v=>v!=null).slice(-1)[0];
+    const per = ((r.util.at(-1)-r.util.find(v=>v!=null))/r.days).toFixed(1);
+    return `<tr>
+      <td><div class="subject"><b>${esc(r.port)}</b><i>${esc(r.site)} · ${esc(r.name)}</i></div></td>
+      <td class="hide limit">${esc(r.limitText)}</td>
+      <td class="n"><span class="num">${last}%</span></td>
+      <td class="n hide"><span class="num">+${per}<small>points a day</small></span></td>
+      <td><span class="when ${r.wide?"":"soon"}">${r.wide?"no date yet":esc(r.from)+" – "+esc(r.to)}
+        <i>${r.wide?"the band is wider than the horizon":r.days+" days of history"}</i></span></td>
+      <td class="hide">${spark(r.util, 100, [Math.round(r.util.length*0.78), r.util.length-1])}</td>
+    </tr>`;
+  }).join("")}</tbody></table>`;
+}
+
+function turnTable(rows){
+  if(!rows.length) return "";
+  return `<table><thead><tr>
+    <th>What</th><th>Said last month</th><th>Says this week</th><th class="hide">Why it turned</th><th class="hide">Last 30 days</th>
+  </tr></thead><tbody>${rows.map((r)=>`<tr>
+    <td><div class="subject"><b>${esc(r.port)}</b><i>${esc(r.site)} · ${esc(r.name)}</i></div></td>
+    <td><span class="num">${esc(r.was)}</span></td>
+    <td><span class="when ${r.now==="no date"?"":"soon"}">${esc(r.now)}</span></td>
+    <td class="hide limit">${esc(r.why)}</td>
+    <td class="hide">${spark(r.util, 100, null)}</td>
+  </tr>`).join("")}</tbody></table>`;
+}
+
+function render(env){
+  const real = env === "real";
+  const v = document.getElementById("verdict");
+  const F = REAL_FACTS;
+
+  if(real){
+    v.innerHTML = `<span class="big">Nothing in this environment is on course to meet a limit.</span>
+      <span class="sub">Not a clean bill of health — a short record. The counters here reach back
+      <b>${F.realDays} days</b>, the busiest port peaked once at 49% and sits under 12% the rest of the time,
+      and no circuit carries a contracted bandwidth the app could measure against.</span>`;
+    document.getElementById("runs").innerHTML =
+      `<div class="why"><b>No row qualifies.</b> A row appears here when a measured series, a limit someone
+       else stated, and enough history agree on a date. Today the third is missing and the second is
+       missing for every WAN link.</div>`;
+    document.getElementById("turn").innerHTML =
+      `<div class="why"><b>Nothing has turned.</b> This block compares the forecast made from the last
+       seven days against the one made from the last thirty. With ${F.realDays} days on record there is no
+       month to compare against yet — it starts answering at thirty.</div>`;
+    document.getElementById("blind").innerHTML =
+      `<div class="why"><b>${F.ports.toLocaleString("en-US")} ports, ${F.circuits} circuits, and what stands between them and a date:</b>
+       <ul>
+         <li><b>${(F.ports-F.d7).toLocaleString("en-US")} ports</b> have fewer than seven days of record — the extension
+           started polling them after that.</li>
+         <li><b>${(F.d7-F.d21).toLocaleString("en-US")} ports</b> have between seven and twenty-one days: enough to draw,
+           not enough to extrapolate without a band wider than the answer.</li>
+         <li><b>${F.d21.toLocaleString("en-US")} ports</b> have twenty-one days or more. Of those, none is within reach
+           of its own speed: the traffic is spiky — two busy days in a fortnight — rather than growing.</li>
+         <li><b>Every WAN link.</b> No ICMP monitor carries a <code>bandwidth_mbps</code> tag, so no circuit
+           states a limit and none can run out of one.</li>
+       </ul>
+       <p style="margin:12px 0 0">Each of these is a sentence the page can keep saying until it changes.
+       None of them is a reason to show an empty screen.</p></div>`;
+    document.querySelectorAll("#s-runs .right, #s-turn .right").forEach(e=>e.textContent="");
+  } else {
+    v.innerHTML = `<span class="big">Three links and eleven ports meet their limit within ninety days; two of them serve a data centre.</span>
+      <span class="sub">The nearest is <b>Rio Grande ↔ São Paulo</b>, a 100 Mb/s MPLS circuit at 78% of
+      contract, between <b>14 Feb and 2 Apr</b>. That line is a budget request with a date on it.</span>`;
+    document.getElementById("runs").innerHTML = runsTable(DEMO_RUNS);
+    document.getElementById("turn").innerHTML = turnTable(DEMO_TURN);
+    document.getElementById("blind").innerHTML =
+      `<div class="why"><b>412 ports and 2 circuits have no date, and the reason is theirs:</b>
+       <ul>
+         <li><b>318 ports</b> report no speed, so nothing states the limit they would meet.</li>
+         <li><b>86 ports</b> have under twenty-one days of record.</li>
+         <li><b>8 ports</b> sit flat: the band the analyzer returns spans more than the horizon.</li>
+         <li><b>2 circuits</b> have no <code>bandwidth_mbps</code> tag.</li>
+       </ul></div>`;
+    document.querySelector("#s-runs .right").textContent = "soonest first · the limit is the device's own, never the app's";
+    document.querySelector("#s-turn .right").textContent = "what the last week says against what the month said";
+  }
+}
+
+document.querySelectorAll(".switcher button").forEach((b)=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll(".switcher button").forEach(x=>x.setAttribute("aria-pressed", String(x===b)));
+    render(b.dataset.env);
+  });
+});
+render("real");
+</script>
+</body>
+</html>

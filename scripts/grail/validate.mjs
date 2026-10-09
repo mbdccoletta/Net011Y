@@ -325,6 +325,20 @@ check("Flat retransmissions stated as counter-evidence", !fS.app?.rising && fS.f
     search.includes(d.name) && search.includes(d.ip) && /contains\(log\.source/.test(search) && /contains\(content/.test(search),
     search.split("\n")[1]?.slice(0, 110));
 }
+// site_cidr is a fact about the site, and any device standing at it may state it. The app used to
+// read the tag off whichever device it met first with a site tag, so tagging one router per site —
+// the obvious thing to do — did nothing unless that router happened to be the one it met.
+{
+  const site = Object.keys(model.sites).find((c) => model.devices.filter((d) => d.site === c).length > 2);
+  const at = R.devices.filter((d) => model.devices.find((x) => x.name === d.name)?.site === site);
+  if (at.length > 2) {
+    const tagged = R.devices.map((d) => (d === at[at.length - 1] ? { ...d, "primary_tags.site_cidr": "198.51.100.0/24" } : d));
+    const m2 = buildRealModel({ ...R, devices: tagged }, "simulated-grail");
+    check("A range tagged on any device at a site counts for that site",
+      (m2.flowMap?.subnetsTagged ?? 0) > (model.flowMap?.subnetsTagged ?? 0),
+      `${site}: tagged the last of ${at.length} devices · ${model.flowMap?.subnetsTagged} -> ${m2.flowMap?.subnetsTagged} ranges`);
+  } else check("A range tagged on any device at a site counts for that site", false, "no site with three devices in the fixture");
+}
 // NetFlow: exporters place traffic at sites, site_cidr places the far end, findings are measurements
 const fm = model.flowMap;
 const dc1 = Object.values(model.sites).find((s) => s.dc && fm?.sites[s.code]?.fanIn.length);
