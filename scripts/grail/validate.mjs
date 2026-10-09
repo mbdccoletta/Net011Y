@@ -359,6 +359,22 @@ check("Flat retransmissions stated as counter-evidence", !fS.app?.rising && fS.f
       `${one}: ${before} devices before, ${after} after bending one sysLocation · ${Object.keys(model.sites).length} -> ${Object.keys(m2.sites).length} sites`);
   } else check("One site tag is one site, whatever each device's sysLocation says", false, "no tagged site with three devices in the fixture");
 }
+// The separator inside a primary tag key is whatever the person who typed it chose. The reference
+// configuration writes geo_lat; one environment had written geo.lat, and the coordinates of nine
+// sites read as absent while the exact position sat in the record under a full stop.
+{
+  const dotted = R.devices.map((d) => {
+    const o = { ...d };
+    // only the key, never the primary_tags. prefix, which carries an underscore of its own
+    for (const k of Object.keys(o)) if (k.startsWith("primary_tags.") && k.slice(13).includes("_")) { o[`primary_tags.${k.slice(13).replace(/_/g, ".")}`] = o[k]; delete o[k]; }
+    return o;
+  });
+  const m2 = buildRealModel({ ...R, devices: dotted }, "simulated-grail");
+  const exact = (m) => Object.values(m.sites).filter((s) => s.lat != null && !s.approx).length;
+  check("A primary tag reads the same with a dot or an underscore",
+    exact(m2) === exact(model) && exact(model) > 0,
+    `${exact(model)} sites placed exactly with underscores, ${exact(m2)} with dots`);
+}
 // NetFlow: exporters place traffic at sites, site_cidr places the far end, findings are measurements
 const fm = model.flowMap;
 const dc1 = Object.values(model.sites).find((s) => s.dc && fm?.sites[s.code]?.fanIn.length);

@@ -16,9 +16,16 @@ export type QueryResults = Partial<Record<string, Rec[]>>;
 const num = (v: unknown): number | null => (v == null || v === "" || Number.isNaN(Number(v)) ? null : Number(v));
 const clean = (a: unknown): number[] => (Array.isArray(a) ? a.filter((v) => v != null).map(Number) : []);
 const round = (v: number, d = 1) => Math.round(v * 10 ** d) / 10 ** d;
-/** A primary Grail tag (primary_tags.<key>) on a record, or null when the source does not send it. */
+/**
+ * A primary Grail tag (primary_tags.<key>) on a record, or null when the source does not send it.
+ *
+ * The separator inside a key is whatever the person who typed it chose. This app's own reference
+ * configuration writes geo_lat; one environment had written geo.lat, so the coordinates of nine sites
+ * were read as absent and the map placed every one of them approximately, from the city name, while
+ * the exact position sat in the record under a full stop. Both spellings are the same tag.
+ */
 const tag = (r: Rec | undefined, key: string): string | null => {
-  const v = r?.[`primary_tags.${key}`];
+  const v = r?.[`primary_tags.${key}`] ?? (key.includes("_") ? r?.[`primary_tags.${key.replace(/_/g, ".")}`] : undefined);
   const x = Array.isArray(v) ? v[0] : v;
   return x == null || x === "" ? null : String(x);
 };
