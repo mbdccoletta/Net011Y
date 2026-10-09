@@ -221,29 +221,35 @@ const UF_CITY = [
   ["MA", "Imperatriz", "IMP"], ["TO", "Palmas", "PMW"], ["TO", "Gurupi", "GUR"], ["PA", "Paragominas", "PGM"],
   ["PA", "Santarém", "STM"], ["RO", "Vilhena", "VLH"], ["RO", "Ji-Paraná", "JPR"], ["CE", "Sobral", "SOB"],
   ["PE", "Petrolina", "PTL"], ["RN", "Mossoró", "MSS"], ["ES", "Linhares", "LIN"], ["PB", "Campina Grande", "CPV"],
+  ["AL", "Arapiraca", "ARP"], ["SE", "Itabaiana", "ITB"], ["AM", "Itacoatiara", "ITC"], ["AC", "Cruzeiro do Sul", "CZS"],
+  ["RR", "Rorainópolis", "RRP"], ["AP", "Santana", "STN"], ["DF", "Taguatinga", "TGA"], ["RJ", "Campos", "CMP"],
 ];
 const CARRIER = ["Vivo", "Claro", "Oi", "TIM"];
 const PLAN = [["20 Mb/s", 60], ["30 Mb/s", 60], ["50 Mb/s", 60], ["100 Mb/s", 75]];
 const MODEL = ["Catalyst 9200 · 48P-4G", "Catalyst 9300 · 48T-4X", "Catalyst 9300 · 48U-4X"];
 
-UF_CITY.forEach(([uf, city, code], k) => {
-  const seed = 131 + k * 7, r = rnd(seed);
-  SITE_DEFS.push([city, uf, seed]);
+// A branch network has several sites per town, numbered. Six sites proved nothing; forty-eight
+// proved the picture composes; this is the size at which individual marks stop separating, which
+// is the only size worth designing against.
+const PER_TOWN = 6;
+for (let b = 0; b < PER_TOWN; b++) UF_CITY.forEach(([uf, city, code], j) => {
+  const k = b * UF_CITY.length + j, seed = 131 + k * 7, r = rnd(seed);
+  const name = b === 0 ? city : `${city} ${b + 1}`;
+  SITE_DEFS.push([name, uf, seed]);
   const [plan, lead] = PLAN[Math.floor(r() * 4)], sla = [40, 45, 50, 60, 80][Math.floor(r() * 5)];
-  // a circuit that climbs, one that sits still, and one that is quietly giving bandwidth back
-  const mood = r(), bwNow = 34 + r() * 44, climb = mood < 0.46 ? 4 + r() * 26 : (mood < 0.78 ? r() * 3 : -(2 + r() * 9));
-  const rtNow = 40 + r() * 34, rtClimb = r() < 0.3 ? 5 + r() * 22 : (r() - 0.6) * 6;
-  LINK_DEFS.push([city, CARRIER[Math.floor(r() * 4)], "primary", plan, lead, sla,
+  const mood = r(), bwNow = 34 + r() * 44, climb = mood < 0.42 ? 4 + r() * 26 : (mood < 0.78 ? r() * 3 : -(2 + r() * 9));
+  const rtNow = 40 + r() * 34, rtClimb = r() < 0.28 ? 5 + r() * 22 : (r() - 0.6) * 6;
+  LINK_DEFS.push([name, CARRIER[Math.floor(r() * 4)], "primary", plan, lead, sla,
     +(bwNow - climb).toFixed(1), +bwNow.toFixed(1), +(rtNow - rtClimb).toFixed(1), +rtNow.toFixed(1)]);
-  // A processor that climbs is the exception, not the rule, and an uplink that climbs enough to
-  // reach its line rate inside six months is rarer still. Anything that only wobbles has no date,
-  // and having no date is the normal state of a healthy thing.
-  const cm = r(), cNow = 28 + r() * 40, cUp = cm < 0.22 ? 6 + r() * 30 : (cm < 0.7 ? r() * 2.5 : -(1 + r() * 7));
-  const pm = r(), pNow = 24 + r() * 52, pUp = pm < 0.3 ? 5 + r() * 34 : (pm < 0.74 ? r() * 3 : -(2 + r() * 8));
-  DEVICES.push(makeDevice(DEVICES.length, `BR-${uf}-${code}-SWA-0${10 + (k % 80)}`, city,
+  // A processor that climbs is the exception, and an uplink that reaches its line rate inside six
+  // months is rarer still. Anything that only wobbles has no date, which is the normal state.
+  const cm = r(), cNow = 28 + r() * 40, cUp = cm < 0.2 ? 6 + r() * 30 : (cm < 0.7 ? r() * 2.5 : -(1 + r() * 7));
+  const pm = r(), pNow = 24 + r() * 52, pUp = pm < 0.26 ? 5 + r() * 34 : (pm < 0.74 ? r() * 3 : -(2 + r() * 8));
+  DEVICES.push(makeDevice(DEVICES.length, `BR-${uf}-${code}${b ? b + 1 : ""}-SWA-0${10 + (k % 80)}`, name,
     MODEL[Math.floor(r() * 3)], seed * 3 + 1, 49 + Math.floor(r() * 4),
     { cFrom: +(cNow - cUp).toFixed(1), cTo: +cNow.toFixed(1), pFrom: +(pNow - pUp).toFixed(1), pTo: +pNow.toFixed(1) }));
 });
+const UF_OF = new Map(SITE_DEFS.map(([n, u]) => [n, u]));
 
 const LINKS = LINK_DEFS.map(([site, carrier, role, contracted, lead, sla, bwFrom, bwTo, rtFrom, rtTo], i) => {
   const bw = series(bwFrom, bwTo, 30, 2.1, rnd(i * 17 + 3));
@@ -251,6 +257,7 @@ const LINKS = LINK_DEFS.map(([site, carrier, role, contracted, lead, sla, bwFrom
   return { id: i, site, carrier, role, contracted, lead, sla,
     bw: { hist: bw, f: fit(bw) }, rtt: { hist: rt, f: fit(rt) } };
 });
+
 // the first of a link's two ways out
 const linkFirst = (l) => {
   const a = l.bw.f && l.bw.f.mid, b = l.rtt.f && l.rtt.f.mid;
@@ -274,7 +281,7 @@ function subjects() {
 const KINDC = { link: "var(--warn)", port: "var(--cyan)", device: "var(--violet)" };
 const orderBy = (s) => s.days - s.lead;
 
-let view = { at: "network", site: null, link: null, dev: null, port: null };
+let view = { at: "network", uf: null, site: null, link: null, dev: null, port: null };
 
 // ---------------------------------------------------------------- drawing
 function cone(o, W, H, limitLabel) {
@@ -326,153 +333,239 @@ function spark(o, w, h) {
 }
 
 /**
- * The top level IS the forecast, drawn once — and it has to survive the real estate.
+ * The top level IS the forecast, and it has to survive a network of any size.
  *
- * Sixteen trajectories compose as a shape. Six thousand are mud, and no amount of thinning saves
- * a picture that draws one line per measured thing. Three rules keep this readable at any size,
- * and none of them is a drawing trick:
+ * Four rules do the work, and none of them is a drawing trick.
  *
  *   1. A thing with no date is not a line. Most series do not trend — traffic is spiky, a
- *      processor sits where it sits — so the straight line through them never reaches the limit.
- *      Here that is 58 subjects out of 196. The other 138 are a sentence, not ink.
- *   2. One line per site, not per subject, because a site is what the next level is. A site's
- *      line is the first thing to give there; the rest of its list is one level down.
- *   3. Past the first few, sites stop being individuals and become an envelope — the span every
- *      remaining trajectory lies inside, narrowing as each one drops out at its own crossing.
+ *      processor sits where it sits — so the line through them never reaches the limit. Here
+ *      that is 340 subjects out of 1,228. The rest are a sentence, counted in the open, because
+ *      a thing the screen stops reporting is a thing the reader will take for fine.
  *
- * What never thins is the limit line itself: every dated site keeps its dot on it, so the reader
- * sees the whole distribution of dates even where the lines have merged. And the sites with
- * nothing on course are counted in the open, because a thing this screen stops reporting is a
- * thing the reader will assume is fine.
+ *   2. One line per unit, never per subject, and the unit is whatever the next level down is.
+ *      A unit's line is the first thing to give inside it.
+ *
+ *   3. The unit changes with the size of the network. Up to two dozen, a unit is a site. Past
+ *      that, it is the federative unit — the tier the customer already tags, Country ›
+ *      federativeunit › site — which caps the top screen at twenty-seven lines no matter whether
+ *      there are three hundred sites or three thousand, and the sites reappear one level down.
+ *
+ *   4. Past the first six, units stop being individuals and become an envelope: the span every
+ *      remaining trajectory lies inside, narrowing as each drops out at its own crossing.
+ *
+ * Two things are drawn per-mark until the marks stop separating, then per-count: the crossings on
+ * the limit line, and the order lane beneath the axis. A smear of four hundred ticks says less
+ * than a bar that says forty. The lane in particular is better as a count — "how much work falls
+ * in this fortnight" is the question a planner actually has.
  */
-function netView() {
-  const dated = subjects().filter((s) => s.o.f && s.days != null);
-  let measured = LINKS.length * 2;
-  DEVICES.forEach((d) => { measured += 1; if (d.ports.some((p) => p.uplink && p.hist)) measured += 1; });
+const GROUP_AT = 24, NAMED = 6;
 
-  const bySite = new Map();
-  dated.forEach((s) => { const c = bySite.get(s.site); if (!c || s.days < c.days) bySite.set(s.site, s); });
-  const perSite = [...bySite.values()].sort((a, b) => a.days - b.days);
-  const countAt = (name) => dated.filter((s) => s.site === name).length;
-  const quiet = SITE_DEFS.length - perSite.length;
+/**
+ * Grouping by "the soonest thing inside" stops discriminating as groups grow: the minimum of
+ * eleven sites is always early, so every federative unit lands inside two months and the screen
+ * says everything is urgent everywhere, which is the same as saying nothing. At the site tier the
+ * date is the whole story; at the tier above it the question is where the work piles up. So a unit
+ * still draws the trajectory of its soonest subject — that is a real curve belonging to a real
+ * thing — but the units are ranked by how many orders are late and how many land inside sixty
+ * days, and only the date breaks the tie.
+ */
+function unitsFor(dated, mode) {
+  const key = mode === "uf" ? (s) => UF_OF.get(s.site) ?? "—" : (s) => s.site;
+  const by = new Map();
+  dated.forEach((s) => {
+    const k = key(s), u = by.get(k);
+    if (!u) by.set(k, { key: k, first: s, count: 1, late: 0, soon: 0, sites: new Set([s.site]) });
+    const v = by.get(k);
+    if (u) { v.count++; v.sites.add(s.site); if (s.days < v.first.days) v.first = s; }
+    if (orderBy(s) <= 0) v.late++;
+    if (s.days <= 60) v.soon++;
+  });
+  const units = [...by.values()].map((u) => ({ ...u, sites: u.sites.size, days: u.first.days,
+    kind: u.first.kind, o: u.first.o, lead: u.first.lead }));
+  return mode === "uf"
+    ? units.sort((a, b) => b.late - a.late || b.soon - a.soon || a.days - b.days)
+    : units.sort((a, b) => a.days - b.days);
+}
 
-  const NAMED = 6, lead = perSite.slice(0, NAMED), rest = perSite.slice(NAMED);
-  const W = 780, H = 348, L = 42, AX = H - 56, TOP = 14;
+/** the whole picture for one tier of units, at any count */
+function tierChart(units, dated, measured, quiet, scopeWord) {
+  const W = 780, H = 372, L = 42, AX = 292, TOP = 14;
   const tx = L + (30 / 210) * (W - L - 14);
   const X = (d) => { const c = Math.min(HZ, Math.max(-30, d)); return c <= 0 ? L + ((c + 30) / 30) * (tx - L) : tx + (c / HZ) * (W - 14 - tx); };
   const peak = 128, Y = (v) => AX - (Math.min(Math.max(v, 0), peak) / peak) * (AX - TOP);
+  const lead = units.slice(0, NAMED), rest = units.slice(NAMED);
   const late = dated.filter((s) => orderBy(s) <= 0).length;
 
   const months = MONTHS.map((mo, m) => `<g>
       <line x1="${X(m * 30).toFixed(1)}" y1="${AX}" x2="${X(m * 30).toFixed(1)}" y2="${AX + 4}" stroke="var(--line-2)"/>
       <text class="ax" x="${X(m * 30 + 15).toFixed(1)}" y="${AX + 15}" text-anchor="middle">${mo}</text></g>`).join("");
 
-  // the sites past the named few, as the span they all lie inside
-  let envelope = "", envTag = "";
+  let envelope = "";
   if (rest.length) {
-    const far = rest[rest.length - 1].days, top = [], bot = [];
+    const far = Math.max(...rest.map((u) => u.days)), top = [], bot = [];
     for (let k = 0; k <= 32; k++) {
-      const t = (k / 32) * far, live = rest.filter((s) => s.days >= t);
+      const t = (k / 32) * far, live = rest.filter((u) => u.days >= t);
       if (!live.length) break;
-      const vs = live.map((s) => s.o.f.at(t));
+      const vs = live.map((u) => u.o.f.at(t));
       top.push(`${X(t).toFixed(1)},${Y(Math.max(...vs)).toFixed(1)}`);
       bot.push(`${X(t).toFixed(1)},${Y(Math.min(...vs)).toFixed(1)}`);
     }
     envelope = `<polygon points="${top.concat([...bot].reverse()).join(" ")}" fill="var(--ink-3)" opacity=".055"/>
       <polyline points="${top.join(" ")}" fill="none" stroke="var(--ink-3)" stroke-width="1" opacity=".3" stroke-dasharray="2 3"/>
       <polyline points="${bot.join(" ")}" fill="none" stroke="var(--ink-3)" stroke-width="1" opacity=".3" stroke-dasharray="2 3"/>`;
-    const mid = rest[Math.floor(rest.length / 2)];
-    envTag = `<text class="ax" x="${X(mid.days).toFixed(1)}" y="${(Y(100) + 17).toFixed(1)}" text-anchor="middle">${rest.length} more sites · ${rest[0].days}–${far}d</text>`;
   }
 
-  const trails = lead.map((s, i) => {
-    const f = s.o.f, c = KINDC[s.kind], first = i === 0;
-    const hist = s.o.hist.map((v, k) => `${X(-30 + (k / (s.o.hist.length - 1)) * 30).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
-    const proj = Array.from({ length: 13 }, (_, k) => { const t = (k / 12) * s.days; return `${X(t).toFixed(1)},${Y(f.at(t)).toFixed(1)}`; }).join(" ");
+  const trails = lead.map((u, i) => {
+    const f = u.o.f, c = KINDC[u.kind], first = i === 0;
+    const hist = u.o.hist.map((v, k) => `${X(-30 + (k / (u.o.hist.length - 1)) * 30).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+    const proj = Array.from({ length: 13 }, (_, k) => { const t = (k / 12) * u.days; return `${X(t).toFixed(1)},${Y(f.at(t)).toFixed(1)}`; }).join(" ");
     const band = first ? `<polygon opacity=".14" fill="${c}" points="${
-      Array.from({ length: 13 }, (_, k) => { const t = (k / 12) * s.days; return `${X(t).toFixed(1)},${Y(f.at(t) + f.band(t)).toFixed(1)}`; })
-        .concat(Array.from({ length: 13 }, (_, k) => { const t = ((12 - k) / 12) * s.days; return `${X(t).toFixed(1)},${Y(Math.max(0, f.at(t) - f.band(t))).toFixed(1)}`; })).join(" ")}"/>` : "";
-    return `${band}<g class="trail" data-site="${esc(s.site)}" opacity="${first ? 1 : 0.62}">
+      Array.from({ length: 13 }, (_, k) => { const t = (k / 12) * u.days; return `${X(t).toFixed(1)},${Y(f.at(t) + f.band(t)).toFixed(1)}`; })
+        .concat(Array.from({ length: 13 }, (_, k) => { const t = ((12 - k) / 12) * u.days; return `${X(t).toFixed(1)},${Y(Math.max(0, f.at(t) - f.band(t))).toFixed(1)}`; })).join(" ")}"/>` : "";
+    return `${band}<g class="trail" data-unit="${esc(u.key)}" opacity="${first ? 1 : 0.62}">
       <polyline points="${proj}" fill="none" stroke="transparent" stroke-width="11"/>
       <polyline points="${hist}" fill="none" stroke="transparent" stroke-width="11"/>
       <polyline points="${hist}" fill="none" stroke="${c}" stroke-width="${first ? 2.4 : 1.6}" stroke-linejoin="round"/>
       <polyline points="${proj}" fill="none" stroke="${c}" stroke-width="${first ? 2.4 : 1.6}" stroke-dasharray="5 4"/>
       <line x1="${X(f.lo).toFixed(1)}" y1="${Y(100).toFixed(1)}" x2="${X(f.hi).toFixed(1)}" y2="${Y(100).toFixed(1)}"
         stroke="${c}" stroke-width="3.5" stroke-linecap="round" opacity=".3"/>
-      <title>${esc(s.site)} — ${esc(s.name)} reaches its limit in ${s.days} days, between ${f.lo} and ${f.hi}</title></g>`;
+      <title>${esc(u.key)} — ${esc(u.first.name)} at ${esc(u.first.site)} reaches its limit in ${u.days} days, between ${f.lo} and ${f.hi}</title></g>`;
   }).join("");
 
-  // every dated site keeps its dot, named or not: the limit line carries the whole distribution
-  const dots = perSite.map((s, i) => `<circle class="dot" data-site="${esc(s.site)}"
-      cx="${X(s.days).toFixed(1)}" cy="${Y(100).toFixed(1)}" r="${i === 0 ? 4.6 : i < NAMED ? 3.6 : 2.6}"
-      fill="${KINDC[s.kind]}" stroke="var(--bg)" stroke-width="1" opacity="${i < NAMED ? 1 : 0.75}"
-      ><title>${esc(s.site)} — ${esc(s.name)} in ${s.days} days</title></circle>`).join("");
+  // crossings: a dot each while dots still separate, a count per fortnight once they do not
+  const DOTS_UNTIL = 40;
+  const crossings = units.length <= DOTS_UNTIL
+    ? units.map((u, i) => `<circle class="dot" data-unit="${esc(u.key)}"
+        cx="${X(u.days).toFixed(1)}" cy="${Y(100).toFixed(1)}" r="${i === 0 ? 4.6 : i < NAMED ? 3.6 : 2.6}"
+        fill="${KINDC[u.kind]}" stroke="var(--bg)" stroke-width="1" opacity="${i < NAMED ? 1 : 0.75}"
+        ><title>${esc(u.key)} in ${u.days} days</title></circle>`).join("")
+    : histo(units, (u) => u.days, X, Y(100), -1, 26, (n) => `${n} ${scopeWord} reach a limit here`);
 
-  // Exactly one name on the chart: the nearest. Labelling the leading few only worked while they
-  // were spread out — at this size the first six sites land between 22 and 33 days, inside one
-  // inch of x, and four of the six labels had to be dropped for collision. A picture that names
-  // some of its lines and silently drops the others is worse than one that names one and means it.
-  const head = lead[0], hx = X(head.days), hFlip = hx > W - 190;
+  const head = units[0], hx = X(head.days), hFlip = hx > W - 190;
   const tags = `<line x1="${hx.toFixed(1)}" y1="${(Y(100) - 7).toFixed(1)}" x2="${hx.toFixed(1)}" y2="${(Y(100) - 20).toFixed(1)}"
       stroke="${KINDC[head.kind]}" stroke-width="1" opacity=".55"/>
     <text class="tag" x="${(hFlip ? hx - 6 : hx + 6).toFixed(1)}" y="${(Y(100) - 24).toFixed(1)}"
-      text-anchor="${hFlip ? "end" : "start"}" fill="${KINDC[head.kind]}">${esc(head.site)} · ${head.days}d</text>
+      text-anchor="${hFlip ? "end" : "start"}" fill="${KINDC[head.kind]}">${esc(head.key)} · ${head.days}d</text>
     <text class="ax" x="${(hFlip ? hx - 6 : hx + 6).toFixed(1)}" y="${(Y(100) - 12).toFixed(1)}"
-      text-anchor="${hFlip ? "end" : "start"}">${esc(head.name)}</text>`;
+      text-anchor="${hFlip ? "end" : "start"}">${esc(head.first.name)}</text>`;
 
-  const LY = AX + 36;
-  const orders = dated.map((s) => {
-    const ob = orderBy(s), x = X(ob);
-    return `<line x1="${x.toFixed(1)}" y1="${LY - 7}" x2="${x.toFixed(1)}" y2="${LY + 7}"
-      stroke="${ob <= 0 ? "var(--bad)" : KINDC[s.kind]}" stroke-width="1.8" opacity="${ob <= 0 ? 0.9 : 0.5}"><title>${esc(s.site)} · ${esc(s.name)} — ${
-      ob <= 0 ? "the order is already late" : `order by ${MONTHS[monthOf(ob)]}, ${ob} days from now`}</title></line>`;
+  const LB = 352;
+  const onTime = dated.filter((s) => orderBy(s) > 0);
+  const orders = dated.length <= DOTS_UNTIL
+    ? dated.map((s) => { const ob = orderBy(s), x = X(ob);
+        return `<line x1="${x.toFixed(1)}" y1="${LB - 7}" x2="${x.toFixed(1)}" y2="${LB + 7}"
+          stroke="${ob <= 0 ? "var(--bad)" : KINDC[s.kind]}" stroke-width="1.8" opacity="${ob <= 0 ? 0.9 : 0.5}"
+          ><title>${esc(s.site)} · ${esc(s.name)} — ${ob <= 0 ? "the order is already late" : `order by ${MONTHS[monthOf(ob)]}`}</title></line>`; }).join("")
+    : histo(onTime, orderBy, X, LB, -1, 26, (n) => `${n} orders have to leave in this fortnight`);
+  const lateBar = dated.length > DOTS_UNTIL && late
+    ? `<rect x="${(L + 1).toFixed(1)}" y="${(LB - 26).toFixed(1)}" width="${(tx - L - 4).toFixed(1)}" height="26" rx="2"
+        fill="var(--bad)" opacity=".2"/>
+       <text class="axb" x="${((L + tx) / 2).toFixed(1)}" y="${(LB - 9).toFixed(1)}" text-anchor="middle" fill="var(--bad)">${late} late</text>` : "";
+
+  return `<svg id="all" viewBox="0 0 ${W} ${H}" role="img" aria-label="one forecast per ${scopeWord.replace(/s$/, "")}, against each subject's own limit">
+      <line x1="${L}" y1="${Y(100).toFixed(1)}" x2="${W - 14}" y2="${Y(100).toFixed(1)}" stroke="var(--bad)" stroke-dasharray="3 4" opacity=".8"/>
+      <text class="ax" x="${L - 6}" y="${(Y(100) + 4).toFixed(1)}" text-anchor="end" fill="var(--bad)">LIMIT</text>
+      <text class="ax" x="${L - 6}" y="${(Y(50) + 4).toFixed(1)}" text-anchor="end">50%</text>
+      <line x1="${L}" y1="${AX}" x2="${W - 14}" y2="${AX}" stroke="var(--line-2)"/>
+      <line x1="${tx.toFixed(1)}" y1="${TOP - 6}" x2="${tx.toFixed(1)}" y2="${LB + 7}" stroke="var(--line-2)"/>
+      <text class="ax" x="${(tx - 5).toFixed(1)}" y="${TOP - 2}" text-anchor="end">TODAY</text>
+      ${months}${envelope}${trails}${crossings}${tags}
+      <text class="ax" x="${L - 6}" y="${LB + 4}" text-anchor="end">ORDER</text>
+      <line x1="${L}" y1="${LB}" x2="${W - 14}" y2="${LB}" stroke="var(--line-2)" opacity=".7"/>${lateBar}${orders}
+    </svg>`;
+}
+
+/** counts per fortnight, as bars rising from a baseline */
+function histo(items, dayOf, X, base, dir, maxH, tip) {
+  const BK = 15, n = Math.ceil(HZ / BK), bins = Array.from({ length: n }, () => []);
+  items.forEach((it) => { const d = dayOf(it); if (d > 0 && d <= HZ) bins[Math.min(n - 1, Math.floor(d / BK))].push(it); });
+  const top = Math.max(1, ...bins.map((b) => b.length)), w = X(BK) - X(0);
+  return bins.map((b, i) => {
+    if (!b.length) return "";
+    const h = (b.length / top) * maxH, x = X(i * BK) + 1, y = dir < 0 ? base - h : base;
+    const warm = b.filter((it) => (dayOf(it)) <= 60).length / b.length;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(2, w - 2).toFixed(1)}" height="${h.toFixed(1)}"
+      rx="1.5" fill="${warm > 0.5 ? "var(--warn)" : "var(--cyan)"}" opacity=".62"><title>${tip(b.length)}</title></rect>`;
   }).join("");
+}
 
+function unitTable(units, mode, ROWS) {
   const kindWord = { link: "the WAN contract", port: "an uplink", device: "a processor" };
-  const ROWS = 10, shown = perSite.slice(0, ROWS), hidden = perSite.slice(ROWS);
+  const shown = units.slice(0, ROWS), hidden = units.slice(ROWS);
+  const go = mode === "uf" ? "data-uf" : "data-site";
+  return `<div class="scroll"><table><thead><tr><th>${mode === "uf" ? "Federative unit" : "Site"}</th>
+      ${mode === "uf" ? `<th class="n">Late</th>` : ""}<th>What gives first</th><th>Shape of it</th><th class="n">Reaches it</th><th class="n">Order by</th><th class="n">Record</th></tr></thead><tbody>
+    ${shown.map((u) => {
+      const ob = orderBy(u.first), behind = u.count - 1;
+      return `<tr class="pick" data-unit="${esc(u.key)}" ${go}="${esc(u.key)}">
+        <td><span class="mono">${esc(u.key)}</span><span class="sub2">${mode === "uf"
+          ? `${u.sites} sites · ${u.count} with a date`
+          : behind ? `and ${behind} more behind it` : "one thing on course"}</span></td>
+        ${mode === "uf" ? `<td class="n"><span class="days${u.late ? " bad" : " none"}">${u.late || "—"}</span>
+          <span class="sub2">${u.soon} inside 60d</span></td>` : ""}
+        <td><span class="mono" style="font-size:12px"><i class="kind" style="background:${KINDC[u.kind]}"></i>${esc(kindWord[u.kind])}</span>
+            <span class="sub2">${esc(mode === "uf" ? `${u.first.site} · ${u.first.name}` : u.first.name)}</span></td>
+        <td>${spark(u.o, 96, 34)}</td>
+        <td class="n"><span class="days${u.days < 30 ? " bad" : ""}">${u.days}d</span><span class="sub2">${u.o.f.lo}–${u.o.f.hi}d</span></td>
+        <td class="n"><span class="days${ob <= 0 ? " bad" : ""}">${ob <= 0 ? "now" : MONTHS[monthOf(ob)]}</span><span class="sub2">${u.first.lead}-day lead</span></td>
+        <td class="n">${confBars(u.o.f.days)}</td></tr>`;
+    }).join("")}</tbody></table></div>
+    ${hidden.length ? `<p class="after">${hidden.length} more ${mode === "uf" ? "federative units" : "sites"} have a date,
+      reaching a limit between ${Math.min(...hidden.map((u) => u.days))} and ${Math.max(...hidden.map((u) => u.days))} days from now${
+      hidden.some((u) => u.late) ? `, and ${hidden.reduce((a, u) => a + u.late, 0)} of their orders are already late` : ""}.</p>` : ""}`;
+}
+
+function netView() {
+  const dated = subjects().filter((s) => s.o.f && s.days != null);
+  let measured = LINKS.length * 2;
+  DEVICES.forEach((d) => { measured += 1; if (d.ports.some((p) => p.uplink && p.hist)) measured += 1; });
+  const datedSites = new Set(dated.map((s) => s.site)).size;
+  const mode = datedSites > GROUP_AT ? "uf" : "site";
+  const units = unitsFor(dated, mode);
+  const quiet = SITE_DEFS.length - datedSites;
+  const word = mode === "uf" ? "federative units" : "sites";
 
   return `
     <div class="card" style="margin-bottom:13px">
       <h2>Every forecast on the network<span>${SITE_DEFS.length} sites · ${measured} measured · ${dated.length} with a date</span></h2>
-      <svg id="all" viewBox="0 0 ${W} ${H}" role="img" aria-label="one forecast per site, against each subject's own limit">
-        <line x1="${L}" y1="${Y(100).toFixed(1)}" x2="${W - 14}" y2="${Y(100).toFixed(1)}" stroke="var(--bad)" stroke-dasharray="3 4" opacity=".8"/>
-        <text class="ax" x="${L - 6}" y="${(Y(100) + 4).toFixed(1)}" text-anchor="end" fill="var(--bad)">LIMIT</text>
-        <text class="ax" x="${L - 6}" y="${(Y(50) + 4).toFixed(1)}" text-anchor="end">50%</text>
-        <line x1="${L}" y1="${AX}" x2="${W - 14}" y2="${AX}" stroke="var(--line-2)"/>
-        <line x1="${tx.toFixed(1)}" y1="${TOP - 6}" x2="${tx.toFixed(1)}" y2="${LY + 7}" stroke="var(--line-2)"/>
-        <text class="ax" x="${(tx - 5).toFixed(1)}" y="${TOP - 2}" text-anchor="end">TODAY</text>
-        ${months}${envelope}${trails}${dots}${envTag}${tags}
-        <text class="ax" x="${L - 6}" y="${LY + 4}" text-anchor="end">ORDER</text>
-        <line x1="${L}" y1="${LY}" x2="${W - 14}" y2="${LY}" stroke="var(--line-2)" opacity=".7"/>${orders}
-      </svg>
-      <figcaption><b>One line per site</b> — the first thing to give there. Solid is 30 days of record,
-        dashed is the line through it, and it stops at the dot where it reaches the limit its owner stated.
-        The ${NAMED} nearest are drawn and the nearest named; <b>the dotted span holds the other ${rest.length}</b>,
-        narrowing as each arrives. Every dated site keeps its dot either way. Below the axis, the same date
-        less the time to do the work: <b>a tick left of TODAY is already late</b>${late ? ` — ${late} of them` : ""}.
+      ${tierChart(units, dated, measured, quiet, word)}
+      <figcaption><b>One line per ${mode === "uf" ? "federative unit" : "site"}</b> — the first thing to give
+        inside it. Solid is 30 days of record, dashed is the line through it, and it stops at the dot where it
+        reaches the limit its owner stated. The ${NAMED} nearest are drawn and the nearest named;
+        <b>the dotted span holds the other ${Math.max(0, units.length - NAMED)}</b>, narrowing as each arrives.
+        Below the axis, the same dates less the time to do the work, counted by fortnight.
+        ${mode === "uf" ? `The six drawn are the six carrying the most work — the soonest thing inside a group of
+        a dozen sites is always early, so a date alone stops telling these apart.` : ""}
       </figcaption>
       <div class="legend"><span><i class="kind" style="background:var(--warn)"></i>WAN contract</span>
         <span><i class="kind" style="background:var(--cyan)"></i>uplink</span>
         <span><i class="kind" style="background:var(--violet)"></i>processor</span>
         <span>${measured - dated.length} of ${measured} measured subjects have no date: the line through their
-          record never reaches the limit${quiet ? `, which leaves ${quiet} sites with nothing on course` : ""}.</span></div>
+          record never reaches the limit${quiet ? `, which leaves ${quiet} of ${SITE_DEFS.length} sites with nothing on course` : ""}.
+          ${mode === "uf" ? `${datedSites} sites is past what one screen can name, so the unit here is the
+          federative unit — the tier already on every device as a tag. The sites are one level down.` : ""}</span></div>
     </div>
     <div class="card">
-      <h2>Sites<span>hover to pick one out of the chart · click to open it</span></h2>
-      <div class="scroll"><table><thead><tr><th>Site</th><th>What gives first</th><th>Shape of it</th><th class="n">Reaches it</th><th class="n">Order by</th><th class="n">Record</th></tr></thead><tbody>
-      ${shown.map((first) => {
-        const ob = orderBy(first), n = countAt(first.site) - 1;
-        return `<tr class="pick" data-site="${esc(first.site)}">
-          <td><span class="mono">${esc(first.site)}</span>${n ? `<span class="sub2">and ${n} more behind it</span>` : ""}</td>
-          <td><span class="mono" style="font-size:12px"><i class="kind" style="background:${KINDC[first.kind]}"></i>${esc(kindWord[first.kind])}</span>
-              <span class="sub2">${esc(first.name)}</span></td>
-          <td>${spark(first.o, 96, 34)}</td>
-          <td class="n"><span class="days${first.days < 30 ? " bad" : ""}">${first.days}d</span><span class="sub2">${first.o.f.lo}–${first.o.f.hi}d</span></td>
-          <td class="n"><span class="days${ob <= 0 ? " bad" : ""}">${ob <= 0 ? "now" : MONTHS[monthOf(ob)]}</span><span class="sub2">${first.lead}-day lead</span></td>
-          <td class="n">${confBars(first.o.f.days)}</td></tr>`;
-      }).join("")}</tbody></table></div>
-      ${hidden.length ? `<p class="after">${hidden.length} more sites have a date, the next in ${hidden[0].days} days and the last in ${hidden[hidden.length - 1].days}.
-        ${quiet ? `${quiet} sites have nothing on course at all — everything measured there is flat or falling.` : ""}</p>` : ""}
+      <h2>${mode === "uf" ? "Federative units" : "Sites"}<span>hover to pick one out of the chart · click to open it</span></h2>
+      ${unitTable(units, mode, 12)}
+    </div>`;
+}
+
+function ufView(uf) {
+  const dated = subjects().filter((s) => s.o.f && s.days != null && UF_OF.get(s.site) === uf);
+  const here = SITE_DEFS.filter(([, u]) => u === uf);
+  const units = unitsFor(dated, "site");
+  const quiet = here.length - units.length;
+  return `
+    <div class="card" style="margin-bottom:13px">
+      <h2>${esc(uf)}<span>${here.length} sites · ${dated.length} with a date</span></h2>
+      ${tierChart(units, dated, 0, quiet, "sites")}
+      <figcaption>The same picture, one tier down: <b>one line per site in ${esc(uf)}</b>, the first thing to
+        give there. ${quiet ? `${quiet} of the ${here.length} sites here have nothing on course.` : ""}</figcaption>
+    </div>
+    <div class="card">
+      <h2>Sites in ${esc(uf)}<span>hover to pick one out of the chart · click to open it</span></h2>
+      ${unitTable(units, "site", 14)}
     </div>`;
 }
 
@@ -624,6 +717,14 @@ function devView(d) {
 }
 
 // ---------------------------------------------------------------- shell
+/** the federative unit only earns a crumb when it is the tier the top screen draws */
+function ufCrumb(site) {
+  const dated = subjects().filter((s) => s.o.f && s.days != null);
+  if (new Set(dated.map((s) => s.site)).size <= GROUP_AT) return [];
+  const uf = UF_OF.get(site);
+  return uf ? [`<i>›</i><button data-uf="${esc(uf)}">${esc(uf)}</button>`] : [];
+}
+
 function render() {
   const crumbs = [`<button data-go="network">Network</button>`];
   let title = "Capacity ahead", kicker = "Prototype · Ahead", lede = "", body = "";
@@ -635,20 +736,25 @@ function render() {
       reach one: ${sites} of ${SITE_DEFS.length} sites have anything on course at all. The nearest is
       <b>${esc(nearest.site)}</b>, in ${nearest.days} days.${late ? ` <em>${late} of these orders should already have left.</em>` : ""}`;
     body = netView();
+  } else if (view.at === "uf") {
+    crumbs.push(`<i>›</i><b>${esc(view.uf)}</b>`);
+    title = view.uf; kicker = "Federative unit";
+    lede = "Every site tagged to this federative unit, read the same way as the network above it.";
+    body = ufView(view.uf);
   } else if (view.at === "site") {
-    crumbs.push(`<i>›</i><b>${esc(view.site)}</b>`);
+    crumbs.push(...ufCrumb(view.site), `<i>›</i><b>${esc(view.site)}</b>`);
     title = view.site; kicker = "Site";
     lede = "The whole path at this site, in the order it will give. The WAN contract, the uplinks that carry it and the processors behind them.";
     body = siteView(view.site);
   } else if (view.at === "link") {
     const l = LINKS.find((x) => x.id === view.link);
-    crumbs.push(`<i>›</i><button data-site="${esc(l.site)}">${esc(l.site)}</button>`, `<i>›</i><b>WAN · ${esc(l.carrier)}</b>`);
+    crumbs.push(...ufCrumb(l.site), `<i>›</i><button data-site="${esc(l.site)}">${esc(l.site)}</button>`, `<i>›</i><b>WAN · ${esc(l.carrier)}</b>`);
     title = `WAN · ${l.carrier} ${l.contracted}`; kicker = "WAN link";
     lede = `${l.site} · ${l.role} circuit.`;
     body = linkView(l);
   } else if (view.at === "device") {
     const d = DEVICES.find((x) => x.id === view.dev);
-    crumbs.push(`<i>›</i><button data-site="${esc(d.site)}">${esc(d.site)}</button>`, `<i>›</i><b>${esc(d.name)}</b>`);
+    crumbs.push(...ufCrumb(d.site), `<i>›</i><button data-site="${esc(d.site)}">${esc(d.site)}</button>`, `<i>›</i><b>${esc(d.name)}</b>`);
     title = d.name; kicker = "Device";
     lede = "The front panel as the device reports it. The colour on a live port is how long its forecast gives it — not how full it is today.";
     body = devView(d);
@@ -664,21 +770,30 @@ function render() {
 // not as sixteen things, so the row lends its site to the picture: the lines that belong to it stay,
 // the rest fall back far enough to read as context.
 document.addEventListener("mouseover", (e) => {
-  const row = e.target.closest("tr.pick[data-site]"), svg = document.getElementById("all");
+  const row = e.target.closest("tr.pick[data-unit]"), svg = document.getElementById("all");
   if (!svg) return;
-  const site = row ? row.dataset.site : null;
-  svg.classList.toggle("lit", !!site);
-  svg.querySelectorAll(".trail").forEach((t) => t.classList.toggle("on", t.dataset.site === site));
+  const unit = row ? row.dataset.unit : null;
+  svg.classList.toggle("lit", !!unit);
+  svg.querySelectorAll(".trail").forEach((t) => t.classList.toggle("on", t.dataset.unit === unit));
 });
 
+const AT = { at: "network", uf: null, site: null, link: null, dev: null, port: null };
 document.addEventListener("click", (e) => {
-  const go = e.target.closest("[data-go]"), s = e.target.closest("[data-site]"),
+  const go = e.target.closest("[data-go]"), u = e.target.closest("[data-uf]"), s = e.target.closest("[data-site]"),
         l = e.target.closest("[data-link]"), d = e.target.closest("[data-dev]"), p = e.target.closest("[data-port]");
   if (p) { const v = Number(p.dataset.port); view.port = view.port === v ? null : v; return render(); }
-  if (go) { view = { at: "network", site: null, link: null, dev: null, port: null }; return render(); }
-  if (s) { view = { at: "site", site: s.dataset.site, link: null, dev: null, port: null }; return render(); }
-  if (l) { const li = LINKS.find((x) => x.id === Number(l.dataset.link)); view = { at: "link", site: li.site, link: li.id, dev: null, port: null }; return render(); }
-  if (d) { const dv = DEVICES.find((x) => x.id === Number(d.dataset.dev)); view = { at: "device", site: dv.site, link: null, dev: dv.id, port: null }; return render(); }
+  if (go) { view = { ...AT }; return render(); }
+  // a trail carries whichever tier the chart is drawing, so it is a site name or a federative unit
+  const tr = e.target.closest(".trail,.dot");
+  if (tr) {
+    const k = tr.dataset.unit;
+    view = UF_OF.has(k) ? { ...AT, at: "site", uf: UF_OF.get(k), site: k } : { ...AT, at: "uf", uf: k };
+    return render();
+  }
+  if (u) { view = { ...AT, at: "uf", uf: u.dataset.uf }; return render(); }
+  if (s) { view = { ...AT, at: "site", uf: UF_OF.get(s.dataset.site) ?? null, site: s.dataset.site }; return render(); }
+  if (l) { const li = LINKS.find((x) => x.id === Number(l.dataset.link)); view = { ...AT, at: "link", uf: UF_OF.get(li.site) ?? null, site: li.site, link: li.id }; return render(); }
+  if (d) { const dv = DEVICES.find((x) => x.id === Number(d.dataset.dev)); view = { ...AT, at: "device", uf: UF_OF.get(dv.site) ?? null, site: dv.site, dev: dv.id }; return render(); }
 });
 render();
 </script>
