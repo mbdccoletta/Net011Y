@@ -884,6 +884,13 @@
 .sp-keys { margin: 0; padding: 9px 16px; display: flex; gap: 6px; align-items: center; font-size: 12px; border-top: 1px solid var(--dt-colors-border-neutral-default, #34344a); color: var(--dt-colors-text-neutral-subdued, #9a9cb8); }
 
 /* Traffic journey: the colour legend and the ranked paths */
+/* Ports in three states, the way an operator reads a switch: carrying traffic, meant to and not, shut. */
+.vz-ports b { display: inline-flex; align-items: center; gap: 4px; }
+.vz-port { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-left: 7px; }
+.vz-port:first-child { margin-left: 0; }
+.vz-port--up { background: var(--lm-good-fill); }
+.vz-port--down { background: var(--lm-bad-fill); }
+.vz-port--off { background: color-mix(in srgb, var(--lm-ink) 38%, transparent); }
 /* Why a device carries the status it carries: the first thing the panel says, one line per reason. */
 .vz-why { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .vz-why li { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 8px; font-size: 13px; line-height: 1.45; color: var(--lm-ink-hi); }

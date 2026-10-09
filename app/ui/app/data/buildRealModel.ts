@@ -718,18 +718,20 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
       const d = byDeviceName.get(String(n).toLowerCase());
       if (d) onDevice.set(d, onDevice.get(d));
     });
+    // a device the problem names itself, as against one reached only through the monitor that pings it
+    const named = new Set<Device>([...onDevice.keys()]);
     ids.forEach((id) => {
       const direct = byEntity.get(id);
-      if (direct) onDevice.set(direct, onDevice.get(direct));
+      if (direct) { onDevice.set(direct, onDevice.get(direct)); named.add(direct); }
       const viaIface = byInterface.get(id);
-      if (viaIface) onDevice.set(viaIface.device, viaIface.iface);
+      if (viaIface) { onDevice.set(viaIface.device, viaIface.iface); named.add(viaIface.device); }
       (devicesByMonitor.get(id) ?? []).forEach((d) => onDevice.set(d, onDevice.get(d)));
     });
     const onCircuits = new Set(ids.map((id) => circuitByMonitor.get(id)).filter((c): c is Circuit => !!c));
     if (!onDevice.size && !onCircuits.size) {
       unmappedAlerts.push({ ...base, scope: scopeOf(ids), entities: entityNames });
     }
-    onDevice.forEach((on, d) => { (d.problems ??= []).push({ ...base, ...(on ? { on } : {}), ...(rootId && rootId === d.id ? { rootCause: true } : {}) }); });
+    onDevice.forEach((on, d) => { (d.problems ??= []).push({ ...base, ...(on ? { on } : {}), ...(named.has(d) ? {} : { viaMonitor: true }), ...(rootId && rootId === d.id ? { rootCause: true } : {}) }); });
     onCircuits.forEach((c) => { (c.problems ??= []).push(base); });
   }
 
@@ -756,23 +758,24 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     const ifaceId = e["dt.smartscape.ext_network_interface"] ? String(e["dt.smartscape.ext_network_interface"]) : null;
 
     const hit = new Map<Device, string | undefined>();
+    const named = new Set<Device>();
     entitiesOf(e).names.forEach((n) => {
       const d = byDeviceName.get(String(n).toLowerCase());
-      if (d) hit.set(d, hit.get(d));
+      if (d) { hit.set(d, hit.get(d)); named.add(d); }
     });
     ids.forEach((x) => {
       const direct = byEntity.get(x);
-      if (direct) hit.set(direct, hit.get(direct));
+      if (direct) { hit.set(direct, hit.get(direct)); named.add(direct); }
       (devicesByMonitor.get(x) ?? []).forEach((d) => hit.set(d, hit.get(d)));
     });
-    if (ifaceId) { const via = byInterface.get(ifaceId); if (via) hit.set(via.device, via.iface); }
+    if (ifaceId) { const via = byInterface.get(ifaceId); if (via) { hit.set(via.device, via.iface); named.add(via.device); } }
     const onCircuits = new Set(ids.map((x) => circuitByMonitor.get(x)).filter((c): c is Circuit => !!c));
 
     if (!hit.size && !onCircuits.size) {
       unmappedAlerts.push({ ...alert, scope: scopeOf([...ids, ...(ifaceId ? [ifaceId] : [])]), entities: entitiesOf(e).names });
       continue;
     }
-    hit.forEach((on, d) => { (d.problems ??= []).push(on ? { ...alert, on } : alert); });
+    hit.forEach((on, d) => { (d.problems ??= []).push({ ...alert, ...(on ? { on } : {}), ...(named.has(d) ? {} : { viaMonitor: true }) }); });
     onCircuits.forEach((c) => { (c.problems ??= []).push(alert); });
   }
 

@@ -169,6 +169,13 @@ export interface DeviceProblem {
   /** Davis names this device as the root cause of the problem */
   rootCause?: boolean;
   /**
+   * The problem names the monitor that watches this device, not the device. It is a statement about
+   * the measurement — the ping stopped running — and the app reports it as that rather than as a fault
+   * of the target: one monitoring configuration covering forty-nine switches turned all of them red
+   * while every one of them was answering SNMP.
+   */
+  viaMonitor?: boolean;
+  /**
    * Why an alert is not on the map, when it is not:
    * "network" — it names a network entity (a monitor, a device, an interface) that this environment's
    *   inventory does not contain, so the app can see it but cannot place it;

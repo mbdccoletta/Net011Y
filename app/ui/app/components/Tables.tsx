@@ -7,6 +7,20 @@ import { ROLE_LABEL } from "../model/site";
 import { fmtInt, fmtNum, hhmm, speedLabel } from "../utils/format";
 import { Status } from "./Status";
 import { ORDER } from "../model/verdict";
+import { portCounts } from "../model/ports";
+
+/** up · enabled but not up · shut or empty — the device's own two status fields, kept apart. */
+function PortCell({ d }: { d: Device }) {
+  const p = portCounts(d);
+  if (!p.known) return <span className="np-mono">{p.total ? `${p.total} ports` : "—"}</span>;
+  return (
+    <span className="np-mono vz-ports" title={`${p.up} up · ${p.down} down with the port enabled · ${p.unused} shut or empty`}>
+      <i className="vz-port vz-port--up" />{p.up}
+      <i className="vz-port vz-port--down" />{p.down}
+      <i className="vz-port vz-port--off" />{p.unused}
+    </span>
+  );
+}
 
 const Incident = ({ id }: { id?: string | null }) => (id ? <span className="np-chip-incident">{id}</span> : null);
 
@@ -29,6 +43,9 @@ export function DevicesTable({ model, devices, showSite, compact, onSelect }: { 
     { id: "cpu", header: "CPU", accessor: (d: Device) => d.cpuNow ?? -1, width: 80, alignment: "right", cell: ({ rowData }) => <span className="np-mono">{rowData.cpuNow != null ? `${Math.round(rowData.cpuNow)}%` : "—"}</span> },
     { id: "rtt", header: "ICMP RTT", accessor: (d: Device) => d.icmp?.rttMs ?? -1, width: 100, alignment: "right", cell: ({ rowData }) => <span className="np-mono">{rowData.icmp?.rttMs != null ? `${fmtNum(rowData.icmp.rttMs)} ms` : "—"}</span> },
     { id: "loss", header: "Loss", accessor: (d: Device) => d.icmp?.loss ?? -1, width: 80, alignment: "right", cell: ({ rowData }) => <span className="np-mono">{rowData.icmp?.loss != null ? `${fmtNum(rowData.icmp.loss)}%` : "—"}</span> },
+    // Ports as the operator reads them. Sorted by the middle number, because a port enabled and not up
+    // is the only one of the three worth a morning: the shut ones were shut on purpose.
+    { id: "ports", header: "Interface status", accessor: (d: Device) => portCounts(d).down, width: 170, cell: ({ rowData }) => <PortCell d={rowData} /> },
     { id: "reason", header: "Main reason", accessor: (d: Device) => d.reasons[0]?.text ?? "Within expected range", width: "2fr",
       cell: ({ rowData }) => <span title={rowData.reasons[0]?.text ?? "Within expected range"}>{rowData.reasons[0]?.text ?? "Within expected range"} <Incident id={rowData.incident} /></span> },
   ], [model, showSite, compact]);

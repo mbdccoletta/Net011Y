@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import type { Circuit, Device, E2EPath, Iface, NetworkModel } from "../model/types";
 import { ownsPath, ROLE_LABEL, type SiteInfo } from "../model/site";
 import { isBad, ORDER } from "../model/verdict";
+import { portCounts } from "../model/ports";
 import { fmtInt, fmtNum, hhmm, unitOf } from "../utils/format";
 import { deviceContext, isolationContext, siteContext } from "../utils/assist";
 import { deviceQuestions, isolationQuestions, siteQuestions } from "../utils/prompts";
@@ -310,6 +311,25 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
   );
 }
 
+/**
+ * Ports in the three states an operator tells apart: carrying traffic, meant to and not, and shut or
+ * empty. One number over a total made a switch with thirty unpatched ports look half broken.
+ */
+function PortLine({ d }: { d: Device }) {
+  const p = portCounts(d);
+  if (!p.known) return <span className="vz-stat"><b>{fmtInt(p.total)}</b>interfaces</span>;
+  return (
+    <span className="vz-stat vz-ports" title={`${p.up} up · ${p.down} down with the port enabled · ${p.unused} shut or empty`}>
+      <b>
+        <i className="vz-port vz-port--up" />{fmtInt(p.up)}
+        <i className="vz-port vz-port--down" />{fmtInt(p.down)}
+        <i className="vz-port vz-port--off" />{fmtInt(p.unused)}
+      </b>
+      up · down · unused
+    </span>
+  );
+}
+
 export function EntityDetails(props: Props) {
   const { model, infos, sel, onSelect, onClose, needs } = props;
   const kind = sel.slice(0, sel.indexOf(":"));
@@ -333,7 +353,7 @@ export function EntityDetails(props: Props) {
               red device found availability at 100%, no syslog error, no trap, and a link to go and find
               out elsewhere. The reason is in the model; it belongs at the top of the panel. */}
           {d.reasons.length > 0 && (
-            <Tile tone={verdictTone(d.verdict)} title={`Why ${d.verdict.toLowerCase()}`}
+            <Tile tone={verdictTone(d.verdict)} title={isBad(d.verdict) ? `Why ${d.verdict.toLowerCase()}` : "Worth knowing"}
               right={d.reasons.length > 1 ? `${d.reasons.length} reasons` : undefined}>
               <ul className="vz-why">
                 {d.reasons.map((r, k) => (
@@ -349,7 +369,7 @@ export function EntityDetails(props: Props) {
               <Gauge value={d.cpuNow} label="CPU" />
               <Gauge value={d.availPct} label="Availability" />
               <div className="vz-chipline vz-chipline--col">
-                <span className="vz-stat"><b>{d.interfaces.filter((i) => i.oper.startsWith("up")).length}/{d.interfaces.length}</b>interfaces up</span>
+                <PortLine d={d} />
                 <span className="vz-stat"><b>{fmtInt(d.syslog.ERROR)}</b>syslog errors · 6 h</span>
                 <span className="vz-stat"><b>{fmtInt(d.traps)}</b>traps</span>
                 {d.memNow != null && <span className="vz-stat"><b>{Math.round(d.memNow)}%</b>memory in use</span>}

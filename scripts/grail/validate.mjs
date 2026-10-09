@@ -2,7 +2,7 @@
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, buildJourney, asRoutes, nextSteps, coverage } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, deviceVerdict, portCounts, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, buildJourney, asRoutes, nextSteps, coverage } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -272,6 +272,28 @@ const flat = { ...model, appNet: { ...model.appNet, retrPct: model.appNet.retrPc
 const fS = suspicionFor(flat, { dropPct: 50 });
 check("Flat retransmissions stated as counter-evidence", !fS.app?.rising && fS.facts.some((f) => /at their usual level/.test(f)), fS.facts.find((f) => /usual level/.test(f)) ?? "none");
 
+// A problem raised on the monitor that pings a device is about the monitor. One monitoring
+// configuration covering forty-nine switches turned all forty-nine red while every one of them was
+// answering SNMP, and the network team's reading of that screen was that the day was normal.
+{
+  const d = model.devices.find((x) => x.mode === "Extension");
+  const watched = { ...d, problems: [{ eventId: "E", eventKind: "DAVIS_PROBLEM", displayId: "P-1", name: "Network availability monitor outage", start: new Date().toISOString(), category: "AVAILABILITY", viaMonitor: true }] };
+  const named = { ...d, problems: [{ ...watched.problems[0], viaMonitor: undefined }] };
+  const [vw, rw] = deviceVerdict(watched);
+  const [vn] = deviceVerdict(named);
+  check("A monitor outage does not make the device it watches critical",
+    vw === "Healthy" && vn === "Critical" && /not being measured/.test(rw[0]?.text ?? ""),
+    `through the monitor: ${vw} · on the device: ${vn} · ${rw[0]?.text?.slice(0, 80)}`);
+}
+// A switch's unpatched and shut ports are not faults, and folding them into one number over a total
+// made a healthy switch look half broken.
+{
+  const withPorts = model.devices.filter((x) => x.interfaces.length);
+  const ok = withPorts.every((x) => { const p = portCounts(x); return p.up + p.down + p.unused === p.total && p.total === x.interfaces.length; });
+  const shut = withPorts.map((x) => portCounts(x)).reduce((a, p) => a + p.unused, 0);
+  check("Ports are counted in three states that add up", ok && withPorts.length > 0,
+    `${withPorts.length} devices with ports · ${shut} shut or empty`);
+}
 // NetFlow: exporters place traffic at sites, site_cidr places the far end, findings are measurements
 const fm = model.flowMap;
 const dc1 = Object.values(model.sites).find((s) => s.dc && fm?.sites[s.code]?.fanIn.length);

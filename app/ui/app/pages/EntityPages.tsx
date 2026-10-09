@@ -6,6 +6,7 @@ import { FilterBar } from "@dynatrace/strato-components/filters";
 import { SearchInput, Select } from "@dynatrace/strato-components/forms";
 import type { Circuit, Device, NetworkModel, Verdict } from "../model/types";
 import { ROLE_LABEL, type SiteInfo } from "../model/site";
+import { portCounts } from "../model/ports";
 import { isBad } from "../model/verdict";
 import { Status } from "../components/Status";
 import { inSet, Spark } from "../components/Visual";
@@ -133,6 +134,19 @@ type DeviceRow = Device & Record<string, unknown>;
 /** The trend cell sorts on the last reading; the curve itself is drawn by <Spark />. */
 const cpuLast = (d: Device) => (d.cpu.length ? d.cpu[d.cpu.length - 1] : -1);
 
+/** up · enabled but not up · shut or empty: the device's own two status fields, kept apart. */
+function Ports({ d }: { d: Device }) {
+  const p = portCounts(d);
+  if (!p.known) return <span className="np-mono np-muted">{p.total ? `${p.total} ports` : "—"}</span>;
+  return (
+    <span className="np-mono vz-ports" title={`${p.up} up · ${p.down} down with the port enabled · ${p.unused} shut or empty`}>
+      <i className="vz-port vz-port--up" />{p.up}
+      <i className="vz-port vz-port--down" />{p.down}
+      <i className="vz-port vz-port--off" />{p.unused}
+    </span>
+  );
+}
+
 export function DevicesPage({ model, filters, onFilters, selected, onSelect }: PageProps) {
   const regions = useMemo(() => uniq(Object.values(model.sites).map((s) => s.region)), [model]);
   const roles = useMemo(() => uniq(model.devices.map((d) => d.role)), [model]);
@@ -152,6 +166,10 @@ export function DevicesPage({ model, filters, onFilters, selected, onSelect }: P
       cell: ({ rowData }) => <span className="np-mono">{rowData.availPct != null ? `${fmtNum(rowData.availPct)}%` : "—"}</span> },
     { id: "rtt", header: "ICMP RTT", accessor: (d) => d.icmp?.rttMs ?? -1, width: 100, alignment: "right",
       cell: ({ rowData }) => <span className="np-mono">{rowData.icmp?.rttMs != null ? `${fmtNum(rowData.icmp.rttMs)} ms` : "—"}</span> },
+    // Sorted by the middle number: a port enabled and not up is the only one of the three worth a
+    // morning. "59/97 interfaces up" made a switch with thirty unpatched ports look half broken.
+    { id: "ports", header: "Interface status", accessor: (d) => portCounts(d).down, width: 160,
+      cell: ({ rowData }) => <Ports d={rowData} /> },
     { id: "reason", header: "Main reason", accessor: (d) => d.reasons[0]?.text ?? "", width: "2fr",
       cell: ({ rowData }) => <span title={rowData.reasons[0]?.text ?? "Within expected range"}>{rowData.reasons[0]?.text ?? <span className="np-muted">Within expected range</span>} <Incident id={rowData.incident} /></span> },
   ], [model]);

@@ -53,8 +53,15 @@ export const problemLevel = (p: DeviceProblem): Verdict =>
  * rather than as two true statements about different periods.
  */
 export const problemReason = (p: DeviceProblem): Reason => ({
-  level: problemLevel(p),
-  text: `${p.name}${p.on ? ` · ${p.on}` : ""}${p.displayId ? ` (${p.displayId})` : ""}${p.start ? ` · open since ${hhmm(p.start)} UTC` : ""}`,
+  // A problem raised on the monitor is about the monitor. It is still reported, in the device's own
+  // words, but it does not make the device critical: the ping stopped running, which is not the same
+  // statement as the device stopped answering — and when the device really has stopped, SNMP says so
+  // on its own. One monitoring configuration covering forty-nine switches, every one of them polling
+  // happily, used to paint the lot red; the network team read the screen and said the day was normal.
+  level: p.viaMonitor ? "Not monitored" : problemLevel(p),
+  text: p.viaMonitor
+    ? `Reachability is not being measured: ${p.name}${p.displayId ? ` (${p.displayId})` : ""}${p.start ? ` · since ${hhmm(p.start)} UTC` : ""}. The monitor that pings this device is out, so what follows comes from what still answers.`
+    : `${p.name}${p.on ? ` · ${p.on}` : ""}${p.displayId ? ` (${p.displayId})` : ""}${p.start ? ` · open since ${hhmm(p.start)} UTC` : ""}`,
 });
 
 export function deviceVerdict(d: Device): [Verdict, Reason[], number] {
