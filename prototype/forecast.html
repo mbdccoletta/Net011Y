@@ -41,13 +41,16 @@ h1 small{display:block;font:500 10.5px var(--mono);letter-spacing:.1em;text-tran
 .card h2{margin:0 0 10px;font:600 13px var(--sans);color:var(--ink-hi)}
 .card h2 span{float:right;font:500 10.5px var(--mono);color:var(--muted);font-weight:500}
 .card figcaption{font-size:11.5px;color:var(--muted);margin:9px 0 0;line-height:1.55}
-.card figcaption .kind{margin-left:13px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 20px;margin-top:9px;font:500 11px var(--mono);color:var(--muted)}
+.legend span{white-space:nowrap}
 svg{display:block;width:100%;height:auto;overflow:visible}
 .ax{font:500 10px var(--mono);fill:var(--muted)}
 .axb{font:600 10.5px var(--mono);fill:var(--ink-3)}
 .tag{font:600 10.5px var(--mono)}
 .spk{display:block;width:96px;height:34px}
-.trail{transition:opacity .12s}svg:hover .trail{opacity:.22!important}svg .trail:hover{opacity:1!important}
+.trail{transition:opacity .12s;cursor:pointer}
+svg:hover .trail{opacity:.2!important}svg .trail:hover{opacity:1!important}
+svg.lit .trail{opacity:.12!important}svg.lit .trail.on{opacity:1!important}
 .pick{cursor:pointer}.pick:hover{opacity:.84}
 
 /* ---------------------------------------------------------------- rows */
@@ -146,7 +149,7 @@ function fit(hist) {
     lo: ok(cross(slope + 1.96 * se)) ?? 0, hi: ok(cross(slope - 1.96 * se)) ?? HZ };
 }
 
-// ---------------------------------------------------------------- the estate
+// ---------------------------------------------------------------- the network
 const SITE_DEFS = [
   ["Rio Grande", "RS", 11], ["DC TIVIT Transamerica", "SP", 29], ["Rondonópolis", "MT", 43],
   ["Urucuí", "PI", 61], ["LEM", "BA", 83], ["Gaspar", "SC", 97],
@@ -203,7 +206,7 @@ const linkFirst = (l) => {
 };
 const devUplink = (d) => d.ports.filter((p) => p.uplink && p.f && p.f.mid != null).sort((a, b) => a.f.mid - b.f.mid)[0] ?? null;
 
-/** everything in the estate that has a date, as one list */
+/** everything on the network that has a date, as one list */
 function subjects() {
   const out = [];
   LINKS.forEach((l) => { const f = linkFirst(l); if (f) out.push({ kind: "link", ref: l, site: l.site, name: `WAN · ${l.carrier} ${l.contracted}`, sub: `${l.role} · ${f.kind}`, days: f.days, o: f.o, lead: l.lead }); });
@@ -217,7 +220,7 @@ function subjects() {
 const KINDC = { link: "var(--warn)", port: "var(--cyan)", device: "var(--violet)" };
 const orderBy = (s) => s.days - s.lead;
 
-let view = { at: "estate", site: null, link: null, dev: null, port: null };
+let view = { at: "network", site: null, link: null, dev: null, port: null };
 
 // ---------------------------------------------------------------- drawing
 function cone(o, W, H, limitLabel) {
@@ -269,7 +272,7 @@ function spark(o, w, h) {
 }
 
 /**
- * The estate level IS the forecast, drawn once.
+ * The top level IS the forecast, drawn once.
  *
  * Two earlier attempts failed the same way. The first put three bar charts on three different
  * scales side by side and then a table repeating them. The second kept only the table — and a
@@ -284,7 +287,7 @@ function spark(o, w, h) {
  * the record supports. Under the axis, the same x in the same place: the day the order has to
  * leave, which is the crossing minus the carrier's lead time. A tick left of TODAY is late.
  */
-function estate() {
+function netView() {
   const subs = subjects().filter((s) => s.o.f && s.days != null);
   const W = 780, H = 348, L = 42, AX = H - 56, TOP = 14, HP = 30 / 210;
   const tx = L + HP * (W - L - 14);
@@ -304,6 +307,8 @@ function estate() {
       Array.from({ length: 13 }, (_, k) => { const t = (k / 12) * s.days; return `${X(t).toFixed(1)},${Y(f.at(t) + f.band(t)).toFixed(1)}`; })
         .concat(Array.from({ length: 13 }, (_, k) => { const t = ((12 - k) / 12) * s.days; return `${X(t).toFixed(1)},${Y(Math.max(0, f.at(t) - f.band(t))).toFixed(1)}`; })).join(" ")}"/>` : "";
     return `${band}<g class="trail" data-site="${esc(s.site)}" opacity="${op}">
+      <polyline points="${proj}" fill="none" stroke="transparent" stroke-width="11"/>
+      <polyline points="${hist}" fill="none" stroke="transparent" stroke-width="11"/>
       <polyline points="${hist}" fill="none" stroke="${c}" stroke-width="${lead ? 2.4 : 1.5}" stroke-linejoin="round"/>
       <polyline points="${proj}" fill="none" stroke="${c}" stroke-width="${lead ? 2.4 : 1.5}" stroke-dasharray="5 4"/>
       <line x1="${X(f.lo).toFixed(1)}" y1="${Y(100).toFixed(1)}" x2="${X(f.hi).toFixed(1)}" y2="${Y(100).toFixed(1)}"
@@ -343,8 +348,8 @@ function estate() {
 
   return `
     <div class="card" style="margin-bottom:13px">
-      <h2>Every forecast in the estate<span>${subs.length} subjects · 30 days of record · 6 months ahead</span></h2>
-      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="every forecast in the estate, against each subject's own limit">
+      <h2>Every forecast on the network<span>${subs.length} subjects · 30 days of record · 6 months ahead</span></h2>
+      <svg id="all" viewBox="0 0 ${W} ${H}" role="img" aria-label="every forecast on the network, against each subject's own limit">
         <line x1="${L}" y1="${Y(100).toFixed(1)}" x2="${W - 14}" y2="${Y(100).toFixed(1)}" stroke="var(--bad)" stroke-dasharray="3 4" opacity=".8"/>
         <text class="ax" x="${L - 6}" y="${(Y(100) + 4).toFixed(1)}" text-anchor="end" fill="var(--bad)">LIMIT</text>
         <text class="ax" x="${L - 6}" y="${(Y(50) + 4).toFixed(1)}" text-anchor="end">50%</text>
@@ -360,9 +365,11 @@ function estate() {
         and the bar through the dot is how much earlier or later the record allows. The lane at the
         bottom is the same day minus the lead time to get the work done — <b>a tick left of TODAY is an
         order that should already have left</b>${late ? `, and there are ${late}` : ""}.
-        <i class="kind" style="background:var(--warn)"></i>WAN contract
-        <i class="kind" style="background:var(--cyan)"></i>uplink
-        <i class="kind" style="background:var(--violet)"></i>processor</figcaption>
+        Hover a site below to pick its lines out of the picture; click a line, or its row, to open the site.
+      </figcaption>
+      <div class="legend"><span><i class="kind" style="background:var(--warn)"></i>WAN contract</span>
+        <span><i class="kind" style="background:var(--cyan)"></i>uplink</span>
+        <span><i class="kind" style="background:var(--violet)"></i>processor</span></div>
     </div>
     <div class="card">
       <h2>Sites<span>soonest first · click one</span></h2>
@@ -530,15 +537,15 @@ function devView(d) {
 
 // ---------------------------------------------------------------- shell
 function render() {
-  const crumbs = [`<button data-go="estate">Estate</button>`];
+  const crumbs = [`<button data-go="network">Network</button>`];
   let title = "Capacity ahead", kicker = "Prototype · Ahead", lede = "", body = "";
-  if (view.at === "estate") {
+  if (view.at === "network") {
     const subs = subjects(), late = subs.filter((s) => orderBy(s) <= 0).length;
     const nearest = subs[0];
     lede = `Every line below is a <b>forecast</b>: a straight line through 30 days of record, carried
       forward until it reaches a limit someone else stated — a contracted rate, a line rate, saturation.
       The nearest is <b>${esc(nearest.site)}</b>, in ${nearest.days} days.${late ? ` <em>${late} of these orders should already have left.</em>` : ""}`;
-    body = estate();
+    body = netView();
   } else if (view.at === "site") {
     crumbs.push(`<i>›</i><b>${esc(view.site)}</b>`);
     title = view.site; kicker = "Site";
@@ -564,11 +571,22 @@ function render() {
   document.getElementById("body").innerHTML = body;
   window.scrollTo(0, 0);
 }
+// The chart and the list under it are one object. Sixteen trajectories are legible as a shape but
+// not as sixteen things, so the row lends its site to the picture: the lines that belong to it stay,
+// the rest fall back far enough to read as context.
+document.addEventListener("mouseover", (e) => {
+  const row = e.target.closest("tr.pick[data-site]"), svg = document.getElementById("all");
+  if (!svg) return;
+  const site = row ? row.dataset.site : null;
+  svg.classList.toggle("lit", !!site);
+  svg.querySelectorAll(".trail").forEach((t) => t.classList.toggle("on", t.dataset.site === site));
+});
+
 document.addEventListener("click", (e) => {
   const go = e.target.closest("[data-go]"), s = e.target.closest("[data-site]"),
         l = e.target.closest("[data-link]"), d = e.target.closest("[data-dev]"), p = e.target.closest("[data-port]");
   if (p) { const v = Number(p.dataset.port); view.port = view.port === v ? null : v; return render(); }
-  if (go) { view = { at: "estate", site: null, link: null, dev: null, port: null }; return render(); }
+  if (go) { view = { at: "network", site: null, link: null, dev: null, port: null }; return render(); }
   if (s) { view = { at: "site", site: s.dataset.site, link: null, dev: null, port: null }; return render(); }
   if (l) { const li = LINKS.find((x) => x.id === Number(l.dataset.link)); view = { at: "link", site: li.site, link: li.id, dev: null, port: null }; return render(); }
   if (d) { const dv = DEVICES.find((x) => x.id === Number(d.dataset.dev)); view = { at: "device", site: dv.site, link: null, dev: dv.id, port: null }; return render(); }
