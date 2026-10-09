@@ -390,18 +390,25 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
         const cxp = (x0 + x1) / 2 - (dy / len) * len * 0.18, cyp = (y0 + y1) / 2 + (dx / len) * len * 0.18 - len * 0.08;
         const bad = verdict === "Critical" || verdict === "Warning";
-        const alpha = (focused ? 1 : P.dim) * (verdict === "Critical" ? 0.85 : verdict === "Warning" ? 0.45 : P.calm);
+        // Out of focus and nothing wrong with it are two reasons to be quiet, and multiplying them
+        // punished a calm route twice: 0.22 × 0.2 is four per cent of a one-pixel line. The fade has a
+        // floor now, so a route that is merely not the focus still draws.
+        const level = verdict === "Critical" ? 0.85 : verdict === "Warning" ? 0.5 : P.calm;
+        const alpha = (focused ? 1 : Math.max(P.dim, 0.6)) * level;
         ctx.strokeStyle = bad ? COL[verdict] : P.route;
         ctx.globalAlpha = alpha;
         const vol = volume(bps);
         // a route that stands for a group of links is as much wider as it carries
-        ctx.lineWidth = (bad ? 1.5 : 0.9) * (vol == null ? 1 : 0.7 + vol * 1.6) * P.stroke * (n > 1 ? 1 + Math.min(2.2, Math.log2(n) * 0.35) : 1);
+        ctx.lineWidth = (bad ? 1.5 : 1.1) * (vol == null ? 1 : 0.7 + vol * 1.6) * P.stroke * (n > 1 ? 1 + Math.min(2.2, Math.log2(n) * 0.35) : 1);
         ctx.setLineDash(verdict === "Critical" && !reduce ? [4, 4] : []);
         ctx.lineDashOffset = verdict === "Critical" ? -(now / 70) % 8 : 0;
         ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(cxp, cyp, x1, y1); ctx.stroke();
         // packets on the route: towards the data center and back, each stream as many, as fast and as big
         // as that direction carries. Without the interface counters there is one stream, on the volume.
-        if (!reduce && vol !== 0 && (focused || !F)) {
+        // Traffic flows on a route whether or not it is the one you asked about, and a line holding
+        // still reads as a dead link. Every route carries its packets; the focus shows in how brightly
+        // they are drawn (below), not in whether they move at all.
+        if (!reduce && vol !== 0) {
           const phase = hash(id), vv = vol ?? 0.3;
           const split = bpsIn != null || bpsOut != null;
           const share = (v: number | null) => (split ? Math.max(0.12, Math.min(1, (v ?? 0) / Math.max(1, (bpsIn ?? 0) + (bpsOut ?? 0)))) : 1);
@@ -655,13 +662,21 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
             else if (hit) onSite(hit.site.code);
           }
         }} />
-      {hover && (
-        <div className="lm-tip" style={{ left: hover.x, top: hover.y }}>
+      {hover && (() => {
+        // The tip used to sit on the pointer's own line, sixteen pixels to its right, which is exactly
+        // where the thing it describes writes its label: hovering a region covered the region's name.
+        // It goes below and to the right now, and flips at the edges so it never leaves the map.
+        const { w, h } = size.current;
+        const x = hover.x > w - 300 ? "calc(-100% - 16px)" : "16px";
+        const y = hover.y > h - 96 ? "calc(-100% - 14px)" : "14px";
+        return (
+        <div className="lm-tip" style={{ left: hover.x, top: hover.y, transform: `translate(${x}, ${y})` }}>
           <b><i style={{ background: MAP_COLORS[hover.site.verdict] }} />{hover.site.name}</b>
           {!hover.cluster && <span>{[hover.site.code, hover.site.region, hover.site.dc ? "Data center" : null].filter(Boolean).join(" · ")}</span>}
           {hover.site.cause && <span className="lm-tip__cause">{hover.site.cause}</span>}
         </div>
-      )}
+        );
+      })()}
       <div className="lm-zoom" style={{ right: insets.right + 12, bottom: insets.bottom + 12 }}>
         <button type="button" onClick={() => zoomBy(1.4)} aria-label="Zoom in"><PlusIcon /></button>
         <button type="button" onClick={() => zoomBy(1 / 1.4)} aria-label="Zoom out"><MinusIcon /></button>

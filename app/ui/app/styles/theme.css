@@ -70,7 +70,10 @@
   --lm-glow: 0.2;
   --lm-land-dot: 1;
   --lm-dim: 0.22;
-  --lm-calm: 0.2;
+  /* How much of a route survives when nothing is wrong with it. This was 0.2 against the light
+     theme's 0.5, and multiplied by the out-of-focus fade it came to four per cent — a line nobody
+     could see. A healthy route is quiet, not absent. */
+  --lm-calm: 0.55;
   --lm-stroke: 1;
   /* a healthy site drawn at 28% of #00cb86 lands at 2.1:1 over the stage — the dots washed out.
      The mark keeps most of its colour even out of focus; only routes fade that far. */
@@ -154,7 +157,7 @@
 .lm-map--empty p { margin: 0; max-width: 46ch; line-height: 1.5; }
 .lm-map__acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .lm-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-.lm-tip { position: absolute; transform: translate(14px, -50%); pointer-events: none; z-index: 5; display: grid; gap: 2px; max-width: 280px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--lm-tint) 94%, transparent); border: 1px solid var(--lm-line-2); font-family: var(--lm-mono); font-size: 12px; color: var(--lm-muted); }
+.lm-tip { position: absolute; pointer-events: none; /* the offset is set inline: it flips at the map's edges */ z-index: 5; display: grid; gap: 2px; max-width: 280px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--lm-tint) 94%, transparent); border: 1px solid var(--lm-line-2); font-family: var(--lm-mono); font-size: 12px; color: var(--lm-muted); }
 .lm-tip b { display: flex; align-items: center; gap: 6px; color: var(--lm-ink); font-size: 12px; }
 .lm-tip b i { width: 8px; height: 8px; border-radius: 50%; }
 .lm-tip__cause { color: var(--lm-ink); }
