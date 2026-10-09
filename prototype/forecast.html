@@ -40,10 +40,14 @@ h1 small{display:block;font:500 10.5px var(--mono);letter-spacing:.1em;text-tran
 .card{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:14px 16px;min-width:0}
 .card h2{margin:0 0 10px;font:600 13px var(--sans);color:var(--ink-hi)}
 .card h2 span{float:right;font:500 10.5px var(--mono);color:var(--muted);font-weight:500}
-.card figcaption{font-size:11.5px;color:var(--muted);margin:9px 0 0}
+.card figcaption{font-size:11.5px;color:var(--muted);margin:9px 0 0;line-height:1.55}
+.card figcaption .kind{margin-left:13px}
 svg{display:block;width:100%;height:auto;overflow:visible}
 .ax{font:500 10px var(--mono);fill:var(--muted)}
 .axb{font:600 10.5px var(--mono);fill:var(--ink-3)}
+.tag{font:600 10.5px var(--mono)}
+.spk{display:block;width:96px;height:34px}
+.trail{transition:opacity .12s}svg:hover .trail{opacity:.22!important}svg .trail:hover{opacity:1!important}
 .pick{cursor:pointer}.pick:hover{opacity:.84}
 
 /* ---------------------------------------------------------------- rows */
@@ -250,68 +254,131 @@ function cone(o, W, H, limitLabel) {
 const confBars = (days) => `<span class="conf" title="${days} days of record">${[7, 14, 21, 30].map((t) => `<i class="${days >= t ? "on" : ""}"></i>`).join("")}</span>`;
 
 // ---------------------------------------------------------------- level 1
+/** history and projection with no axis and no words, for a table cell */
+function spark(o, w, h) {
+  const f = o.f, lo = Math.min(...o.hist) * 0.9, peak = 112, hp = 0.34;
+  const tx = hp * w, X = (d) => (d <= 0 ? ((d + 30) / 30) * tx : tx + Math.min(1, d / HZ) * (w - tx));
+  const Y = (v) => (h - 2) - ((Math.min(Math.max(v, lo), peak) - lo) / (peak - lo)) * (h - 5);
+  const hist = o.hist.map((v, k) => `${X(-30 + (k / (o.hist.length - 1)) * 30).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  const to = f && f.mid != null ? f.mid : HZ;
+  const proj = f ? Array.from({ length: 9 }, (_, i) => { const t = (i / 8) * to; return `${X(t).toFixed(1)},${Y(f.at(t)).toFixed(1)}`; }).join(" ") : "";
+  return `<svg class="spk" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+    <line x1="0" y1="${Y(100).toFixed(1)}" x2="${w}" y2="${Y(100).toFixed(1)}" stroke="var(--bad)" stroke-dasharray="2 3" opacity=".6"/>
+    ${proj ? `<polyline points="${proj}" fill="none" stroke="var(--warn)" stroke-width="1.6" stroke-dasharray="4 3"/>` : ""}
+    <polyline points="${hist}" fill="none" stroke="var(--cyan)" stroke-width="1.6"/></svg>`;
+}
+
+/**
+ * The estate level IS the forecast, drawn once.
+ *
+ * Two earlier attempts failed the same way. The first put three bar charts on three different
+ * scales side by side and then a table repeating them. The second kept only the table — and a
+ * table of "22d" is a *conclusion*, not a forecast: the reader never sees the slope that produced
+ * it, how straight the history was, or how wide the answer is.
+ *
+ * So everything measured against a limit is drawn on one pair of axes. It works because every
+ * subject is already a percentage of its own limit — a circuit against its contracted rate, a port
+ * against its line rate, a processor against saturation — so they share a y axis at 100 even
+ * though their units never match. Each trajectory carries 30 days of record, a projection that
+ * stops where it crosses, and a whisker along the limit line from the earliest to the latest date
+ * the record supports. Under the axis, the same x in the same place: the day the order has to
+ * leave, which is the crossing minus the carrier's lead time. A tick left of TODAY is late.
+ */
 function estate() {
-  const subs = subjects(), W = 460, H = 160, L = 26, B = 26;
-  const bw = (W - L - 12) / MONTHS.length;
-  const per = MONTHS.map((_, m) => subs.filter((s) => monthOf(Math.max(0, orderBy(s))) === m).length);
-  const late = subs.filter((s) => orderBy(s) <= 0).length, max = Math.max(1, ...per);
-  const Y = (v) => H - B - (v / max) * (H - B - 20);
-  const bars = MONTHS.map((mo, m) => `<g>
-      <rect x="${(L + m * bw + 4).toFixed(1)}" y="${Y(per[m]).toFixed(1)}" width="${(bw - 8).toFixed(1)}"
-        height="${Math.max(1, H - B - Y(per[m])).toFixed(1)}" rx="4" fill="${m === 0 ? "var(--bad)" : "var(--warn)"}" opacity=".85"/>
-      <text class="axb" x="${(L + m * bw + bw / 2).toFixed(1)}" y="${(Y(per[m]) - 6).toFixed(1)}" text-anchor="middle">${per[m] || ""}</text>
-      <text class="ax" x="${(L + m * bw + bw / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">${mo}</text></g>`).join("");
+  const subs = subjects().filter((s) => s.o.f && s.days != null);
+  const W = 780, H = 348, L = 42, AX = H - 56, TOP = 14, HP = 30 / 210;
+  const tx = L + HP * (W - L - 14);
+  const X = (d) => { const c = Math.min(HZ, Math.max(-30, d)); return c <= 0 ? L + ((c + 30) / 30) * (tx - L) : tx + (c / HZ) * (W - 14 - tx); };
+  const peak = 128, Y = (v) => AX - (Math.min(Math.max(v, 0), peak) / peak) * (AX - TOP);
+  const late = subs.filter((s) => orderBy(s) <= 0).length;
 
-  const sitesList = SITE_DEFS.map(([name]) => {
-    const mine = subs.filter((s) => s.site === name);
-    return { name, first: mine[0] ?? null, n: mine.length };
+  const months = MONTHS.map((mo, m) => `<g>
+      <line x1="${X(m * 30).toFixed(1)}" y1="${AX}" x2="${X(m * 30).toFixed(1)}" y2="${AX + 4}" stroke="var(--line-2)"/>
+      <text class="ax" x="${X(m * 30 + 15).toFixed(1)}" y="${AX + 15}" text-anchor="middle">${mo}</text></g>`).join("");
+
+  const trails = subs.map((s, i) => {
+    const f = s.o.f, c = KINDC[s.kind], lead = i === 0, op = lead ? 1 : 0.5;
+    const hist = s.o.hist.map((v, k) => `${X(-30 + (k / (s.o.hist.length - 1)) * 30).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+    const proj = Array.from({ length: 13 }, (_, k) => { const t = (k / 12) * s.days; return `${X(t).toFixed(1)},${Y(f.at(t)).toFixed(1)}`; }).join(" ");
+    const band = lead ? `<polygon opacity=".14" fill="${c}" points="${
+      Array.from({ length: 13 }, (_, k) => { const t = (k / 12) * s.days; return `${X(t).toFixed(1)},${Y(f.at(t) + f.band(t)).toFixed(1)}`; })
+        .concat(Array.from({ length: 13 }, (_, k) => { const t = ((12 - k) / 12) * s.days; return `${X(t).toFixed(1)},${Y(Math.max(0, f.at(t) - f.band(t))).toFixed(1)}`; })).join(" ")}"/>` : "";
+    return `${band}<g class="trail" data-site="${esc(s.site)}" opacity="${op}">
+      <polyline points="${hist}" fill="none" stroke="${c}" stroke-width="${lead ? 2.4 : 1.5}" stroke-linejoin="round"/>
+      <polyline points="${proj}" fill="none" stroke="${c}" stroke-width="${lead ? 2.4 : 1.5}" stroke-dasharray="5 4"/>
+      <line x1="${X(f.lo).toFixed(1)}" y1="${Y(100).toFixed(1)}" x2="${X(f.hi).toFixed(1)}" y2="${Y(100).toFixed(1)}"
+        stroke="${c}" stroke-width="3.5" stroke-linecap="round" opacity=".32"/>
+      <circle cx="${X(s.days).toFixed(1)}" cy="${Y(100).toFixed(1)}" r="${lead ? 4.6 : 3.4}" fill="${c}" stroke="var(--bg)" stroke-width="1.2"/>
+      <title>${esc(s.name)} — ${esc(s.site)} — reaches its limit in ${s.days} days, between ${f.lo} and ${f.hi}</title></g>`;
+  }).join("");
+
+  // The nearest few get their name. A tier only accepts a label whose whole span is clear of what is
+  // already on it — measured from the string, because 10.5px mono is about 6.4px a character, and a
+  // tier chosen by the dot's x alone puts "22d" inside the next label's first word.
+  const tiers = [[], [], []];
+  const tags = subs.slice(0, 6).map((s) => {
+    const label = `${s.name} · ${s.days}d`, w = label.length * 6.4, x = X(s.days);
+    const flip = x + 9 + w > W - 14;
+    const a = flip ? x - 9 - w : x + 9, b = a + w;
+    const t = tiers.findIndex((spans) => spans.every(([c, d]) => b + 12 < c || a - 12 > d));
+    if (t < 0 || a < L) return "";
+    tiers[t].push([a, b]);
+    return `<text class="tag" x="${(flip ? x - 9 : x + 9).toFixed(1)}" y="${(Y(100) - 13 - t * 15).toFixed(1)}"
+      text-anchor="${flip ? "end" : "start"}" fill="${KINDC[s.kind]}">${esc(label)}</text>`;
+  }).join("");
+
+  const LY = AX + 36;
+  const orders = subs.map((s) => {
+    const ob = orderBy(s), x = X(ob);
+    return `<line x1="${x.toFixed(1)}" y1="${LY - 7}" x2="${x.toFixed(1)}" y2="${LY + 7}"
+      stroke="${ob <= 0 ? "var(--bad)" : KINDC[s.kind]}" stroke-width="2" opacity="${ob <= 0 ? 0.95 : 0.6}"><title>${esc(s.name)} — ${
+      ob <= 0 ? "the order is already late" : `order by ${MONTHS[monthOf(ob)]}, ${ob} days from now`}</title></line>`;
+  }).join("");
+
+  const bySite = SITE_DEFS.map(([name]) => {
+    const mine = subs.filter((s) => s.site === name).sort((a, b) => a.days - b.days);
+    return { name, first: mine[0] ?? null, rest: mine.slice(1) };
   }).filter((s) => s.first).sort((a, b) => a.first.days - b.first.days);
-  const SW = 330, rowH = 19, SH = sitesList.length * rowH + 8;
-  const smax = Math.max(...sitesList.map((s) => s.first.days), HZ);
-  const siteBars = sitesList.map((s, i) => {
-    const y = i * rowH + 6, w = (s.first.days / smax) * (SW - 160);
-    return `<g class="pick" data-site="${esc(s.name)}">
-      <text class="ax" x="124" y="${y + 8}" text-anchor="end" fill="var(--ink-3)">${esc(s.name.length > 18 ? s.name.slice(0, 17) + "…" : s.name)}</text>
-      <rect x="130" y="${y + 1}" width="${Math.max(3, w).toFixed(1)}" height="8" rx="4" fill="${KINDC[s.first.kind]}" opacity=".9"/>
-      <text class="ax" x="${(136 + w).toFixed(1)}" y="${y + 8}">${s.first.days}d · ${s.first.kind === "link" ? "WAN" : s.first.kind === "port" ? "uplink" : "device"}</text></g>`;
-  }).join("");
-
-  const links = LINKS.map((l) => ({ l, f: linkFirst(l) })).filter((x) => x.f).sort((a, b) => a.f.days - b.f.days);
-  const LW = 330, LH = links.length * rowH + 8;
-  const linkBars = links.map(({ l, f }, i) => {
-    const y = i * rowH + 6, w = (f.days / HZ) * (LW - 170);
-    return `<g class="pick" data-link="${l.id}">
-      <text class="ax" x="128" y="${y + 8}" text-anchor="end" fill="var(--ink-3)">${esc(l.site.length > 15 ? l.site.slice(0, 14) + "…" : l.site)} · ${esc(l.carrier)}</text>
-      <rect x="134" y="${y + 1}" width="${Math.max(3, w).toFixed(1)}" height="8" rx="4"
-        fill="${f.kind === "latency" ? "var(--violet)" : "var(--warn)"}" opacity=".9"/>
-      <text class="ax" x="${(140 + w).toFixed(1)}" y="${y + 8}">${f.days}d · ${f.kind}</text></g>`;
-  }).join("");
+  const kindWord = { link: "the WAN contract", port: "an uplink", device: "a processor" };
 
   return `
-    <div class="grid3">
-      <div class="card"><h2>When the order has to leave<span>${subs.length} to order</span></h2>
-        <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="orders by month">
-          <line x1="${L}" y1="${H - B}" x2="${W - 10}" y2="${H - B}" stroke="var(--line-2)"/>
-          ${bars}${late ? `<text class="ax" x="${W - 10}" y="12" text-anchor="end" fill="var(--bad)">${late} already late</text>` : ""}</svg>
-        <figcaption>The carrier's lead time is already subtracted from the forecast.</figcaption></div>
-      <div class="card"><h2>What gives first, per site<span>click one</span></h2>
-        <svg viewBox="0 0 ${SW} ${SH}">${siteBars}</svg>
-        <figcaption>A path is as wide as its narrowest link: WAN, uplink or device.</figcaption></div>
-      <div class="card"><h2>WAN links<span>bandwidth or latency</span></h2>
-        <svg viewBox="0 0 ${LW} ${LH}">${linkBars}</svg>
-        <figcaption>A circuit runs out two ways. The colour says which comes first.</figcaption></div>
+    <div class="card" style="margin-bottom:13px">
+      <h2>Every forecast in the estate<span>${subs.length} subjects · 30 days of record · 6 months ahead</span></h2>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="every forecast in the estate, against each subject's own limit">
+        <line x1="${L}" y1="${Y(100).toFixed(1)}" x2="${W - 14}" y2="${Y(100).toFixed(1)}" stroke="var(--bad)" stroke-dasharray="3 4" opacity=".8"/>
+        <text class="ax" x="${L - 6}" y="${(Y(100) + 4).toFixed(1)}" text-anchor="end" fill="var(--bad)">LIMIT</text>
+        <text class="ax" x="${L - 6}" y="${(Y(50) + 4).toFixed(1)}" text-anchor="end">50%</text>
+        <line x1="${L}" y1="${AX}" x2="${W - 14}" y2="${AX}" stroke="var(--line-2)"/>
+        <line x1="${tx.toFixed(1)}" y1="${TOP - 6}" x2="${tx.toFixed(1)}" y2="${LY + 7}" stroke="var(--line-2)"/>
+        <text class="ax" x="${(tx - 5).toFixed(1)}" y="${TOP - 2}" text-anchor="end">TODAY</text>
+        ${months}${trails}${tags}
+        <text class="ax" x="${L - 6}" y="${LY + 4}" text-anchor="end">ORDER</text>
+        <line x1="${L}" y1="${LY}" x2="${W - 14}" y2="${LY}" stroke="var(--line-2)" opacity=".7"/>${orders}
+      </svg>
+      <figcaption><b>Reading it.</b> Solid is 30 days of record; dashed is where the straight line through
+        that record goes. A trajectory stops at the dot, the day it reaches the limit its owner stated,
+        and the bar through the dot is how much earlier or later the record allows. The lane at the
+        bottom is the same day minus the lead time to get the work done — <b>a tick left of TODAY is an
+        order that should already have left</b>${late ? `, and there are ${late}` : ""}.
+        <i class="kind" style="background:var(--warn)"></i>WAN contract
+        <i class="kind" style="background:var(--cyan)"></i>uplink
+        <i class="kind" style="background:var(--violet)"></i>processor</figcaption>
     </div>
-    <div class="card" style="margin-top:13px"><h2>Everything with a date<span>soonest first</span></h2>
-      <table><thead><tr><th>What</th><th>Where</th><th class="n">Limit in</th><th class="n">Order by</th><th class="n">Record</th></tr></thead><tbody>
-      ${subs.map((s) => {
-        const ob = orderBy(s), nav = s.kind === "link" ? `data-link="${s.ref.id}"` : `data-dev="${s.ref.id}"`;
-        return `<tr class="pick" ${nav}>
-          <td><span class="mono"><i class="kind" style="background:${KINDC[s.kind]}"></i>${esc(s.name)}</span><span class="sub2">${esc(s.sub)}</span></td>
-          <td><span class="sub2" style="font-size:12px;color:var(--ink-3)">${esc(s.site)}</span></td>
-          <td class="n"><span class="days${s.days < 30 ? " bad" : ""}">${s.days}d</span><span class="sub2">between ${s.o.f.lo} and ${s.o.f.hi}</span></td>
-          <td class="n"><span class="days${ob <= 0 ? " bad" : ""}">${ob <= 0 ? "now" : MONTHS[monthOf(ob)] + " · " + ob + "d"}</span><span class="sub2">${s.lead}-day lead</span></td>
-          <td class="n">${confBars(s.o.f.days)}</td></tr>`;
-      }).join("")}</tbody></table></div>`;
+    <div class="card">
+      <h2>Sites<span>soonest first · click one</span></h2>
+      <table><thead><tr><th>Site</th><th>What gives first</th><th>Shape of it</th><th class="n">Reaches it</th><th class="n">Order by</th><th class="n">Record</th></tr></thead><tbody>
+      ${bySite.map(({ name, first, rest }) => {
+        const ob = orderBy(first);
+        return `<tr class="pick" data-site="${esc(name)}">
+          <td><span class="mono">${esc(name)}</span>${rest.length ? `<span class="sub2">and ${rest.length} more behind it</span>` : ""}</td>
+          <td><span class="mono" style="font-size:12px"><i class="kind" style="background:${KINDC[first.kind]}"></i>${esc(kindWord[first.kind])}</span>
+              <span class="sub2">${esc(first.name)}</span></td>
+          <td>${spark(first.o, 96, 34)}</td>
+          <td class="n"><span class="days${first.days < 30 ? " bad" : ""}">${first.days}d</span><span class="sub2">${first.o.f.lo}–${first.o.f.hi}d</span></td>
+          <td class="n"><span class="days${ob <= 0 ? " bad" : ""}">${ob <= 0 ? "now" : MONTHS[monthOf(ob)]}</span><span class="sub2">${first.lead}-day lead</span></td>
+          <td class="n">${confBars(first.o.f.days)}</td></tr>`;
+      }).join("")}</tbody></table>
+    </div>`;
 }
 
 // ---------------------------------------------------------------- level 2
@@ -467,7 +534,10 @@ function render() {
   let title = "Capacity ahead", kicker = "Prototype · Ahead", lede = "", body = "";
   if (view.at === "estate") {
     const subs = subjects(), late = subs.filter((s) => orderBy(s) <= 0).length;
-    lede = `${subs.length} things are measured against a limit someone else stated, and every date below is <b>when the order has to leave</b>, not when the thing fills.${late ? ` <em>${late} are already late.</em>` : ""} Start here, open a site, then the link or the box inside it.`;
+    const nearest = subs[0];
+    lede = `Every line below is a <b>forecast</b>: a straight line through 30 days of record, carried
+      forward until it reaches a limit someone else stated — a contracted rate, a line rate, saturation.
+      The nearest is <b>${esc(nearest.site)}</b>, in ${nearest.days} days.${late ? ` <em>${late} of these orders should already have left.</em>` : ""}`;
     body = estate();
   } else if (view.at === "site") {
     crumbs.push(`<i>›</i><b>${esc(view.site)}</b>`);
