@@ -887,10 +887,12 @@
 /* The devices a status tile names: a list beats hunting lit dots in a bubble of a hundred and six. */
 .vz-named { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 4px; }
 .vz-named__lead { font: 600 12px var(--lm-sans); text-transform: uppercase; letter-spacing: 0.04em; color: var(--lm-ink-3); margin-right: 2px; }
+/* No fill. A tinted panel behind a name reads as a state the device is in, and these are just the
+   devices a count names — the house pattern for that is .lm-pill: a hairline and nothing behind it. */
 .vz-named__one { display: grid; gap: 1px; text-align: left; padding: 5px 10px; border-radius: 8px; cursor: pointer;
-  border: 1px solid color-mix(in srgb, var(--lm-accent) 40%, transparent); background: color-mix(in srgb, var(--lm-accent) 8%, transparent);
+  border: 1px solid var(--lm-line); background: none;
   font: 500 12px var(--lm-mono); color: var(--lm-ink-hi); }
-.vz-named__one:hover { border-color: var(--lm-accent); }
+.vz-named__one:hover { border-color: color-mix(in srgb, var(--lm-ink-hi) 45%, transparent); }
 .vz-named__one i { font-style: normal; font-size: 11px; color: var(--lm-ink-3); }
 .vz-named__rest, .vz-named__clear { font-size: 12px; color: var(--lm-ink-3); }
 .vz-named__clear { border: 0; background: none; cursor: pointer; text-decoration: underline; }
