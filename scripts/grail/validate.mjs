@@ -339,6 +339,26 @@ check("Flat retransmissions stated as counter-evidence", !fS.app?.rising && fS.f
       `${site}: tagged the last of ${at.length} devices · ${model.flowMap?.subnetsTagged} -> ${m2.flowMap?.subnetsTagged} ranges`);
   } else check("A range tagged on any device at a site counts for that site", false, "no site with three devices in the fixture");
 }
+// One place must be one site. Forty-eight devices carrying one site tag, one discovery configuration
+// and one pair of coordinates drew three markers on the map, because the identity came from the short
+// code in each device's own sysLocation: forty-seven said RGR, one said RGR1, and the rest fell back
+// to the tag.
+{
+  const tagged = R.devices.filter((d) => d["primary_tags.site"]);
+  const one = tagged[0]?.["primary_tags.site"];
+  const peers = tagged.filter((d) => d["primary_tags.site"] === one);
+  if (one && peers.length > 2) {
+    // give one of them a sysLocation whose code differs, as a typo in the field would
+    const bent = R.devices.map((d) => (d === peers[peers.length - 1]
+      ? { ...d, location: String(d.location ?? "").replace(/ - ([A-Z]{2,5})\d* - /, " - $1Z9 - ") } : d));
+    const m2 = buildRealModel({ ...R, devices: bent }, "simulated-grail");
+    const before = model.devices.filter((d) => d.site === model.devices.find((x) => x.name === peers[0].name)?.site).length;
+    const after = m2.devices.filter((d) => d.site === m2.devices.find((x) => x.name === peers[0].name)?.site).length;
+    check("One site tag is one site, whatever each device's sysLocation says",
+      after === before && Object.keys(m2.sites).length === Object.keys(model.sites).length,
+      `${one}: ${before} devices before, ${after} after bending one sysLocation · ${Object.keys(model.sites).length} -> ${Object.keys(m2.sites).length} sites`);
+  } else check("One site tag is one site, whatever each device's sysLocation says", false, "no tagged site with three devices in the fixture");
+}
 // NetFlow: exporters place traffic at sites, site_cidr places the far end, findings are measurements
 const fm = model.flowMap;
 const dc1 = Object.values(model.sites).find((s) => s.dc && fm?.sites[s.code]?.fanIn.length);

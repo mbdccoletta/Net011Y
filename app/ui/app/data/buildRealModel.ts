@@ -50,11 +50,11 @@ const BR_UF: Record<string, [string, number, number]> = {
   SE: ["Sergipe", -10.6, -37.4], TO: ["Tocantins", -10.2, -48.3],
 };
 
-const slug = (v: string | null | undefined) => (v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-
 /** "City - CODE - Area" in the SNMP sysLocation: the city of a site, when the code in it matches. */
 /** sysLocation left at its default ("n/a", "unknown", "-") says nothing about where the device is. */
-const DC_NAME = /^DC|data ?cent(er|re)/i;
+// A data centre names itself at either end of its code: DCT1, DCG1 — and, once the site's identity
+// became the customer's tag rather than the short code in sysLocation, transamerica-dc and gaspar-dc.
+const DC_NAME = /^DC|[-_ ]dc$|data ?cent(er|re)/i;
 const PLACEHOLDER = /^(n\/?a|none|null|unknown|not ?set|default|sys ?location|-+)?$/i;
 const realLocation = (v: unknown) => { const t = String(v ?? "").trim(); return PLACEHOLDER.test(t) ? null : t; };
 /** With nothing that names a place, the devices of one management /16 are grouped: a network, not a guess at a site. */
@@ -297,6 +297,17 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
   const siteCidrs = new Map<string, Set<string>>();
   // what each site is known by, beyond its code: the city in sysLocation and the UF in the device name
   const siteHints = new Map<string, { cities: string[]; uf?: string; country?: string; dc?: boolean }>();
+  /**
+   * The short code a tagged site's own devices report in sysLocation, so a device at that site which
+   * carries no tag joins it instead of founding a site of its own under the same code.
+   */
+  const codeToTagged = new Map<string, string>();
+  for (const [name, d] of byName) {
+    const t = tag(d, "site");
+    const der = deriveTags(name, d.device_type);
+    const c = der.matched ? der.site : parseLocation(realLocation(d.location), null)?.code ?? null;
+    if (t && c && !codeToTagged.has(c)) codeToTagged.set(c, t);
+  }
   for (const [name, d] of byName) {
     const derived = deriveTags(name, d.device_type);
     const location = realLocation(d.location);
@@ -306,8 +317,15 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     // A site tag is the customer's own word and wins; when it names the same place as the code the
     // device already carries (the tag "currais-de-laranjeiras" on devices whose sysLocation is
     // "Currais de Laranjeiras - LRJ1 - …"), the short code is kept so the site is not split in two.
-    const site = tagSite && !(code && loc && slug(tagSite) === slug(loc.city)) ? tagSite
-      : code ?? location ?? realLocation(d.activation_tag) ?? groupSite(d["autodiscovery.group_label"]) ?? subnetSite(d);
+    // The tag is the customer's own statement of where the device stands, so it is the identity;
+    // sysLocation only names the place. It used to be the other way round whenever the two agreed —
+    // the short code from sysLocation became the site — and that made the code a per-device fact.
+    // Forty-eight devices at Rio Grande carried one tag, one discovery configuration and one pair of
+    // coordinates, and the map drew three sites: forty-seven sysLocations said RGR, one said RGR1,
+    // and the devices whose location did not parse fell back to the tag. One place, three markers.
+    const site = tagSite
+      ?? (code ? codeToTagged.get(code) : undefined)
+      ?? code ?? location ?? realLocation(d.activation_tag) ?? groupSite(d["autodiscovery.group_label"]) ?? subnetSite(d);
     // the role: the customer's tag, the naming convention when it matched, else what the device says it is
     const described = DESCR_ROLES.find(([re]) => re.test(`${d.device_type ?? ""} ${d.description ?? ""}`))?.[1];
     const role = tag(d, "device_role") ?? (derived.matched || !described ? derived.role : described);
@@ -835,9 +853,13 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     const state = hint?.country && hint.country.toUpperCase() !== "BR" ? undefined : uf ? BR_UF[uf] : undefined;
     if (t) {
       const lat = num(tag(t, "geo_lat")), lon = num(tag(t, "geo_lon"));
+      // the name counts as well as the code, as it does for an untagged site: "DC TIVIT Transamerica"
+      // says what it is even where the identity the tag gave it does not
+      const nm = tag(t, "site_name") ?? city ?? code;
       Object.assign(sites[code], {
-        name: tag(t, "site_name") ?? city ?? code, city: tag(t, "city") ?? city, uf: tag(t, "state") ?? uf,
-        region: tag(t, "region") ?? state?.[0], hub: tag(t, "hub") ?? undefined, dc: tag(t, "site_type") === "datacenter" || DC_NAME.test(code),
+        name: nm, city: tag(t, "city") ?? city, uf: tag(t, "state") ?? uf,
+        region: tag(t, "region") ?? state?.[0], hub: tag(t, "hub") ?? undefined,
+        dc: tag(t, "site_type") === "datacenter" || DC_NAME.test(code) || DC_NAME.test(nm),
         ...(lat != null && lon != null ? { lat, lon } : {}),
       });
       if (sites[code].hub === code) delete sites[code].hub;
