@@ -3,16 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ahead · Capacity</title>
+<title>Ahead · Forecast</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 :root{
-  --bg:#0e0e14; --panel:#15151f; --panel-2:#1b1b27;
-  --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.16);
+  --bg:#0e0e14; --panel:#15151f; --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.16);
   --ink-hi:#fff; --ink:#e4e9f2; --ink-3:#a8b0c0; --muted:#757d91;
-  --good:#00bb7b; --warn:#f0b429; --bad:#e0384f; --cyan:#22d3ee; --violet:#8b5cf6; --accent:#6366f1;
+  --good:#00bb7b; --warn:#f0b429; --bad:#e0384f; --cyan:#22d3ee; --violet:#8b5cf6;
   --sans:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
 }
@@ -20,67 +19,65 @@
 html{color-scheme:dark}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 14px/1.5 var(--sans)}
 .wrap{max-width:1320px;margin:0 auto;padding:26px 20px 80px}
-
-.top{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:22px}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:20px}
 h1{font:700 26px/1.15 var(--sans);margin:0;color:var(--ink-hi);letter-spacing:-.02em}
 h1 small{display:block;font:500 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
-.lede{margin:7px 0 0;color:var(--ink-3);max-width:62ch;font-size:14px}
+.lede{margin:7px 0 0;color:var(--ink-3);max-width:66ch;font-size:14px}
 .lede b{color:var(--ink-hi);font-weight:600}
 .tabs{display:flex;gap:8px;flex-wrap:wrap}
 .tabs button{font:500 12.5px var(--sans);color:var(--ink);background:none;cursor:pointer;
   border:1px solid var(--line);border-radius:8px;padding:6px 13px}
 .tabs button[aria-pressed="true"]{color:var(--ink-hi);border-color:var(--line-2);box-shadow:inset 0 -2px 0 var(--warn)}
 
-/* ---------------------------------------------------------------- summary */
-.grid{display:grid;gap:14px;grid-template-columns:1.25fr 1fr 1fr;align-items:stretch}
-@media (max-width:1060px){ .grid{grid-template-columns:1fr} }
-.card{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:15px 17px 13px;min-width:0;display:grid;
-  grid-template-rows:auto 1fr auto;gap:10px}
+.grid{display:grid;gap:14px;grid-template-columns:1.5fr 1fr 1fr}
+@media (max-width:1100px){ .grid{grid-template-columns:1fr} }
+.card{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:15px 17px 13px;min-width:0;
+  display:grid;grid-template-rows:auto 1fr auto;gap:9px;margin:0}
 .card h2{margin:0;font:600 13.5px var(--sans);color:var(--ink-hi)}
-.card h2 span{float:right;font:500 11px var(--mono);color:var(--muted);font-weight:500}
-.card figcaption,.card .note{font-size:11.5px;color:var(--muted);margin:0}
+.card h2 span{float:right;font:500 11px var(--mono);color:var(--muted)}
+.card figcaption{font-size:11.5px;color:var(--muted);margin:0}
 .card svg{display:block;width:100%;height:auto;overflow:visible}
 .ax{font:500 10px var(--mono);fill:var(--muted)}
 .axb{font:600 10.5px var(--mono);fill:var(--ink-3)}
-.pick{cursor:pointer}
-.pick:hover{opacity:.82}
-.dim{opacity:.22}
+.pick{cursor:pointer}.pick:hover{opacity:.82}.dim{opacity:.2}
 
-/* ---------------------------------------------------------------- list + detail */
-.lower{display:grid;gap:14px;grid-template-columns:1.1fr 1fr;margin-top:14px;align-items:start}
-@media (max-width:1060px){ .lower{grid-template-columns:1fr} }
+.lower{display:grid;gap:14px;grid-template-columns:1.12fr 1fr;margin-top:14px;align-items:start}
+@media (max-width:1100px){ .lower{grid-template-columns:1fr} }
 .filter{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 10px;font-size:12.5px;color:var(--muted)}
 .chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line-2);border-radius:999px;
   padding:3px 10px;font:500 12px var(--mono);color:var(--ink-hi);background:none;cursor:pointer}
-.chip b{color:var(--warn);font-weight:600}
-.chip:hover{border-color:var(--warn)}
-
+.chip b{color:var(--warn)}
 table{width:100%;border-collapse:collapse}
 th{font:600 10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;
   padding:0 9px 7px;border-bottom:1px solid var(--line);white-space:nowrap}
 th.n,td.n{text-align:right}
-td{padding:9px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}
+td{padding:9px;border-bottom:1px solid var(--line);font-size:13px}
 tr.pick:hover td{background:rgba(255,255,255,.035)}
 tr.on td{background:color-mix(in srgb,var(--warn) 9%,transparent)}
 .sub2{font-size:11px;color:var(--muted);display:block}
 .mono{font:500 12.5px var(--mono);color:var(--ink-hi)}
 .days{font:700 14px var(--mono);color:var(--warn);font-variant-numeric:tabular-nums}
 .days.none{color:var(--muted);font-weight:500;font-size:12px}
-.minibar{position:relative;height:7px;border-radius:4px;background:rgba(255,255,255,.07);min-width:72px}
-.minibar i{position:absolute;inset:0 auto 0 0;border-radius:4px;background:var(--cyan)}
-.minibar u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--bad);right:0}
+/* a forecast cell: the predicted value, and the band it sits in, drawn to scale */
+.fc{min-width:92px}
+.fc .v{font:600 12.5px var(--mono);color:var(--ink-hi);font-variant-numeric:tabular-nums}
+.fc .v.over{color:var(--bad)}
+.fcbar{position:relative;height:6px;border-radius:3px;background:rgba(255,255,255,.07);margin-top:4px}
+.fcbar i{position:absolute;top:0;bottom:0;background:color-mix(in srgb,var(--warn) 55%,transparent);border-radius:3px}
+.fcbar b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--warn);border-radius:2px}
+.fcbar u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--bad);border-radius:2px}
 
 .detail{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:17px 19px;position:sticky;top:18px}
 .detail h3{margin:0;font:600 15px var(--mono);color:var(--ink-hi)}
 .detail .where{margin:3px 0 0;font-size:12px;color:var(--muted)}
-.detail .facts{display:flex;gap:22px;flex-wrap:wrap;margin:14px 0 4px}
+.detail .facts{display:flex;gap:20px;flex-wrap:wrap;margin:14px 0 2px}
 .detail .fact{display:grid;gap:1px}
 .detail .fact b{font:700 19px var(--sans);color:var(--ink-hi);font-variant-numeric:tabular-nums}
 .detail .fact b.warn{color:var(--warn)}
 .detail .fact span{font:500 10px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
-.detail .empty{color:var(--muted);font-size:13px;padding:30px 0;text-align:center}
+.detail .empty{color:var(--muted);font-size:13px;padding:34px 0;text-align:center}
 .detail p.why{margin:12px 0 0;font-size:12.5px;color:var(--ink-3)}
-
+.detail p.why b{color:var(--ink-hi);font-weight:600}
 .foot{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px;
   display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
 .foot b{display:block;color:var(--ink-3);margin-bottom:3px}
@@ -92,10 +89,7 @@ code{font:500 12px var(--mono);color:var(--ink)}
 <body>
 <div class="wrap">
   <div class="top">
-    <div>
-      <h1><small>Prototype · Ahead</small><span id="title"></span></h1>
-      <p class="lede" id="lede"></p>
-    </div>
+    <div><h1><small>Prototype · Ahead</small>Forecast</h1><p class="lede" id="lede"></p></div>
     <div class="tabs" role="group" aria-label="Which environment">
       <button type="button" data-env="demo" aria-pressed="true">An environment with trends</button>
       <button type="button" data-env="real" aria-pressed="false">This environment (eob · real)</button>
@@ -103,278 +97,322 @@ code{font:500 12px var(--mono);color:var(--ink)}
   </div>
 
   <div class="grid">
-    <figure class="card" style="margin:0">
-      <h2>What is at its limit, month by month<span id="burn-n"></span></h2>
-      <div id="burn"></div>
-      <figcaption>Click a month to keep only what arrives by then.</figcaption>
+    <figure class="card">
+      <h2>How many will be at their limit<span id="hz-n"></span></h2>
+      <div id="wave"></div>
+      <figcaption>Not a count of today — the forecast, with the band it carries. The dark line is the
+        middle of it; the shaded area is between the earliest and the latest the analyzer allows.
+        Click a month to keep what it predicts.</figcaption>
     </figure>
-    <figure class="card" style="margin:0">
-      <h2>How full against how soon<span>each dot is one port or link</span></h2>
-      <div id="scatter"></div>
-      <figcaption>Bottom right is the corner that costs money. Click a dot to open it.</figcaption>
+    <figure class="card">
+      <h2>Where it will be in ninety days<span>forecast, not today</span></h2>
+      <div id="proj"></div>
+      <figcaption>Each bar is a prediction with its band. Everything past the red line is predicted
+        over its limit. Click one to open it.</figcaption>
     </figure>
-    <figure class="card" style="margin:0">
-      <h2>Where they are<span id="site-n"></span></h2>
-      <div id="sites"></div>
-      <figcaption>Click a site to keep only its own.</figcaption>
+    <figure class="card">
+      <h2>How fast it is coming<span>points a day</span></h2>
+      <div id="rate"></div>
+      <figcaption>The slope the forecast is built on, and how much of it is the fit and how much is
+        the doubt. A long bar with a long whisker is a guess, not a plan.</figcaption>
     </figure>
   </div>
 
   <div class="lower">
-    <div>
-      <div class="filter" id="filter"></div>
-      <div id="list"></div>
-    </div>
+    <div><div class="filter" id="filter"></div><div id="list"></div></div>
     <aside class="detail" id="detail"></aside>
   </div>
 
   <div class="foot">
-    <p><b>Where the forecast comes from</b>The platform's analyzer, <code>dt.statistics.forecast</code> —
-      not a regression written here. On eob it answers <code>403 · davis:analyzers:read</code>; the SDK
-      client is already installed. One scope.</p>
+    <p><b>Every number on this page is a forecast</b>Nothing here reports the present except as the
+      last point of a series. The columns are the predicted value, the predicted date and the width of
+      the band around both — a reading of today belongs on the Traffic page, not here.</p>
+    <p><b>Where the forecast comes from</b>The platform's analyzer, <code>dt.statistics.forecast</code>,
+      which returns the prediction and its bounds. The app propagates those bounds and never narrows
+      them. On eob the endpoint answers <code>403 · davis:analyzers:read</code> and the SDK client is
+      installed: one scope. In this prototype a least-squares fit with its own standard error stands in
+      for it, so the shapes are honest even though the engine is not the real one.</p>
     <p><b>Where the limits come from</b>Never the app: the speed the port reports, the bandwidth the
       contract names, the hundred per cent of a processor.</p>
-    <p><b>What it costs</b>Nothing new — every series here is a metric, and Grail bills logs, events and
-      sessions, not metrics.</p>
   </div>
 </div>
 
 <script>
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const MONTHS = ["Feb", "Mar", "Apr", "May", "Jun", "Jul"];
+const HZ = 180;
+const monthOf = (d) => Math.min(MONTHS.length - 1, Math.floor(d / 30));
 
-// ------------------------------------------------------------------ data
+// ---------------------------------------------------------------- the forecast
+/**
+ * Stands in for dt.statistics.forecast: a least-squares line through the record, and the standard
+ * error of its slope as the band. Everything the page shows is read off this — the predicted value at
+ * a date, the date a limit is reached, and the width of the doubt around both. The real page asks the
+ * platform and propagates the bounds it returns; the shape of the answer is the same.
+ */
+function fit(hist) {
+  const pts = hist.map((v, i) => [i, v]).filter(([, v]) => v != null);
+  if (pts.length < 8) return null;
+  const n = pts.length, sx = pts.reduce((a, [x]) => a + x, 0), sy = pts.reduce((a, [, y]) => a + y, 0);
+  const sxx = pts.reduce((a, [x]) => a + x * x, 0), sxy = pts.reduce((a, [x, y]) => a + x * y, 0);
+  const den = n * sxx - sx * sx;
+  if (!den) return null;
+  const slope = (n * sxy - sx * sy) / den, intercept = (sy - slope * sx) / n;
+  const resid = pts.reduce((a, [x, y]) => a + (y - (intercept + slope * x)) ** 2, 0);
+  const se = Math.sqrt(resid / Math.max(1, n - 2)) / Math.sqrt(sxx - (sx * sx) / n);
+  const last = pts[pts.length - 1];
+  const at = (d) => intercept + slope * (last[0] + d);          // predicted value d days out
+  const band = (d) => 1.96 * se * d;                             // widening with the horizon
+  const cross = (s) => (s <= 0 ? null : (100 - at(0)) / s);
+  const mid = cross(slope), lo = cross(slope + 1.96 * se), hi = cross(slope - 1.96 * se);
+  const ok = (v) => (v != null && Number.isFinite(v) && v > 0 && v <= HZ ? Math.round(v) : null);
+  return { slope, se, at, band, now: at(0), mid: ok(mid), lo: ok(lo) ?? 0, hi: ok(hi) ?? HZ,
+    certain: ok(mid) != null && ok(hi) != null };
+}
+
 const rnd = (seed) => () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
-function series(from, to, n, noise, r) {
-  return Array.from({ length: n }, (_, i) => {
-    const t = i / (n - 1), week = (i % 7 === 5 || i % 7 === 6) ? -noise * 1.6 : 0;
-    return Math.max(0, +(from + (to - from) * t + (r() - 0.5) * noise * 2 + week).toFixed(1));
-  });
-}
+const series = (from, to, n, noise, r) => Array.from({ length: n }, (_, i) => {
+  const t = i / (n - 1), week = (i % 7 === 5 || i % 7 === 6) ? -noise * 1.6 : 0;
+  return Math.max(0, +(from + (to - from) * t + (r() - 0.5) * noise * 2 + week).toFixed(1));
+});
 const SITES = ["Rio Grande", "DC TIVIT Transamerica", "Rondonópolis", "Urucuí", "LEM", "Gaspar", "Placas"];
-const KINDS = [["circuit", "var(--warn)"], ["port", "var(--cyan)"], ["cpu", "var(--violet)"]];
 function makeDemo() {
-  const r = rnd(97), out = [];
+  // start, today, noise, devices — the pair sets the slope, and the slope sets the date. Chosen so
+  // the crossings spread across the half year the way a real estate does, rather than all arriving
+  // next week: a port at 78% climbing two thirds of a point a day has about a month.
   const seeds = [
-    ["WAN · Vivo MPLS", 0, "circuit", "100 Mb/s contracted", 78, 34, 20, 67],
-    ["port-channel1", 1, "port", "10 Gb/s · the port", 83, 58, 46, 73],
-    ["Te1/1/1", 2, "port", "1 Gb/s · the port", 71, 123, 90, 165],
-    ["WAN · Claro", 3, "circuit", "50 Mb/s contracted", 66, 141, 108, 178],
-    ["CPU", 4, "cpu", "100% · the processor", 69, null, 140, null],
-    ["WAN · Oi", 0, "circuit", "30 Mb/s contracted", 74, 71, 52, 96],
-    ["Gi1/0/48", 1, "port", "1 Gb/s · the port", 81, 44, 31, 62],
-    ["Te2/1/4", 1, "port", "10 Gb/s · the port", 64, 96, 70, 134],
-    ["Gi1/0/12", 2, "port", "1 Gb/s · the port", 59, 118, 88, 160],
-    ["Gi1/0/3", 3, "port", "1 Gb/s · the port", 77, 61, 44, 85],
-    ["port-channel2", 1, "port", "20 Gb/s · the port", 55, 150, 112, 179],
-    ["Te1/1/2", 4, "port", "10 Gb/s · the port", 68, 88, 63, 121],
-    ["CPU", 5, "cpu", "100% · the processor", 62, 162, 128, 180],
-    ["Gi1/0/22", 5, "port", "1 Gb/s · the port", 72, 77, 55, 108],
-    ["Gi1/0/7", 6, "port", "1 Gb/s · the port", 51, null, null, null],
+    ["WAN · Vivo MPLS", 0, "100 Mb/s contracted", 58.6, 78, 2.0, 38],
+    ["Gi1/0/48", 1, "1 Gb/s · the port", 68.1, 81, 2.4, 4],
+    ["port-channel1", 1, "10 Gb/s · the port", 74.2, 83, 1.8, 22],
+    ["Gi1/0/3", 3, "1 Gb/s · the port", 65.7, 77, 2.6, 3],
+    ["WAN · Oi", 0, "30 Mb/s contracted", 63.0, 74, 2.2, 11],
+    ["Gi1/0/22", 5, "1 Gb/s · the port", 61.1, 72, 3.0, 2],
+    ["Te1/1/2", 4, "10 Gb/s · the port", 57.1, 68, 2.1, 6],
+    ["Te2/1/4", 1, "10 Gb/s · the port", 52.8, 64, 2.3, 9],
+    ["WAN · Claro", 3, "50 Mb/s contracted", 58.8, 66, 1.9, 14],
+    ["Gi1/0/12", 2, "1 Gb/s · the port", 48.6, 59, 2.5, 3],
+    ["Te1/1/1", 2, "1 Gb/s · the port", 63.9, 71, 2.8, 5],
+    ["port-channel2", 1, "20 Gb/s · the port", 46.0, 55, 1.7, 17],
+    ["CPU", 5, "100% · the processor", 55.0, 62, 2.2, 1],
+    ["CPU", 4, "100% · the processor", 65.4, 69, 4.6, 1],
+    ["Gi1/0/7", 6, "1 Gb/s · the port", 49.5, 51, 5.4, 2],
   ];
-  seeds.forEach(([name, si, kind, limit, now, mid, lo, hi], i) => {
-    out.push({ id: i, name, site: SITES[si], kind, limit, now, mid, lo, hi,
-      devices: 1 + Math.round(r() * (kind === "circuit" ? 40 : 6)),
-      hist: series(Math.max(4, now - 26 - r() * 10), now, 30, 3 + r() * 3, rnd(i * 31 + 5)) });
+  return seeds.map(([name, si, limit, from, to, noise, devices], i) => {
+    const hist = series(from, to, 30, noise, rnd(i * 37 + 11));
+    return { id: i, name, site: SITES[si], limit, devices, hist, f: fit(hist) };
   });
-  return out;
 }
-const DEMO = {
-  title: "Capacity ahead", rows: makeDemo(),
-  lede: 'Fifteen things are measured against a limit someone else stated. <b>Eleven of them reach it inside six months</b>, and the summary above is how they fall — by month, by how full they already are, and by where they stand.',
-  blind: 412,
-};
-
-// real eob series, daily peak utilisation per port; the nulls are real — sixteen days of counter
+const DEMO = { rows: makeDemo(), real: false };
 const REAL_HIST = [
   [null,null,null,null,null,null,null,null,null,null,null,null,3.5,5.4,5.7,6.4,4.4,1.8,6.1,7.6,7.4,12.2,49.5,45.6,2.4,1.9,8.8,1.4],
   [null,null,null,null,null,null,null,null,null,null,null,null,2.7,11.1,10.8,10.4,12,4.4,15.2,10.6,11.8,10,33.3,37.9,8.3,4,12,7.4],
   [null,null,null,null,null,null,null,null,null,null,null,null,0.5,0.3,1.4,1.2,1.8,0.6,2.2,2.6,2.4,1.8,1.6,3,2.2,1.9,13.8,7.2],
   [null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,0,0,0,1.5,9.8,9.9,9.5,9.1,9.4,8.8,1.4,5.5,0],
 ];
-const REAL = {
-  title: "Capacity ahead",
-  lede: 'Nothing here is on course to meet a limit, and that is <b>a short record, not a clean bill of health</b>: the counters reach back sixteen days, the busiest port touched 49% once, and no circuit states a contracted bandwidth to measure against.',
-  rows: REAL_HIST.map((h, i) => ({
-    id: i, name: ["Ethernet1/31", "Ethernet1/31", "Gi1/1/2", "Te3/1/1"][i],
-    site: ["DC TIVIT Transamerica", "DC TIVIT Transamerica", "LEM", "Rio Grande"][i],
-    kind: "port", limit: ["10 Gb/s · the port", "10 Gb/s · the port", "1 Gb/s · the port", "1 Gb/s · the port"][i],
-    now: [8.8, 12, 7.2, 0][i], mid: null, lo: null, hi: null, devices: 1, hist: h,
-    why: "sixteen days of record, and spiky rather than growing",
-  })),
-  blind: 6910,
-};
+const REAL = { real: true, rows: REAL_HIST.map((h, i) => ({
+  id: i, name: ["Ethernet1/31", "Ethernet1/31", "Gi1/1/2", "Te3/1/1"][i],
+  site: ["DC TIVIT Transamerica", "DC TIVIT Transamerica", "LEM", "Rio Grande"][i],
+  limit: ["10 Gb/s · the port", "10 Gb/s · the port", "1 Gb/s · the port", "1 Gb/s · the port"][i],
+  devices: 1, hist: h, f: fit(h) })) };
 
-let DATA = DEMO, filter = { month: null, site: null }, picked = null;
+let DATA = DEMO, filter = { month: null }, picked = null;
+const dated = (rows) => rows.filter((r) => r.f && r.f.certain);
 
-// ------------------------------------------------------------------ charts
-const monthOf = (d) => Math.min(MONTHS.length - 1, Math.floor(d / 30));
-
-function burn(rows) {
-  const W = 420, H = 150, L = 26, B = 24;
-  const dated = rows.filter((r) => r.mid != null);
-  const per = MONTHS.map((_, m) => dated.filter((r) => monthOf(r.mid) === m).length);
-  let run = 0; const cum = per.map((n) => (run += n));
-  const max = Math.max(1, cum[cum.length - 1]);
-  const bw = (W - L - 6) / MONTHS.length;
-  const X = (m) => L + m * bw, Y = (v) => H - B - (v / max) * (H - B - 12);
-  const bars = MONTHS.map((mo, m) => {
-    const on = filter.month == null || filter.month === m;
+// ---------------------------------------------------------------- charts
+/** the forecast of the estate: how many are predicted over their limit at each day, as a band */
+function wave(rows) {
+  const W = 470, H = 168, L = 28, B = 26;
+  const ds = dated(rows);
+  const X = (d) => L + (d / HZ) * (W - L - 10);
+  const step = 6, days = Array.from({ length: HZ / step + 1 }, (_, i) => i * step);
+  const early = days.map((d) => ds.filter((r) => r.f.lo <= d).length);   // every band at its earliest
+  const mid = days.map((d) => ds.filter((r) => r.f.mid <= d).length);
+  const late = days.map((d) => ds.filter((r) => r.f.hi <= d).length);    // every band at its latest
+  const max = Math.max(1, early[early.length - 1]);
+  const Y = (v) => H - B - (v / max) * (H - B - 16);
+  const path = (arr, close) => arr.map((v, i) => `${i ? "L" : "M"}${X(days[i]).toFixed(1)},${Y(v).toFixed(1)}`).join(" ")
+    + (close ? ` L${X(days[days.length - 1]).toFixed(1)},${Y(0)} L${X(0).toFixed(1)},${Y(0)} Z` : "");
+  const area = `${path(early)} ` + late.slice().reverse().map((v, i) =>
+    `L${X(days[days.length - 1 - i]).toFixed(1)},${Y(v).toFixed(1)}`).join(" ") + " Z";
+  const months = MONTHS.map((mo, m) => {
+    const d0 = m * 30, on = filter.month == null || filter.month === m;
     return `<g class="pick${on ? "" : " dim"}" data-month="${m}">
-      <rect x="${(X(m) + 3).toFixed(1)}" y="${Y(cum[m]).toFixed(1)}" width="${(bw - 6).toFixed(1)}"
-            height="${(H - B - Y(cum[m])).toFixed(1)}" rx="3" fill="var(--warn)" opacity="${per[m] ? .26 : .1}"/>
-      <rect x="${(X(m) + 3).toFixed(1)}" y="${Y(cum[m]).toFixed(1)}" width="${(bw - 6).toFixed(1)}"
-            height="${Math.max(2, (Y(cum[m] - per[m]) - Y(cum[m]))).toFixed(1)}" rx="3" fill="var(--warn)"/>
-      <text class="axb" x="${(X(m) + bw / 2).toFixed(1)}" y="${(Y(cum[m]) - 7).toFixed(1)}" text-anchor="middle">${cum[m]}</text>
-      <text class="ax" x="${(X(m) + bw / 2).toFixed(1)}" y="${H - 7}" text-anchor="middle">${mo}</text>
+      <rect x="${X(d0).toFixed(1)}" y="8" width="${(X(30) - X(0)).toFixed(1)}" height="${H - B - 8}" fill="transparent"/>
+      <text class="ax" x="${(X(d0) + (X(30) - X(0)) / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">${mo}</text>
+      <line x1="${X(d0).toFixed(1)}" y1="10" x2="${X(d0).toFixed(1)}" y2="${H - B}" stroke="var(--line)"/>
     </g>`;
   }).join("");
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="how many have met their limit by each month">
-    <line x1="${L}" y1="${H - B}" x2="${W - 4}" y2="${H - B}" stroke="var(--line-2)"/>
+  const lastMid = mid[mid.length - 1], lastEarly = early[early.length - 1], lastLate = late[late.length - 1];
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="forecast of how many reach their limit">
+    ${months}
+    <path d="${area}" fill="var(--warn)" opacity=".17"/>
+    <path d="${path(early)}" fill="none" stroke="var(--warn)" stroke-width="1" opacity=".5" stroke-dasharray="3 3"/>
+    <path d="${path(late)}" fill="none" stroke="var(--warn)" stroke-width="1" opacity=".5" stroke-dasharray="3 3"/>
+    <path d="${path(mid)}" fill="none" stroke="var(--warn)" stroke-width="2.4"/>
+    <line x1="${L}" y1="${H - B}" x2="${W - 10}" y2="${H - B}" stroke="var(--line-2)"/>
     <text class="ax" x="4" y="${Y(max).toFixed(1)}">${max}</text>
-    <text class="ax" x="4" y="${H - B}">0</text>
+    <text class="ax" x="4" y="${(H - B).toFixed(1)}">0</text>
+    <text class="axb" x="${(W - 12).toFixed(1)}" y="${(Y(lastMid) - 8).toFixed(1)}" text-anchor="end">${lastMid} by Jul</text>
+    ${lastLate === lastEarly ? "" : `<text class="ax" x="${(W - 12).toFixed(1)}" y="${(Y(lastMid) + 6).toFixed(1)}" text-anchor="end">${lastLate}\u2013${lastEarly} in the band</text>`}
+  </svg>`;
+}
+
+/** the predicted value at +90 days, with the band, against the limit */
+function proj(rows) {
+  const list = rows.filter((r) => r.f).map((r) => ({ r, v: r.f.at(90), b: r.f.band(90) }))
+    .sort((a, b) => b.v - a.v).slice(0, 9);
+  if (!list.length) return `<svg viewBox="0 0 330 150"><text class="ax" x="165" y="76" text-anchor="middle">no series long enough to project</text></svg>`;
+  const W = 330, rowH = 16, H = list.length * rowH + 16;
+  const max = Math.max(120, ...list.map(({ v, b }) => v + b));
+  const X = (v) => 108 + (Math.max(0, v) / max) * (W - 124);
+  const bars = list.map(({ r, v, b }, i) => {
+    const y = i * rowH + 6, on = filter.month == null || (r.f.certain && monthOf(r.f.mid) === filter.month);
+    const over = v >= 100;
+    return `<g class="pick${on ? "" : " dim"}" data-id="${r.id}">
+      <text class="ax" x="102" y="${y + 8}" text-anchor="end" fill="var(--ink-3)">${esc(r.name.length > 14 ? r.name.slice(0, 13) + "…" : r.name)}</text>
+      <line x1="${X(Math.max(0, v - b)).toFixed(1)}" y1="${y + 4}" x2="${X(v + b).toFixed(1)}" y2="${y + 4}" stroke="var(--warn)" stroke-width="1" opacity=".45"/>
+      <rect x="108" y="${y + 1}" width="${(X(v) - 108).toFixed(1)}" height="7" rx="3.5" fill="${over ? "var(--bad)" : "var(--warn)"}" opacity=".85"/>
+      <text class="ax" x="${(X(v + b) + 5).toFixed(1)}" y="${y + 8}" fill="${over ? "var(--bad)" : "var(--ink-3)"}">${Math.round(v)}%</text>
+    </g>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="predicted utilisation in ninety days">
+    <line x1="${X(100).toFixed(1)}" y1="0" x2="${X(100).toFixed(1)}" y2="${H - 10}" stroke="var(--bad)" stroke-dasharray="3 3" opacity=".8"/>
+    <text class="ax" x="${X(100).toFixed(1)}" y="${H - 1}" text-anchor="middle" fill="var(--bad)">limit</text>
     ${bars}</svg>`;
 }
 
-function scatter(rows) {
-  const W = 330, H = 150, L = 30, B = 26;
-  const X = (pct) => L + (pct / 100) * (W - L - 12);
-  const Y = (d) => (H - B) - (Math.min(d, 180) / 180) * (H - B - 14);
-  const dots = rows.map((r) => {
-    const on = (filter.site == null || filter.site === r.site) && (filter.month == null || (r.mid != null && monthOf(r.mid) === filter.month));
-    const col = (KINDS.find((k) => k[0] === r.kind) || [, "var(--cyan)"])[1];
-    const cy = r.mid == null ? 12 : Y(r.mid);
-    return `<circle class="pick${on ? "" : " dim"}" data-id="${r.id}" cx="${X(r.now).toFixed(1)}" cy="${cy.toFixed(1)}"
-      r="${(3.5 + Math.min(5, Math.sqrt(r.devices))).toFixed(1)}" fill="${col}" opacity="${r.mid == null ? .35 : .85}"
-      stroke="${picked === r.id ? "var(--ink-hi)" : "none"}" stroke-width="1.6"><title>${esc(r.name)} · ${esc(r.site)} · ${r.now}% · ${r.mid == null ? "no date" : r.mid + " days"}</title></circle>`;
+/** the slope the forecast rests on, and the doubt around it */
+function rate(rows) {
+  const list = rows.filter((r) => r.f).map((r) => ({ r, s: r.f.slope, e: 1.96 * r.f.se }))
+    .sort((a, b) => b.s - a.s).slice(0, 9);
+  if (!list.length) return `<svg viewBox="0 0 330 150"><text class="ax" x="165" y="76" text-anchor="middle">no slope to report</text></svg>`;
+  const W = 330, rowH = 16, H = list.length * rowH + 16;
+  const max = Math.max(...list.map(({ s, e }) => Math.abs(s) + e), 0.1);
+  const X = (v) => 108 + (v / max) * (W - 130);
+  const bars = list.map(({ r, s, e }, i) => {
+    const y = i * rowH + 6, on = filter.month == null || (r.f.certain && monthOf(r.f.mid) === filter.month);
+    const shaky = e > Math.abs(s) * 0.6;
+    return `<g class="pick${on ? "" : " dim"}" data-id="${r.id}">
+      <text class="ax" x="102" y="${y + 8}" text-anchor="end" fill="var(--ink-3)">${esc(r.name.length > 14 ? r.name.slice(0, 13) + "…" : r.name)}</text>
+      <rect x="108" y="${y + 1}" width="${Math.max(1, X(Math.max(0, s)) - 108).toFixed(1)}" height="7" rx="3.5"
+            fill="${shaky ? "var(--muted)" : "var(--cyan)"}" opacity=".85"/>
+      <line x1="${X(Math.max(0, s - e)).toFixed(1)}" y1="${y + 4.5}" x2="${X(Math.max(0, s + e)).toFixed(1)}" y2="${y + 4.5}"
+            stroke="${shaky ? "var(--muted)" : "var(--cyan)"}" stroke-width="1"/>
+      <text class="ax" x="${(X(Math.max(0, s + e)) + 5).toFixed(1)}" y="${y + 8}">${s.toFixed(2)}</text>
+    </g>`;
   }).join("");
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="utilisation against days to the limit">
-    <rect x="${X(70).toFixed(1)}" y="${(H - B - 42).toFixed(1)}" width="${(W - 12 - X(70)).toFixed(1)}" height="42"
-          fill="var(--bad)" opacity=".09" rx="4"/>
-    <line x1="${L}" y1="${H - B}" x2="${W - 8}" y2="${H - B}" stroke="var(--line-2)"/>
-    <line x1="${L}" y1="8" x2="${L}" y2="${H - B}" stroke="var(--line-2)"/>
-    <text class="ax" x="${L}" y="${H - 8}">0%</text>
-    <text class="ax" x="${X(100).toFixed(1)}" y="${H - 8}" text-anchor="end">100% full</text>
-    <text class="ax" x="4" y="16">180d</text>
-    <text class="ax" x="4" y="${H - B}">now</text>
-    ${dots}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="slope and its uncertainty">${bars}</svg>`;
 }
 
-function sitesChart(rows) {
-  const by = new Map();
-  rows.forEach((r) => by.set(r.site, (by.get(r.site) ?? 0) + (r.mid != null ? 1 : 0)));
-  const list = [...by].filter(([, n]) => n).sort((a, b) => b[1] - a[1]).slice(0, 7);
-  if (!list.length) return `<svg viewBox="0 0 330 150"><text class="ax" x="165" y="78" text-anchor="middle">no site has anything on course</text></svg>`;
-  const W = 330, rowH = Math.min(22, 140 / list.length), max = Math.max(...list.map(([, n]) => n));
-  const bars = list.map(([site, n], i) => {
-    const on = filter.site == null || filter.site === site;
-    const w = (n / max) * (W - 150);
-    return `<g class="pick${on ? "" : " dim"}" data-site="${esc(site)}">
-      <text class="ax" x="140" y="${(i * rowH + 13).toFixed(1)}" text-anchor="end" fill="var(--ink-3)">${esc(site.length > 19 ? site.slice(0, 18) + "…" : site)}</text>
-      <rect x="146" y="${(i * rowH + 4).toFixed(1)}" width="${Math.max(3, w).toFixed(1)}" height="${(rowH - 9).toFixed(1)}" rx="3" fill="var(--warn)" opacity=".8"/>
-      <text class="axb" x="${(152 + w).toFixed(1)}" y="${(i * rowH + 13).toFixed(1)}">${n}</text></g>`;
-  }).join("");
-  return `<svg viewBox="0 0 ${W} ${Math.max(60, list.length * rowH + 6)}" role="img" aria-label="how many per site">${bars}</svg>`;
-}
+// ---------------------------------------------------------------- list + detail
+const visible = () => DATA.rows
+  .filter((r) => filter.month == null || (r.f && r.f.certain && monthOf(r.f.mid) === filter.month))
+  .sort((a, b) => ((a.f && a.f.certain ? a.f.mid : 1e9) - (b.f && b.f.certain ? b.f.mid : 1e9)));
 
-// ------------------------------------------------------------------ list + detail
-function visible() {
-  return DATA.rows.filter((r) =>
-    (filter.site == null || r.site === filter.site)
-    && (filter.month == null || (r.mid != null && monthOf(r.mid) === filter.month)))
-    .sort((a, b) => (a.mid ?? 1e9) - (b.mid ?? 1e9));
+function fcCell(r) {
+  if (!r.f) return `<span class="sub2">too little record to fit</span>`;
+  const v = r.f.at(90), b = r.f.band(90), max = Math.max(140, v + b);
+  const pc = (x) => `${Math.min(100, (Math.max(0, x) / max) * 100).toFixed(1)}%`;
+  return `<span class="v${v >= 100 ? " over" : ""}">${Math.round(v)}%</span>
+    <div class="fcbar">
+      <i style="left:${pc(v - b)};width:${Math.max(2, ((Math.min(max, v + b) - Math.max(0, v - b)) / max) * 100).toFixed(1)}%"></i>
+      <b style="left:${pc(v)}"></b><u style="left:${pc(100)}"></u>
+    </div>`;
 }
 
 function list(rows) {
-  if (!rows.length) return `<p style="color:var(--muted);font-size:13px">Nothing matches that selection.</p>`;
-  return `<table><thead><tr><th>What</th><th>How full</th><th class="n">When</th></tr></thead><tbody>
+  if (!rows.length) return `<p style="color:var(--muted);font-size:13px">Nothing is predicted for that month.</p>`;
+  return `<table><thead><tr><th>What</th><th class="fc">In 90 days</th><th class="n">Reaches its limit</th></tr></thead><tbody>
     ${rows.map((r) => `<tr class="pick${picked === r.id ? " on" : ""}" data-id="${r.id}">
       <td><span class="mono">${esc(r.name)}</span><span class="sub2">${esc(r.site)} · ${esc(r.limit)}</span></td>
-      <td><div class="minibar"><i style="width:${Math.min(100, r.now)}%"></i><u></u></div>
-          <span class="sub2">${r.now}% today</span></td>
-      <td class="n">${r.mid != null
-        ? `<span class="days">${r.mid}d</span><span class="sub2">${esc(MONTHS[monthOf(r.mid)])} · band ${r.hi - r.lo}d wide</span>`
-        : `<span class="days none">no date</span><span class="sub2">${esc(r.why || "band wider than the horizon")}</span>`}</td>
+      <td class="fc">${fcCell(r)}</td>
+      <td class="n">${r.f && r.f.certain
+        ? `<span class="days">${r.f.mid}d</span><span class="sub2">${MONTHS[monthOf(r.f.mid)]} · between ${r.f.lo} and ${r.f.hi}</span>`
+        : `<span class="days none">no date</span><span class="sub2">${r.f ? "the band reaches past the horizon" : "fewer than eight days of record"}</span>`}</td>
     </tr>`).join("")}</tbody></table>`;
 }
 
 function detail(r) {
-  if (!r) return `<p class="empty">Pick a dot, a bar or a row to open it.</p>`;
-  const W = 460, H = 180, L = 34, B = 26, HP = 0.34;
+  if (!r) return `<p class="empty">Pick a bar, a month or a row to open its forecast.</p>`;
+  const W = 460, H = 184, L = 34, B = 26, HP = 0.3;
   const vals = r.hist.filter((v) => v != null);
-  const peak = Math.max(100, ...vals);
+  const f = r.f;
+  const peak = Math.max(120, ...vals, f ? f.at(HZ) + f.band(HZ) : 0);
   const todayX = L + HP * (W - L - 14);
-  const X = (d) => d <= 0 ? L + ((d + 30) / 30) * (todayX - L) : todayX + Math.min(1, d / 180) * (W - 14 - todayX);
-  const Y = (v) => (H - B) - (Math.min(v, peak) / peak) * (H - B - 16);
+  const X = (d) => d <= 0 ? L + ((d + 30) / 30) * (todayX - L) : todayX + Math.min(1, d / HZ) * (W - 14 - todayX);
+  const Y = (v) => (H - B) - (Math.min(Math.max(v, 0), peak) / peak) * (H - B - 16);
   let d = "", open = false;
   r.hist.forEach((v, k) => {
     if (v == null) { open = false; return; }
     const px = X(-30 + (k / (r.hist.length - 1)) * 30);
     d += (open ? "L" : "M") + px.toFixed(1) + "," + Y(v).toFixed(1) + " "; open = true;
   });
-  const last = vals[vals.length - 1] ?? 0;
-  const proj = r.mid != null
-    ? `<rect x="${X(r.lo).toFixed(1)}" y="12" width="${Math.max(5, X(r.hi) - X(r.lo)).toFixed(1)}" height="${H - B - 12}" fill="var(--warn)" opacity=".14" rx="3"/>
-       <path d="M${todayX.toFixed(1)},${Y(last).toFixed(1)} L${X(r.mid).toFixed(1)},${Y(peak).toFixed(1)}" fill="none" stroke="var(--warn)" stroke-width="2.2" stroke-dasharray="5 4"/>
-       <circle cx="${X(r.mid).toFixed(1)}" cy="${Y(peak).toFixed(1)}" r="5" fill="var(--warn)"/>` : "";
+  let cone = "", line = "";
+  if (f) {
+    const steps = Array.from({ length: 25 }, (_, i) => (i / 24) * HZ);
+    const up = steps.map((t) => `${X(t).toFixed(1)},${Y(f.at(t) + f.band(t)).toFixed(1)}`);
+    const dn = steps.map((t) => `${X(t).toFixed(1)},${Y(Math.max(0, f.at(t) - f.band(t))).toFixed(1)}`).reverse();
+    cone = `<polygon points="${up.concat(dn).join(" ")}" fill="var(--warn)" opacity=".15"/>`;
+    line = `<path d="M${steps.map((t) => `${X(t).toFixed(1)},${Y(f.at(t)).toFixed(1)}`).join(" L")}"
+              fill="none" stroke="var(--warn)" stroke-width="2.2" stroke-dasharray="5 4"/>`;
+  }
+  const hit = f && f.certain ? `<circle cx="${X(f.mid).toFixed(1)}" cy="${Y(100).toFixed(1)}" r="5" fill="var(--warn)"/>` : "";
   return `
-    <h3>${esc(r.name)}</h3>
-    <p class="where">${esc(r.site)} · ${esc(r.limit)}</p>
+    <h3>${esc(r.name)}</h3><p class="where">${esc(r.site)} · ${esc(r.limit)}</p>
     <div class="facts">
-      <div class="fact"><b>${r.now}%</b><span>of its limit today</span></div>
-      <div class="fact"><b class="${r.mid != null ? "warn" : ""}">${r.mid != null ? r.mid + "d" : "—"}</b><span>to the limit</span></div>
-      <div class="fact"><b>${r.mid != null ? r.hi - r.lo + "d" : "—"}</b><span>band width</span></div>
-      <div class="fact"><b>${r.devices}</b><span>devices behind it</span></div>
+      <div class="fact"><b>${f ? Math.round(f.at(30)) + "%" : "—"}</b><span>in 30 days</span></div>
+      <div class="fact"><b>${f ? Math.round(f.at(90)) + "%" : "—"}</b><span>in 90 days</span></div>
+      <div class="fact"><b class="${f && f.certain ? "warn" : ""}">${f && f.certain ? f.mid + "d" : "—"}</b><span>to the limit</span></div>
+      <div class="fact"><b>${f && f.certain ? f.hi - f.lo + "d" : "—"}</b><span>band width</span></div>
+      <div class="fact"><b>${f ? f.slope.toFixed(2) : "—"}</b><span>points a day</span></div>
     </div>
-    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(r.name)} against its limit">
-      <line x1="${L}" y1="${Y(peak).toFixed(1)}" x2="${W - 14}" y2="${Y(peak).toFixed(1)}" stroke="var(--bad)" stroke-dasharray="3 4" opacity=".7"/>
-      <text class="ax" x="${W - 14}" y="${(Y(peak) - 6).toFixed(1)}" text-anchor="end" fill="var(--bad)">its limit</text>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(r.name)} forecast">
+      <line x1="${L}" y1="${Y(100).toFixed(1)}" x2="${W - 14}" y2="${Y(100).toFixed(1)}" stroke="var(--bad)" stroke-dasharray="3 4" opacity=".75"/>
+      <text class="ax" x="${W - 14}" y="${(Y(100) - 6).toFixed(1)}" text-anchor="end" fill="var(--bad)">its limit</text>
       <line x1="${L}" y1="${H - B}" x2="${W - 14}" y2="${H - B}" stroke="var(--line-2)"/>
       <line x1="${todayX.toFixed(1)}" y1="8" x2="${todayX.toFixed(1)}" y2="${H - B}" stroke="var(--line-2)"/>
       <text class="ax" x="${todayX.toFixed(1)}" y="${H - 8}" text-anchor="middle">TODAY</text>
       <text class="ax" x="${L}" y="${H - 8}">−30d</text>
       <text class="ax" x="${W - 14}" y="${H - 8}" text-anchor="end">+180d</text>
-      ${proj}
+      ${cone}${line}${hit}
       <path d="${d}" fill="none" stroke="var(--cyan)" stroke-width="2.4" stroke-linejoin="round"/>
     </svg>
-    <p class="why">${r.mid != null
-      ? `The measured series is the solid line; past TODAY it is the platform's forecast, and the shaded block is its band. The answer is <b style="color:var(--ink-hi)">${esc(MONTHS[monthOf(r.mid)])}</b>, give or take ${r.hi - r.lo} days.`
-      : esc(r.why || "No date: the band the analyzer returns is wider than the horizon.")}</p>`;
+    <p class="why">${f
+      ? (f.certain
+        ? `The cone is the forecast and its band, widening as it goes out. The middle of it crosses the limit in <b>${f.mid} days</b> — <b>${MONTHS[monthOf(f.mid)]}</b> — and the band puts that anywhere between ${f.lo} and ${f.hi} days.`
+        : `The cone reaches past the horizon before its middle meets the limit, so there is no date to give. The slope is ${f.slope.toFixed(2)} points a day with a doubt of ±${(1.96 * f.se).toFixed(2)}.`)
+      : "Fewer than eight days of record: nothing to fit, so nothing to predict."}</p>`;
 }
 
 function chips() {
-  const parts = [];
-  if (filter.month != null) parts.push(`<button class="chip" data-clear="month">by <b>${MONTHS[filter.month]}</b> ✕</button>`);
-  if (filter.site) parts.push(`<button class="chip" data-clear="site">at <b>${esc(filter.site)}</b> ✕</button>`);
   const n = visible().length;
-  return `<span>${n} of ${DATA.rows.length} shown</span>${parts.join("")}`;
+  return `<span>${n} of ${DATA.rows.length} shown</span>`
+    + (filter.month != null ? `<button class="chip" data-clear="month">predicted for <b>${MONTHS[filter.month]}</b> ✕</button>` : "");
 }
 
 function render() {
-  document.getElementById("title").textContent = DATA.title;
-  document.getElementById("lede").innerHTML = DATA.lede;
-  const dated = DATA.rows.filter((r) => r.mid != null).length;
-  document.getElementById("burn-n").textContent = `${dated} with a date`;
-  document.getElementById("site-n").textContent = `${new Set(DATA.rows.filter((r) => r.mid != null).map((r) => r.site)).size} sites`;
-  document.getElementById("burn").innerHTML = burn(DATA.rows);
-  document.getElementById("scatter").innerHTML = scatter(DATA.rows);
-  document.getElementById("sites").innerHTML = sitesChart(DATA.rows);
+  const ds = dated(DATA.rows);
+  document.getElementById("lede").innerHTML = DATA.real
+    ? 'Nothing here can be forecast yet, and the page says so rather than showing an empty frame: <b>sixteen days of counter</b>, traffic that arrives in spikes rather than trends, and no circuit stating a contracted bandwidth to measure against.'
+    : `Fifteen series are fitted against a limit someone else stated. <b>${ds.length} of them meet it inside six months</b> — every figure below is the prediction and the band around it, never a reading of today.`;
+  document.getElementById("hz-n").textContent = `${ds.length} with a date`;
+  document.getElementById("wave").innerHTML = wave(DATA.rows);
+  document.getElementById("proj").innerHTML = proj(DATA.rows);
+  document.getElementById("rate").innerHTML = rate(DATA.rows);
   document.getElementById("filter").innerHTML = chips();
   document.getElementById("list").innerHTML = list(visible());
   document.getElementById("detail").innerHTML = detail(DATA.rows.find((r) => r.id === picked));
 }
 
 document.addEventListener("click", (e) => {
-  const m = e.target.closest("[data-month]"), s = e.target.closest("[data-site]"),
-        row = e.target.closest("[data-id]"), cl = e.target.closest("[data-clear]");
-  if (cl) { filter[cl.dataset.clear] = null; return render(); }
+  const m = e.target.closest("[data-month]"), row = e.target.closest("[data-id]"), cl = e.target.closest("[data-clear]");
+  if (cl) { filter.month = null; return render(); }
   if (m) { const v = Number(m.dataset.month); filter.month = filter.month === v ? null : v; return render(); }
-  if (s) { filter.site = filter.site === s.dataset.site ? null : s.dataset.site; return render(); }
   if (row) { const v = Number(row.dataset.id); picked = picked === v ? null : v; return render(); }
 });
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
   document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-  DATA = b.dataset.env === "real" ? REAL : DEMO; filter = { month: null, site: null }; picked = null; render();
+  DATA = b.dataset.env === "real" ? REAL : DEMO; filter = { month: null }; picked = null; render();
 }));
 render();
 </script>
