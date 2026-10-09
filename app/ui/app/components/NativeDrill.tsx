@@ -7,7 +7,7 @@ import { ExternalLinkIcon } from "@dynatrace/strato-icons";
 import { Menu } from "@dynatrace/strato-components/navigation";
 import type { Circuit, Device, DeviceProblem } from "../model/types";
 import {
-  circuitMetricsQuery, deviceHealthQuery, deviceMetricsQuery, hoursBack, logsQuery,
+  circuitMetricsQuery, deviceHealthQuery, deviceMetricsQuery, hoursBack, logsQuery, logsSearchQuery,
   openDevice, openInfraDevices, openLogs, openMonitor, openNative, openNotebook, openProblem,
 } from "../utils/drilldown";
 
@@ -75,12 +75,26 @@ export function NativeDrill({ devices, circuits = [], focus, focusCircuit, since
           <small>this alert in Problems</small><ExternalLinkIcon />
         </button>
       ) : null}
-      {devices.length > 0 && (
-        <button type="button" className="lm-btn" disabled={demo} title={demo ? "Simulated data: nothing to open" : `Syslog and SNMP traps of ${devices.length === 1 ? devices[0].name : `${devices.length} devices`} in Logs`}
-          onClick={() => openLogs(logsQuery(ips, since), hoursBack(since))}>
-          <b>Logs</b><small>syslog and traps</small><ExternalLinkIcon />
-        </button>
-      )}
+      {devices.length > 0 && (() => {
+        // A device whose syslog arrives from another interface has nothing tagged with the address the
+        // extension polls, and the button used to open a query that could only answer "No logs found".
+        // It says so instead, and opens the search a reader would have typed: the device's name and
+        // address against the file path and the text.
+        const lines = devices.reduce((a, d) => a + d.syslog.ERROR + d.syslog.WARN + d.syslog.INFO + d.syslog.NONE + d.traps, 0);
+        const one = devices.length === 1 ? devices[0] : null;
+        const search = lines === 0 && !!one;
+        return (
+          <button type="button" className="lm-btn" disabled={demo}
+            title={demo ? "Simulated data: nothing to open"
+              : search ? `Nothing arrives tagged with ${one!.ip}: this searches ${one!.name} and ${one!.ip} across every log source`
+              : `Syslog and SNMP traps of ${one ? one.name : `${devices.length} devices`} in Logs`}
+            onClick={() => (search
+              ? openLogs(logsSearchQuery(one!.name, ips, since), hoursBack(since))
+              : openLogs(logsQuery(ips, since), hoursBack(since)))}>
+            <b>Logs</b><small>{search ? "none from this address · search" : "syslog and traps"}</small><ExternalLinkIcon />
+          </button>
+        );
+      })()}
       <button type="button" className="lm-btn" disabled={demo} title={demo ? "Simulated data: nothing to open" : device ? `Open ${device.name} in Infrastructure & Operations` : "Several devices: open the network device list in Infrastructure & Operations"}
         onClick={() => (device ? openDevice(device.id) : openInfraDevices())}>
         <b>Infra &amp; Ops</b><small>{device ? "this device" : "network devices"}</small><ExternalLinkIcon />

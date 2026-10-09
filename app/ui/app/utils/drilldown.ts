@@ -124,6 +124,26 @@ export function logsQuery(ips: string[], since?: string | null) {
   ].join("\n");
 }
 
+/**
+ * Everything that mentions a device, when nothing arrives tagged with its address.
+ *
+ * A device sends syslog from whichever interface its configuration names, and that is often not the
+ * address the SNMP extension polls: in one environment every Cisco switch matched and not one of the
+ * fifteen Check Points, four Fortigates or three F5s did. The app will not guess which orphan stream
+ * belongs to which firewall, but it can hand the reader the search it would have typed — the device's
+ * name and its address, against the file path the syslog server writes and the text of the line.
+ */
+export function logsSearchQuery(name: string, ips: string[], since?: string | null) {
+  const terms = [name, ...ips].filter(Boolean);
+  const any = terms.map((t) => `contains(log.source, ${quote(t)}) or contains(content, ${quote(t)})`).join(" or ");
+  return [
+    `fetch logs, from:now()-${hoursBack(since)}h`,
+    `| filter ${any}`,
+    "| sort timestamp desc",
+    "| fields timestamp, log.source, loglevel, content",
+  ].join("\n");
+}
+
 /** Synthetic ICMP reachability and round trip of the given target IPs over 24 hours. */
 export function deviceMetricsQuery(ips: string[]) {
   const byIp = ips.length ? `\n| filter in(request.target_address, array(${ips.map(quote).join(", ")}))` : "";

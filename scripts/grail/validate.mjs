@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES } from "./out/queries.mjs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, deviceVerdict, portCounts, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, buildJourney, asRoutes, nextSteps, coverage } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, deviceVerdict, portCounts, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -313,6 +313,17 @@ check("Flat retransmissions stated as counter-evidence", !fS.app?.rising && fS.f
   check("Syslog from an address the inventory does not know is still reported",
     (m2.syslogSenders?.unknown ?? 0) >= 1 && /answer to no monitored device/.test(n2.detail),
     `${m2.syslogSenders?.unknown} unknown · ${n2.detail.slice(0, 110)}`);
+}
+// A device whose syslog arrives from another interface has nothing tagged with the address the
+// extension polls. Every Cisco switch in one environment matched and not one of its fifteen Check
+// Points, four Fortigates or three F5s did, and the Logs button opened a query that could only
+// answer "No logs found".
+{
+  const d = model.devices[0];
+  const search = logsSearchQuery(d.name, [d.ip], null);
+  check("A device with no syslog of its own gets a search, not an empty query",
+    search.includes(d.name) && search.includes(d.ip) && /contains\(log\.source/.test(search) && /contains\(content/.test(search),
+    search.split("\n")[1]?.slice(0, 110));
 }
 // NetFlow: exporters place traffic at sites, site_cidr places the far end, findings are measurements
 const fm = model.flowMap;
