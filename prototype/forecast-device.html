@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ahead · The device</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#0e0e14; --panel:#15151f; --metal:#1d1f2b; --metal-2:#262937;
+  --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.16);
+  --ink-hi:#fff; --ink:#e4e9f2; --ink-3:#a8b0c0; --muted:#757d91;
+  --good:#00bb7b; --warn:#f0b429; --bad:#e0384f; --cyan:#22d3ee; --violet:#8b5cf6;
+  --sans:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html{color-scheme:dark}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 14px/1.5 var(--sans)}
+.wrap{max-width:1340px;margin:0 auto;padding:26px 20px 80px}
+h1{font:700 25px/1.15 var(--sans);margin:0;color:var(--ink-hi);letter-spacing:-.02em}
+h1 small{display:block;font:500 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+.lede{margin:7px 0 20px;color:var(--ink-3);max-width:72ch;font-size:14px}
+.lede b{color:var(--ink-hi);font-weight:600}
+
+.cols{display:grid;grid-template-columns:230px minmax(0,1fr) 340px;gap:14px;align-items:start}
+@media (max-width:1180px){.cols{grid-template-columns:1fr}}
+.card{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:14px 16px}
+.card h2{margin:0 0 10px;font:600 13px var(--sans);color:var(--ink-hi)}
+.card h2 span{float:right;font:500 10.5px var(--mono);color:var(--muted)}
+
+/* device picker */
+.dev{display:block;width:100%;text-align:left;border:1px solid transparent;border-radius:10px;padding:9px 11px;
+  background:none;cursor:pointer;color:var(--ink);margin-bottom:5px}
+.dev:hover{border-color:var(--line-2)}
+.dev[aria-pressed="true"]{border-color:color-mix(in srgb,var(--warn) 45%,transparent);background:rgba(255,255,255,.035)}
+.dev b{display:block;font:600 12.5px var(--mono);color:var(--ink-hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dev span{font-size:11px;color:var(--muted)}
+.dev i{font-style:normal;float:right;font:700 12px var(--mono);color:var(--warn)}
+.dev i.calm{color:var(--muted);font-weight:500}
+
+/* the faceplate */
+.plate{background:linear-gradient(180deg,var(--metal-2),var(--metal));border:1px solid var(--line-2);
+  border-radius:10px;padding:14px 16px 12px;position:relative;overflow:hidden}
+.plate::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(255,255,255,.055),transparent 38%)}
+.plate .badge{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.plate .badge b{font:600 12.5px var(--mono);color:var(--ink-hi)}
+.plate .badge span{font:500 10.5px var(--mono);color:var(--muted)}
+.plate .leds{margin-left:auto;display:flex;gap:5px;align-items:center}
+.plate .leds i{width:6px;height:6px;border-radius:50%;background:var(--good);box-shadow:0 0 6px var(--good)}
+.plate svg{display:block;width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:11px;font-size:11.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:11px;height:8px;border-radius:2px;display:inline-block}
+
+/* right-hand forecast */
+.facts{display:flex;gap:18px;flex-wrap:wrap;margin:2px 0 10px}
+.fact{display:grid;gap:1px}
+.fact b{font:700 18px var(--sans);color:var(--ink-hi);font-variant-numeric:tabular-nums}
+.fact b.warn{color:var(--warn)}
+.fact b.bad{color:var(--bad)}
+.fact span{font:500 9.5px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.card svg.chart{display:block;width:100%;height:auto;overflow:visible}
+.ax{font:500 9.5px var(--mono);fill:var(--muted)}
+.why{margin:10px 0 0;font-size:12.5px;color:var(--ink-3)}
+.why b{color:var(--ink-hi);font-weight:600}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:26px 0}
+.rail{display:grid;gap:7px;margin-top:12px}
+.rail .r{display:grid;grid-template-columns:62px 1fr auto;gap:9px;align-items:center;font-size:11.5px}
+.rail .r span{color:var(--muted);font:500 10.5px var(--mono)}
+.rail .r .t{height:7px;border-radius:4px;background:rgba(255,255,255,.07);position:relative}
+.rail .r .t i{position:absolute;inset:0 auto 0 0;border-radius:4px}
+.rail .r b{font:600 11px var(--mono);color:var(--ink-3)}
+.foot{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px;
+  display:grid;gap:13px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+.foot b{display:block;color:var(--ink-3);margin-bottom:3px}
+.foot p{margin:0}
+code{font:500 12px var(--mono);color:var(--ink)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><small>Prototype · Ahead · drill-down</small>The device</h1>
+  <p class="lede">The front panel as it is: forty-eight access ports and four uplinks, each drawn in
+    the state the device reports. The colour on a live port is <b>how long its forecast gives it</b> —
+    not how full it is today. Click a port.</p>
+
+  <div class="cols">
+    <div class="card">
+      <h2>Devices<span>soonest first</span></h2>
+      <div id="devs"></div>
+    </div>
+
+    <div>
+      <div class="card" style="padding:16px 18px">
+        <div class="plate" id="plate"></div>
+        <div class="legend">
+          <span><i style="background:var(--bad)"></i>under 30 days</span>
+          <span><i style="background:var(--warn)"></i>30 to 90</span>
+          <span><i style="background:var(--cyan)"></i>90 to 180</span>
+          <span><i style="background:#5a6378"></i>up, no date</span>
+          <span><i style="background:#272c3c;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)"></i>down, port enabled</span>
+          <span><i style="background:#12141c;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)"></i>shut or empty</span>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <h2>The device itself<span>processor and memory, against 100%</span></h2>
+        <div id="devfc"></div>
+      </div>
+    </div>
+
+    <div class="card" id="port"></div>
+  </div>
+
+  <div class="foot">
+    <p><b>The colour is a forecast, not a reading</b>A port at 90% that has not moved in a month is
+      grey here; a port at 40% climbing a point a day is red. The page is about what happens next, and
+      a faceplate tinted by today's load would be the Traffic page wearing a costume.</p>
+    <p><b>Where it comes from</b><code>dt.statistics.forecast</code> over the port's own daily peak,
+      against the speed the port reports. In this prototype a least-squares fit with the standard error
+      of its slope stands in for the analyzer.</p>
+    <p><b>Three states before any of that</b>A switch is mostly dark on purpose. Ports shut by an
+      operator or with no module are drawn almost black, ports enabled and not up are outlined, and
+      only what is actually carrying traffic can carry a forecast.</p>
+  </div>
+</div>
+
+<script>
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const HZ = 180;
+const rnd = (seed) => () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+
+function fit(hist) {
+  const pts = hist.map((v, i) => [i, v]).filter(([, v]) => v != null);
+  if (pts.length < 8) return null;
+  const n = pts.length, sx = pts.reduce((a, [x]) => a + x, 0), sy = pts.reduce((a, [, y]) => a + y, 0);
+  const sxx = pts.reduce((a, [x]) => a + x * x, 0), sxy = pts.reduce((a, [x, y]) => a + x * y, 0);
+  const den = n * sxx - sx * sx; if (!den) return null;
+  const slope = (n * sxy - sx * sy) / den, intercept = (sy - slope * sx) / n;
+  const resid = pts.reduce((a, [x, y]) => a + (y - (intercept + slope * x)) ** 2, 0);
+  const se = Math.sqrt(resid / Math.max(1, n - 2)) / Math.sqrt(sxx - (sx * sx) / n);
+  const last = pts[pts.length - 1][0];
+  const at = (d) => intercept + slope * (last + d), band = (d) => 1.96 * se * d;
+  const cross = (s) => (s <= 0 ? null : (100 - at(0)) / s);
+  const ok = (v) => (v != null && Number.isFinite(v) && v > 0 && v <= HZ ? Math.round(v) : null);
+  return { slope, se, at, band, days: n, mid: ok(cross(slope)),
+    lo: ok(cross(slope + 1.96 * se)) ?? 0, hi: ok(cross(slope - 1.96 * se)) ?? HZ };
+}
+const series = (from, to, n, noise, r) => Array.from({ length: n }, (_, i) => {
+  const t = i / (n - 1), week = (i % 7 === 5 || i % 7 === 6) ? -noise * 1.6 : 0;
+  return Math.max(0, +(from + (to - from) * t + (r() - 0.5) * noise * 2 + week).toFixed(1));
+});
+
+/** one switch: 48 access ports in two rows, 4 uplinks, most of them dark as a real one is */
+function makeDevice(id, name, site, model, seed, hot) {
+  const r = rnd(seed);
+  const ports = [];
+  for (let i = 1; i <= 52; i++) {
+    const up = i <= 4 ? true : r() < 0.42;                    // uplinks always, access ports rarely
+    const shut = !up && r() < 0.62;                           // most of the dark ones were shut on purpose
+    const speed = i > 48 ? 10000 : 1000;
+    let hist = null, f = null;
+    if (up) {
+      const to = 8 + r() * 46, from = Math.max(1, to - (r() < 0.3 ? 4 + r() * 22 : r() * 5));
+      hist = series(from, to, 30, 1.4 + r() * 2.4, rnd(seed + i * 13));
+      f = fit(hist);
+    }
+    ports.push({ n: i, name: i > 48 ? `Te1/1/${i - 48}` : `Gi1/0/${i}`, speed, up, shut, hist, f });
+  }
+  // one port carries the story, so the panel has something to point at
+  const star = ports.find((p) => p.n === hot);
+  if (star) {
+    star.up = true; star.shut = false;
+    star.hist = series(54, 81, 30, 2.1, rnd(seed + 999));
+    star.f = fit(star.hist);
+  }
+  const cpu = series(44 + r() * 10, 58 + r() * 14, 30, 2.2, rnd(seed + 5));
+  const mem = series(38 + r() * 8, 46 + r() * 10, 30, 1.6, rnd(seed + 6));
+  return { id, name, site, model, ports, cpu: { hist: cpu, f: fit(cpu) }, mem: { hist: mem, f: fit(mem) } };
+}
+const DEVICES = [
+  makeDevice(0, "BR-RS-RGR-SWA-013", "Rio Grande", "Catalyst 9300 · 48T-4X", 11, 17),
+  makeDevice(1, "BR-SP-DCT1-SPN-001", "DC TIVIT Transamerica", "Nexus 93180YC · 48-6Q", 29, 42),
+  makeDevice(2, "BR-MT-RON1-SWI-045", "Rondonópolis", "Catalyst 9200 · 48P-4G", 43, 8),
+  makeDevice(3, "BR-BA-LEM1-SWA-022", "LEM", "Catalyst 9300 · 48U-4X", 61, 31),
+];
+const soonest = (d) => d.ports.filter((p) => p.f && p.f.mid != null).map((p) => p.f.mid).sort((a, b) => a - b)[0] ?? null;
+DEVICES.sort((a, b) => (soonest(a) ?? 1e9) - (soonest(b) ?? 1e9));
+
+let devId = DEVICES[0].id, portN = null;
+const dev = () => DEVICES.find((d) => d.id === devId);
+// Three dark states that must not look alike: a port shut on purpose is almost the plate itself, a
+// port enabled and not up is a shade above it, and a port carrying traffic with no date is clearly
+// alive — it earns a lit indicator, because "nothing predicted" is not the same as "nothing there".
+const colourOf = (p) => {
+  if (!p.up) return p.shut ? "#12141c" : "#272c3c";
+  if (!p.f || p.f.mid == null) return "#5a6378";
+  return p.f.mid < 30 ? "var(--bad)" : p.f.mid < 90 ? "var(--warn)" : "var(--cyan)";
+};
+
+// ---------------------------------------------------------------- the faceplate
+function plate(d) {
+  const PW = 17, PH = 20, GAP = 3, GROUP = 10, COLS = 24;
+  const W = 40 + COLS * (PW + GAP) + 3 * GROUP + 92, H = 2 * (PH + 7) + 34;
+  const px = (i) => 34 + i * (PW + GAP) + Math.floor(i / 6) * GROUP;
+  const ports = d.ports.slice(0, 48).map((p, k) => {
+    const col = k % 24, row = k % 2;              // a real switch alternates odd above, even below
+    const idx = Math.floor(k / 2);
+    const x = px(idx), y = 22 + row * (PH + 7);
+    const on = portN === p.n;
+    return `<g class="pick" data-port="${p.n}" style="cursor:pointer">
+      <rect x="${x}" y="${y}" width="${PW}" height="${PH}" rx="2.5" fill="${colourOf(p)}"
+        stroke="${on ? "#fff" : p.up ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.1)"}" stroke-width="${on ? 1.8 : 1}"/>
+      <rect x="${x + 3}" y="${y + PH - 5}" width="${PW - 6}" height="2.5" rx="1.2" fill="rgba(0,0,0,.42)"/>
+      ${p.up ? `<circle cx="${x + PW - 3.5}" cy="${y + 3.5}" r="1.7" fill="var(--good)"/>` : ""}
+      <title>${esc(p.name)} · ${p.up ? (p.f && p.f.mid != null ? `limit in ${p.f.mid} d` : "no date") : p.shut ? "shut or empty" : "enabled, not up"}</title>
+    </g>`;
+  }).join("");
+  const uplinks = d.ports.slice(48).map((p, k) => {
+    const x = 34 + COLS * (PW + GAP) + 3 * GROUP + 16 + k * 18, on = portN === p.n;
+    return `<g class="pick" data-port="${p.n}" style="cursor:pointer">
+      <rect x="${x}" y="22" width="15" height="${2 * PH + 7}" rx="2.5" fill="${colourOf(p)}"
+        stroke="${on ? "#fff" : "rgba(255,255,255,.28)"}" stroke-width="${on ? 1.8 : 1}"/>
+      <title>${esc(p.name)} · 10 Gb/s · ${p.f && p.f.mid != null ? `limit in ${p.f.mid} d` : "no date"}</title></g>`;
+  }).join("");
+  const nums = Array.from({ length: 12 }, (_, i) => `<text class="ax" x="${px(i * 2) + PW}" y="16" text-anchor="middle">${i * 4 + 1}</text>`).join("");
+  return `
+    <div class="badge"><b>${esc(d.name)}</b><span>${esc(d.model)}</span>
+      <span class="leds"><i></i><i style="background:var(--cyan);box-shadow:0 0 6px var(--cyan)"></i></span></div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="front panel of ${esc(d.name)}">
+      <rect x="8" y="14" width="${W - 16}" height="${H - 20}" rx="6" fill="rgba(0,0,0,.28)" stroke="rgba(255,255,255,.07)"/>
+      ${nums}${ports}${uplinks}
+      <text class="ax" x="${34 + COLS * (PW + GAP) + 3 * GROUP + 16}" y="16">UPLINK</text>
+    </svg>`;
+}
+
+// ---------------------------------------------------------------- forecast chart
+function cone(o, W, H, label) {
+  const L = 28, B = 20, HP = 0.3;
+  const vals = o.hist.filter((v) => v != null), f = o.f;
+  const peak = Math.max(115, ...vals, f ? f.at(HZ) + f.band(HZ) : 0);
+  const todayX = L + HP * (W - L - 10);
+  const X = (dd) => dd <= 0 ? L + ((dd + 30) / 30) * (todayX - L) : todayX + Math.min(1, dd / HZ) * (W - 10 - todayX);
+  const Y = (v) => (H - B) - (Math.min(Math.max(v, 0), peak) / peak) * (H - B - 12);
+  let d = "", open = false;
+  o.hist.forEach((v, k) => {
+    if (v == null) { open = false; return; }
+    d += (open ? "L" : "M") + X(-30 + (k / (o.hist.length - 1)) * 30).toFixed(1) + "," + Y(v).toFixed(1) + " ";
+    open = true;
+  });
+  let cn = "", ln = "", hit = "";
+  if (f) {
+    const steps = Array.from({ length: 21 }, (_, i) => (i / 20) * HZ);
+    const up = steps.map((t) => `${X(t).toFixed(1)},${Y(f.at(t) + f.band(t)).toFixed(1)}`);
+    const dn = steps.map((t) => `${X(t).toFixed(1)},${Y(Math.max(0, f.at(t) - f.band(t))).toFixed(1)}`).reverse();
+    cn = `<polygon points="${up.concat(dn).join(" ")}" fill="var(--warn)" opacity=".15"/>`;
+    ln = `<path d="M${steps.map((t) => `${X(t).toFixed(1)},${Y(f.at(t)).toFixed(1)}`).join(" L")}" fill="none" stroke="var(--warn)" stroke-width="2" stroke-dasharray="5 4"/>`;
+    if (f.mid != null) hit = `<circle cx="${X(f.mid).toFixed(1)}" cy="${Y(100).toFixed(1)}" r="4.5" fill="var(--warn)"/>`;
+  }
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)} forecast">
+    <line x1="${L}" y1="${Y(100).toFixed(1)}" x2="${W - 10}" y2="${Y(100).toFixed(1)}" stroke="var(--bad)" stroke-dasharray="3 4" opacity=".7"/>
+    <text class="ax" x="${W - 10}" y="${(Y(100) - 5).toFixed(1)}" text-anchor="end" fill="var(--bad)">limit</text>
+    <line x1="${L}" y1="${H - B}" x2="${W - 10}" y2="${H - B}" stroke="var(--line-2)"/>
+    <line x1="${todayX.toFixed(1)}" y1="6" x2="${todayX.toFixed(1)}" y2="${H - B}" stroke="var(--line-2)"/>
+    <text class="ax" x="${todayX.toFixed(1)}" y="${H - 6}" text-anchor="middle">TODAY</text>
+    <text class="ax" x="${W - 10}" y="${H - 6}" text-anchor="end">+180d</text>
+    ${cn}${ln}${hit}
+    <path d="${d}" fill="none" stroke="var(--cyan)" stroke-width="2.2" stroke-linejoin="round"/></svg>`;
+}
+
+function portPanel() {
+  const d = dev(), p = d.ports.find((x) => x.n === portN);
+  if (!p) return `<h2>The port<span>pick one</span></h2><p class="empty">Click a port on the panel.</p>`;
+  if (!p.up) return `<h2>${esc(p.name)}<span>${p.speed >= 10000 ? "10 Gb/s" : "1 Gb/s"}</span></h2>
+    <p class="empty">${p.shut ? "Shut by an operator, or no module in the slot." : "Enabled and not up — nothing is passing, so there is nothing to forecast."}</p>`;
+  const f = p.f, last = p.hist.filter((v) => v != null).slice(-1)[0];
+  return `<h2>${esc(p.name)}<span>${p.speed >= 10000 ? "10 Gb/s · the port" : "1 Gb/s · the port"}</span></h2>
+    <div class="facts">
+      <div class="fact"><b>${Math.round(last)}%</b><span>last peak</span></div>
+      <div class="fact"><b>${f ? Math.round(f.at(90)) + "%" : "—"}</b><span>in 90 days</span></div>
+      <div class="fact"><b class="${f && f.mid != null ? (f.mid < 30 ? "bad" : "warn") : ""}">${f && f.mid != null ? f.mid + "d" : "—"}</b><span>to the limit</span></div>
+      <div class="fact"><b>${f && f.mid != null ? f.hi - f.lo + "d" : "—"}</b><span>band</span></div>
+    </div>
+    ${cone(p, 320, 150, p.name)}
+    <p class="why">${f && f.mid != null
+      ? `The cone crosses the port's own speed in <b>${f.mid} days</b>, and the band puts it between ${f.lo} and ${f.hi}. At ${f.slope.toFixed(2)} points a day.`
+      : f ? `Climbing ${f.slope.toFixed(2)} points a day, which does not reach the port's speed inside the horizon.`
+          : "Too little record to fit."}</p>`;
+}
+
+function devPanel() {
+  const d = dev();
+  const one = (o, label) => {
+    const f = o.f, last = o.hist.slice(-1)[0];
+    return `<div style="min-width:0">
+      <div class="facts" style="margin-bottom:6px">
+        <div class="fact"><b>${Math.round(last)}%</b><span>${label} now</span></div>
+        <div class="fact"><b>${f ? Math.round(f.at(90)) + "%" : "—"}</b><span>in 90 days</span></div>
+        <div class="fact"><b class="${f && f.mid != null ? "warn" : ""}">${f && f.mid != null ? f.mid + "d" : "no date"}</b><span>to 100%</span></div>
+      </div>${cone(o, 300, 110, label)}</div>`;
+  };
+  // and the chain: what gives first on this device
+  const live = d.ports.filter((p) => p.f && p.f.mid != null).sort((a, b) => a.f.mid - b.f.mid);
+  const items = [
+    live[0] ? { label: live[0].name, days: live[0].f.mid, col: "var(--cyan)" } : null,
+    d.cpu.f && d.cpu.f.mid != null ? { label: "CPU", days: d.cpu.f.mid, col: "var(--violet)" } : null,
+    d.mem.f && d.mem.f.mid != null ? { label: "memory", days: d.mem.f.mid, col: "var(--violet)" } : null,
+  ].filter(Boolean).sort((a, b) => a.days - b.days);
+  const rail = items.length ? `<div class="rail">${items.map((i, k) => `
+    <div class="r"><span>${esc(i.label)}</span>
+      <div class="t"><i style="width:${Math.min(100, (1 - i.days / HZ) * 100).toFixed(0)}%;background:${i.col}"></i></div>
+      <b style="color:${k === 0 ? "var(--warn)" : "var(--ink-3)"}">${i.days}d</b></div>`).join("")}</div>` : "";
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">${one(d.cpu, "CPU")}${one(d.mem, "memory")}</div>${rail}`;
+}
+
+function devList() {
+  return DEVICES.map((d) => {
+    const s = soonest(d), on = d.id === devId;
+    const live = d.ports.filter((p) => p.up).length;
+    return `<button type="button" class="dev" data-dev="${d.id}" aria-pressed="${on}">
+      <i class="${s == null ? "calm" : ""}">${s == null ? "—" : s + "d"}</i>
+      <b>${esc(d.name)}</b><span>${esc(d.site)} · ${live} of 52 up</span></button>`;
+  }).join("");
+}
+
+function render() {
+  const d = dev();
+  document.getElementById("devs").innerHTML = devList();
+  document.getElementById("plate").innerHTML = plate(d);
+  document.getElementById("devfc").innerHTML = devPanel();
+  document.getElementById("port").innerHTML = portPanel();
+}
+document.addEventListener("click", (e) => {
+  const dv = e.target.closest("[data-dev]"), p = e.target.closest("[data-port]");
+  if (dv) { devId = Number(dv.dataset.dev); portN = null; return render(); }
+  if (p) { const v = Number(p.dataset.port); portN = portN === v ? null : v; return render(); }
+});
+render();
+</script>
+</body>
+</html>
