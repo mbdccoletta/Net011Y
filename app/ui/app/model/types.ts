@@ -204,6 +204,9 @@ export interface Device {
   vendor: string;
   ip: string;
   mode: string;
+  /** the SNMP autodiscovery configuration that found it, and the extension that configuration would use */
+  discoveredBy?: string;
+  defaultExtension?: string;
   desc: string;
   location?: string | null;
   ifCount: number;

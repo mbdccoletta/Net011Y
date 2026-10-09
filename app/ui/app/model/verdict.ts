@@ -69,7 +69,11 @@ export function deviceVerdict(d: Device): [Verdict, Reason[], number] {
   // an alert counts even on a device nobody polls: Dynatrace is watching it through something else
   // (an extension of its own, a synthetic monitor), and hiding that behind "not monitored" loses it
   if (!open.length && d.mode !== "Extension") {
-    return ["Not monitored", [{ level: "Not monitored", text: "Discovered, but no polling extension is active" }], 0];
+    // naming the configuration that found it and the extension it would use turns a dead end into the
+    // next step: four Fortigates sat here as "discovered, no polling" with nothing saying where to look
+    const where = d.discoveredBy ? ` by the ${d.discoveredBy} configuration` : "";
+    const ext = d.defaultExtension ? ` Its default extension is ${d.defaultExtension}.` : "";
+    return ["Not monitored", [{ level: "Not monitored", text: `Discovered${where}, but no extension polls it.${ext}` }], 0];
   }
   if (!open.length) return ["Healthy", [], 0];
   const [v, reasons] = fold(open.map(problemReason));

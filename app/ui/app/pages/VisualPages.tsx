@@ -235,6 +235,12 @@ export function DevicesVisual(p: VisualProps) {
 
   const n = (v: Verdict) => count(model.devices, (d) => d.verdict === v);
   const setStatus = (s: string) => onFilters({ status: filters.status === s ? null : s });
+  // Clicking a tile lit a few dots among a hundred and six. Four devices is a list, not a hunt: the
+  // ones a status names are named, with where they are and what to call them, and a click opens one.
+  const listed = useMemo(
+    () => (filters.status ? model.devices.filter((d) => d.verdict === filters.status).sort((a, b) => b.impact - a.impact || a.name.localeCompare(b.name)) : []),
+    [model.devices, filters.status],
+  );
 
   return (
     <div className="lm vz">
@@ -259,6 +265,19 @@ export function DevicesVisual(p: VisualProps) {
             <KpiTile tone={TONE.good} label="Healthy" value={fmtInt(n("Healthy"))} caption={`${Math.round((100 * n("Healthy")) / Math.max(1, model.devices.length))}% of devices`} active={filters.status === "Healthy"} onClick={() => setStatus("Healthy")} />
             <KpiTile tone={TONE.accent} label="Not monitored" value={fmtInt(n("Not monitored"))} caption="discovered, no polling" active={filters.status === "Not monitored"} onClick={() => setStatus("Not monitored")} />
           </div>
+          {filters.status && (
+            <div className="vz-named" aria-label={`${filters.status} devices`}>
+              <span className="vz-named__lead">{fmtInt(listed.length)} {filters.status.toLowerCase()}</span>
+              {listed.slice(0, 14).map((d) => (
+                <button key={d.name} type="button" className="vz-named__one" onClick={() => setPicked(d.name)}
+                  title={`${d.name} · ${ROLE_LABEL[d.role] ?? d.role} · ${d.ip} · ${model.sites[d.site]?.name ?? d.site}${d.reasons[0] ? ` · ${d.reasons[0].text}` : ""}`}>
+                  {d.name}<i>{model.sites[d.site]?.name ?? d.site} · {d.ip}</i>
+                </button>
+              ))}
+              {listed.length > 14 && <span className="vz-named__rest">and {fmtInt(listed.length - 14)} more · the table lists them all</span>}
+              <button type="button" className="vz-named__clear" onClick={() => setStatus(filters.status!)}>Clear</button>
+            </div>
+          )}
           {regions.length > 0 && <div className="vz-filters"><Chips label="Region" options={regions.map((r) => ({ key: r, label: r }))} value={filters.region} onChange={(region) => onFilters({ region })} /></div>}
           <div className="vz-split">
             <Tile title={`${fmtInt(model.devices.length)} devices by role`} right="size = devices">

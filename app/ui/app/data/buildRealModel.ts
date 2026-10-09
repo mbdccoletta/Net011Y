@@ -311,8 +311,13 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     siteHints.set(site, hint);
     devices.set(name, {
       id: d.id, idClassic: d.id_classic ?? undefined, chassisMac: d.chassis_mac ?? undefined, name, site, role, vendor: d.device_type || "generic",
-      ip: (Array.isArray(d.ip) ? d.ip[0] : d.ip) ?? d["snmp.ip"] ?? "", ips: Array.isArray(d.ip) ? d.ip.filter((x: unknown) => isIpv4(String(x))) : undefined, mode: d.monitoring_mode, desc: String(d.description ?? "").slice(0, 160),
+      // the address Dynatrace polls, not whichever one the node happens to list first: two firewalls
+      // nobody polls both read 10.0.0.123, an inside interface they share, while the configuration
+      // reaches them at addresses of their own
+      ip: d["snmp.ip"] || (Array.isArray(d.ip) ? d.ip[0] : d.ip) || "", ips: Array.isArray(d.ip) ? d.ip.filter((x: unknown) => isIpv4(String(x))) : undefined, mode: d.monitoring_mode, desc: String(d.description ?? "").slice(0, 160),
       location, ifCount: num(d.interface_count) ?? 0,
+      discoveredBy: d["autodiscovery.config_label"] ? String(d["autodiscovery.config_label"]) : undefined,
+      defaultExtension: d["autodiscovery.default_extension"] ? String(d["autodiscovery.default_extension"]) : undefined,
       cpu: [], cpuNow: null, availPct: null, availTs: null,
       syslog: { ERROR: 0, WARN: 0, INFO: 0, NONE: 0 }, syslogErrTs: new Array(24).fill(0), traps: 0, events: [], interfaces: [],
       reasons: [], verdict: "Healthy", impact: 0, icmp: null,
