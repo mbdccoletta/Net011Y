@@ -328,6 +328,21 @@ export function EntityDetails(props: Props) {
         <div className="lm vz vz-details">
           <Head title={shortDevice(d.name)} verdict={d.verdict} onClose={onClose} subtitle={`${d.name} · ${ROLE_LABEL[d.role] ?? d.role} · ${d.ip || "—"}`}
             back={model.sites[d.site] ? { label: model.sites[d.site].name, onBack: () => onSelect(`site:${d.site}`) } : undefined} />
+          {/* What is happening, before anything else. A device is red because Dynatrace raised something on
+              it, and the panel used to open on a ring at 9% and a row of zeroes — a reader looking at a
+              red device found availability at 100%, no syslog error, no trap, and a link to go and find
+              out elsewhere. The reason is in the model; it belongs at the top of the panel. */}
+          {d.reasons.length > 0 && (
+            <Tile tone={verdictTone(d.verdict)} title={`Why ${d.verdict.toLowerCase()}`}
+              right={d.reasons.length > 1 ? `${d.reasons.length} reasons` : undefined}>
+              <ul className="vz-why">
+                {d.reasons.map((r, k) => (
+                  <li key={k}><StatusShape verdict={r.level} /><span>{r.text}</span></li>
+                ))}
+              </ul>
+              {d.unreachableSince && <p className="vz-why__foot">Not responding since {hhmm(d.unreachableSince)} UTC.</p>}
+            </Tile>
+          )}
           <Tile tone={verdictTone(d.verdict)} title={model.sites[d.site]?.name ?? d.site}
             right={model.sites[d.site]?.dc && behind === 0 ? "no site points here yet" : `${behind} ${behind === 1 ? "site" : "sites"} depend on it`}>
             <div className="vz-inst-top">

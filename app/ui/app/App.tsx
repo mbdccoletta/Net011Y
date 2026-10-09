@@ -73,7 +73,7 @@ export function App() {
   const openSettings = (focus: NeedKey | null = null) => { setSettingsFocus(focus); setSettingsOpen(true); };
 
   const infos = useMemo(() => (model ? allSites(model) : []), [model]);
-  const needs = useMemo(() => evaluateNeeds(net.counts, model, url.source, net.absent, net.loading), [JSON.stringify(net.counts), model, url.source, JSON.stringify(net.absent), net.loading]); // eslint-disable-line react-hooks/exhaustive-deps
+  const needs = useMemo(() => evaluateNeeds(net.counts, model, url.source, net.absent, net.loading, net.unread), [JSON.stringify(net.counts), model, url.source, JSON.stringify(net.absent), net.loading, net.unread.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
   // what to do next to get more from the app, measured on this environment
   const buckets = useLogBuckets();
   const stepOpts = { cost: net.cost, bucketsSet: buckets.length > 0 };
@@ -81,7 +81,7 @@ export function App() {
   // the share of the app in use is about coverage, not cost: the bucket step is left out of it
   const inUse = useMemo(() => coverage(nextSteps(model, needs, { all: true }).filter((s) => s.id !== "bucket")), [model, needs]);
   // how much of each page this environment can fill: shown on the tabs, before a page is opened
-  const pageCov = useMemo(() => pageCoverage(model), [model]);
+  const pageCov = useMemo(() => pageCoverage(model, net.unread), [model, net.unread.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
   const tab = (p: Page, text: string) => {
     const v = model ? pageCov[p] : null;
     const level = v == null ? "" : v === 0 ? "none" : v < 0.5 ? "low" : v < 0.9 ? "mid" : "full";

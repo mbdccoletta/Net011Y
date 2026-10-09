@@ -118,7 +118,7 @@ export function QueryCostSection({ absent, onRecheck, cost, onHow }: { absent: P
       {cost && <LoadMeter cost={cost} buckets={buckets} onHow={onHow ?? (() => undefined)} />}
       <Text textStyle="small">
         Queries on logs, events and sessions are billed by the data Grail scans, not by what they return, and a filter still reads
-        every record of the window; metrics, Smartscape and Davis problems are included. The app reads each optional source once; a source that comes back empty is not
+        every record of the window; metrics, Smartscape and problems are included. The app reads each optional source once; a source that comes back empty is not
         read again for {SOURCE_RECHECK_MS / 3600000} hours. Device logs, traps, neighbours, the NetFlow timeline and the applications&apos;
         network are kept in this browser: the next open reads only what arrived since, with the same result as reading it all.
       </Text>

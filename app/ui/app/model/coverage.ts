@@ -7,7 +7,12 @@ export type PageKey = "causes" | "sites" | "devices" | "links" | "traffic";
 
 const share = (x: number, of: number) => (of ? Math.min(1, x / of) : 0);
 
-export function pageCoverage(model: NetworkModel | null): Record<PageKey, number> {
+/**
+ * `unread` are the queries no open view has asked for yet. A page built on one of them has a coverage
+ * nobody has measured, and that is null, not zero: zero is what the navigation shows as "nothing to
+ * show yet in this environment", which of a page that was simply never read is not true.
+ */
+export function pageCoverage(model: NetworkModel | null, unread: readonly string[] = []): Record<PageKey, number | null> {
   if (!model) return { causes: 0, sites: 0, devices: 0, links: 0, traffic: 0 };
   if (model.demo) return { causes: 1, sites: 1, devices: 1, links: 1, traffic: 1 };
   const devs = model.devices;
@@ -28,6 +33,6 @@ export function pageCoverage(model: NetworkModel | null): Record<PageKey, number
     devices,
     // circuits with their carrier and SLA fill the page; untagged monitors already give reachability per site
     links: (model.circuits?.length ?? 0) > 0 ? 1 : devs.some((d) => d.icmp) ? 0.5 : 0,
-    traffic,
+    traffic: unread.includes("flowNets") && !model.paths?.length ? null : traffic,
   };
 }

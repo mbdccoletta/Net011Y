@@ -352,6 +352,23 @@ check("VLANs from the VLAN table and from VLAN interfaces",
   (vl?.vlans ?? []).map((v) => `${v.tag}:${v.name}:${v.source}`).join(" · "));
 
 // each tab says how much of its page the environment fills; an empty model fills nothing
+// A page whose reads belong to it alone is not read until it is opened, and until then nothing about
+// it has been measured. It announced "nothing to show yet in this environment" on its own tab, and
+// "Neither is arriving in this environment" on the page, while the queries were still being fired.
+{
+  const un = ["flowNets", "flowTs", "flowFanIn"];
+  const blind = { ...model, flowMap: undefined, paths: undefined };
+  const cov = pageCoverage(blind, un);
+  const need = evaluateNeeds({ ...counts, flowNets: null, flowTs: null, flowFanIn: null }, blind, "live", {}, false, un).netflow;
+  check("A page nobody has read yet claims nothing about itself",
+    cov.traffic === null && need.status === "loading" && !/nothing|not available/.test(need.detail),
+    `coverage ${cov.traffic} · ${need.status} · ${need.detail}`);
+  // the bandwidth read answers from the browser's cache in under two seconds, the conversations take
+  // nine: one answer in hand was enough for the page to announce that nothing arrives
+  const half = evaluateNeeds({ ...counts, flowNets: null, flowFanIn: null }, blind, "live", {}, true, []).netflow;
+  check("A source half read is still being read",
+    half.status === "loading", `${half.status} · ${half.detail}`);
+}
 const pc = pageCoverage(model), none = pageCoverage({ ...model, devices: [], sites: {}, circuits: [], flowMap: undefined, paths: undefined, appNet: undefined, users: undefined });
 check("Page coverage reads the data each page is built on",
   pc.links === 1 && pc.traffic > 0.5 && pc.devices > 0 && pc.sites > 0 && Object.values(none).every((v) => v === 0),

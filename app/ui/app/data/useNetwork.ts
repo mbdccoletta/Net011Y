@@ -21,6 +21,8 @@ export interface NetworkState {
   failed: string[];
   /** Rows returned per query; null while loading or when the query failed */
   counts: Record<string, number | null>;
+  /** queries no open view draws, so they have not been read: an empty count here measured nothing */
+  unread: string[];
   /** Devices in the environment, as soon as the inventory answers */
   estate: number | null;
   /** false in a large estate, where interface detail is fetched per device instead */
@@ -155,7 +157,10 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     setOpened((had) => (views.every((v) => had.includes(v)) ? had : [...new Set([...had, ...views])]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewKey]);
-  const viewWants = (name: string) => { const v = QUERIES[name].views; return !v || v.some((x) => opened.includes(x)); };
+  // the view just opened counts from this render, not from the effect that remembers it: a render where
+  // the page is on screen and its queries are not yet wanted is a render that says the page has nothing
+  const reading = useMemo(() => [...new Set([...opened, ...views])], [opened, viewKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const viewWants = (name: string) => { const v = QUERIES[name].views; return !v || v.some((x) => reading.includes(x)); };
   // What the open page draws goes with the core, not behind it. A query that names its views runs only
   // where it is drawn, so it is already the shortest list there is — and queueing it in the last wave
   // meant Traffic waited out the whole inventory before its first read even started.
@@ -271,6 +276,8 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   }, [live, demo, coreSettled, overdue, requiredOk, stamp]);
 
   const counts = Object.fromEntries(NAMES.map((n, i) => [n, results[i].isSuccess ? (results[i].data?.records ?? []).length : null]));
+  // read by no open view, so not read at all: nothing was measured here and nothing may be claimed
+  const unread = NAMES.filter((n) => !viewWants(n));
 
   // what Grail read, from the metadata of each answer (the part read, for an incremental query)
   const cost = useMemo<LoadCost | null>(() => {
@@ -305,6 +312,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   return {
     model,
     counts,
+    unread,
     estate,
     detailLoaded: detailOk,
     loading: live ? settled < NAMES.length : !demo,

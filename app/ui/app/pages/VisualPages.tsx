@@ -248,7 +248,13 @@ export function DevicesVisual(p: VisualProps) {
       ) : p.view === "table" ? <div className="vz-table"><DevicesPage {...p} /></div> : (
         <div className="vz-body">
           <div className="vz-k4">
-            <KpiTile tone={TONE.bad} label="Critical devices" value={fmtInt(n("Critical"))} caption={`${fmtInt(count(model.devices, (d) => !!d.unreachableSince))} not responding`} active={filters.status === "Critical"} onClick={() => setStatus("Critical")} />
+            <KpiTile tone={TONE.bad} label="Critical devices" value={fmtInt(n("Critical"))}
+              /* "0 not responding" under a 70 was read as seventy not responding. When none of them is
+                 silent the caption says what the number is actually made of: open alerts, not outages. */
+              caption={count(model.devices, (d) => !!d.unreachableSince)
+                ? `${fmtInt(count(model.devices, (d) => !!d.unreachableSince))} not responding`
+                : "all responding · alerted"}
+              active={filters.status === "Critical"} onClick={() => setStatus("Critical")} />
             <KpiTile tone={TONE.warn} label="Warning" value={fmtInt(n("Warning"))} caption="alerted, not critical" active={filters.status === "Warning"} onClick={() => setStatus("Warning")} />
             <KpiTile tone={TONE.good} label="Healthy" value={fmtInt(n("Healthy"))} caption={`${Math.round((100 * n("Healthy")) / Math.max(1, model.devices.length))}% of devices`} active={filters.status === "Healthy"} onClick={() => setStatus("Healthy")} />
             <KpiTile tone={TONE.accent} label="Not monitored" value={fmtInt(n("Not monitored"))} caption="discovered, no polling" active={filters.status === "Not monitored"} onClick={() => setStatus("Not monitored")} />

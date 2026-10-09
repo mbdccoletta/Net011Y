@@ -63,7 +63,7 @@ const ABSENT_FEEDS: Partial<Record<NeedKey, string>> = { netflow: "netflow", sys
  * so between the first screen and the last wave a model exists while a source has not been read yet —
  * and a source nobody has read is not a source that is missing.
  */
-export function evaluateNeeds(counts: Record<string, number | null>, model: NetworkModel | null, source: "live" | "example", absent: Record<string, number | undefined> = {}, loading = false): Record<NeedKey, Need> {
+export function evaluateNeeds(counts: Record<string, number | null>, model: NetworkModel | null, source: "live" | "example", absent: Record<string, number | undefined> = {}, loading = false, unread: readonly string[] = []): Record<NeedKey, Need> {
   const out = {} as Record<NeedKey, Need>;
   (Object.keys(CATALOG) as NeedKey[]).forEach((key) => {
     const { label, how, queries = [] } = CATALOG[key];
@@ -95,7 +95,19 @@ export function evaluateNeeds(counts: Record<string, number | null>, model: Netw
       detail = sites.length ? `${located}/${sites.length} located · ${regions}/${sites.length} with region` : "no sites";
     } else {
       const values = queries.map((q) => counts[q]);
-      if (values.every((v) => v === null || v === undefined)) { const read = !!model && !loading; status = read ? "missing" : "loading"; detail = read ? "not available" : "loading"; }
+      // Three states, not two. A source read and empty is missing; one still being read is loading; one
+      // no open view draws has not been read at all, and the page that draws it says so when it is
+      // opened — which is why its nav dot must not announce that the environment has nothing to show.
+      const notRead = queries.length > 0 && queries.every((q) => unread.includes(q));
+      // And a source is read when all of its reads are in, not when the first one is. The bandwidth
+      // query answers in under two seconds from the browser's own cache while the conversations take
+      // nine; in between, one answer in hand was enough for the page to announce that nothing arrives.
+      const outstanding = loading && queries.some((q) => counts[q] == null && !unread.includes(q));
+      if (values.every((v) => v === null || v === undefined)) {
+        const read = !!model && !loading && !notRead;
+        status = read ? "missing" : "loading";
+        detail = notRead ? "read on the view that draws it" : read ? "not available" : "loading";
+      } else if (outstanding) { status = "loading"; detail = "loading"; }
       else {
         const rows = values.reduce<number>((a, v) => a + (v ?? 0), 0);
         const some = values.filter((v) => (v ?? 0) > 0).length;

@@ -32,7 +32,7 @@ const uniqueProblems = (list: DeviceProblem[]) => [...new Map(list.map((p) => [p
 
 export function NativeDrill({ devices, circuits = [], focus, focusCircuit, since, demo, before, after, showNotebook = true }: Props) {
   const ips = devices.map((d) => d.ip).filter(Boolean).slice(0, 40);
-  // Davis problems only: an event that never became a problem is not something the Problems app opens,
+  // problems only: an event that never became a problem is not something the Problems app opens,
   // and counting thousands of them labelled the button "Problems · 170"
   const problems = demo ? [] : uniqueProblems([...devices.flatMap((d) => d.problems ?? []), ...circuits.flatMap((c) => c.problems ?? [])].filter((p) => !p.muted && p.eventKind === "DAVIS_PROBLEM"));
   const one = problems.length === 1 ? problems[0] : null;
@@ -57,7 +57,7 @@ export function NativeDrill({ devices, circuits = [], focus, focusCircuit, since
         <Menu>
           <Menu.Trigger>
             <button type="button" className="lm-btn lm-btn--primary" disabled={demo} title={`${problems.length} open problems on these components`}>
-              <b>Problems · {problems.length}</b><small>Davis · pick one</small><ExternalLinkIcon />
+              <b>Problems · {problems.length}</b><small>pick one</small><ExternalLinkIcon />
             </button>
           </Menu.Trigger>
           <Menu.Content>
@@ -72,7 +72,7 @@ export function NativeDrill({ devices, circuits = [], focus, focusCircuit, since
           title={demo ? "Simulated data: nothing to open" : `Open ${one.displayId} · ${one.name} in Problems`}
           onClick={() => openProblem(one.eventId, one.eventKind)}>
           <b>{one.displayId ? `Problem ${one.displayId}` : "Alert"}</b>
-          <small>this alert in Davis</small><ExternalLinkIcon />
+          <small>this alert in Problems</small><ExternalLinkIcon />
         </button>
       ) : null}
       {devices.length > 0 && (
