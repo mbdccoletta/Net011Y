@@ -521,9 +521,13 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
       const taken: { x0: number; y0: number; x1: number; y1: number }[] = [];
       // the regions are named first and hold their space: a state's name belongs to the whole shape,
       // and a site's name sitting on top of it would be the one that reads as the region
-      if (RG?.length) {
+      // A region label summarises a group. Where the group is one site, the site's own name says more
+      // than "SC · 1" does, and the region was taking the space first and leaving the name undrawn —
+      // Gaspar only appeared once you had zoomed far enough for the two to come apart. A region with
+      // one site waits until the sites have had their turn and takes what is left.
+      const drawRegions = (list: MapRegion[]) => {
         ctx.textAlign = "center";
-        for (const rg of [...RG].sort((a, b) => b.sites - a.sites)) {
+        for (const rg of [...list].sort((a, b) => b.sites - a.sites)) {
           if (!rg.sites) continue;
           const x = sx(rg.lon), y = sy(rg.lat);
           if (x < 0 || y < 0 || x > w || y > h) continue;
@@ -539,7 +543,8 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
           ctx.strokeText(text, x, y); ctx.fillText(text, x, y);
         }
         ctx.textAlign = "start";
-      }
+      };
+      if (RG?.length) drawRegions(RG.filter((rg) => rg.sites > 1));
       [...labelled].sort((a, b) => Number(b.dc) - Number(a.dc)).forEach((s) => {
         const x = sx(s.lon), y = sy(s.lat);
         ctx.font = s.dc ? `600 12px ${font}` : `500 11px ${mono}`;
@@ -562,6 +567,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         ctx.lineWidth = 3.5; ctx.strokeStyle = withAlpha(P.halo, 0.95); ctx.fillStyle = P.ink;
         ctx.strokeText(text, x + 10, y); ctx.fillText(text, x + 10, y);
       });
+      if (RG?.length) drawRegions(RG.filter((rg) => rg.sites === 1));
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
