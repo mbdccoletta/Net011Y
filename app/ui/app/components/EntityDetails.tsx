@@ -67,10 +67,21 @@ function Trail({ path, selected, onSelect }: { path: E2EPath; selected: number |
     <div className="vz-scroll" ref={box}>
       <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="vz-trail" role="group" aria-label={path.name}>
         <defs><filter id="vz-glow"><feGaussianBlur stdDeviation="4" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs>
+        {/**
+          * A line stops at the ring it reaches, and the rings are not all one size.
+          *
+          * The hop that carries the cause is drawn six pixels wider than the rest, and the
+          * connectors were cut at the common radius — so both lines into it crossed the ring
+          * and ran on inside the circle. Measured on a path of five: the ring at 280 has a
+          * radius of 28, and the line before it ended at 258 against an edge at 252. Each end
+          * is cut at the radius of the hop it meets, plus half that ring's stroke so the two
+          * marks touch rather than overlap.
+          */}
         {path.hops.slice(1).map((h, k) => {
           const bad = isBad(h.verdict) || isBad(path.hops[k].verdict);
           const cause = k + 1 === path.summary.firstBad;
-          return <line key={`l${k}`} x1={x(k) + R} x2={x(k + 1) - R} y1={Y} y2={Y} stroke={cause ? TONE.bad : bad ? TONE.warn : "var(--lm-line-2)"} strokeWidth={cause ? 4 : 2.5} strokeDasharray={bad ? "7 5" : undefined} filter={cause ? "url(#vz-glow)" : undefined} />;
+          const edge = (i: number) => (i === path.summary.firstBad ? R + 6 + 1.5 : R + 1.25);
+          return <line key={`l${k}`} x1={x(k) + edge(k)} x2={x(k + 1) - edge(k + 1)} y1={Y} y2={Y} stroke={cause ? TONE.bad : bad ? TONE.warn : "var(--lm-line-2)"} strokeWidth={cause ? 4 : 2.5} strokeDasharray={bad ? "7 5" : undefined} filter={cause ? "url(#vz-glow)" : undefined} />;
         })}
         {path.hops.map((h, i) => {
           const cause = i === path.summary.firstBad, cons = false;

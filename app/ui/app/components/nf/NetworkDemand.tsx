@@ -103,7 +103,12 @@ export default function NetworkDemand({ families, hours, ready }: {
       <div className="card-head">
         <span className="card-title">Traffic · the whole network</span>
         <span className="card-unit">gigabits per second, hour by hour, every polled port
-          {data ? " · forecast by Dynatrace" : loading ? " · asking Dynatrace…" : " · unavailable"}</span>
+          {data ? (data.endsHoursAgo
+            /* the record stopped before now, so the forecast did too: the card says how far
+               behind it is rather than passing it off as the present */
+            ? ` · forecast by Dynatrace, from the record up to ${data.endsHoursAgo} h ago`
+            : " · forecast by Dynatrace")
+            : loading ? " · asking Dynatrace…" : " · unavailable"}</span>
       </div>
       {error && <div className="nfd-empty">No estate forecast: {error.slice(0, 160)}</div>}
       {!error && (
