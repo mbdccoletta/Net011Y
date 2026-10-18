@@ -30,6 +30,10 @@ import { worst } from "../model/verdict";
 import { useTokens } from "../hooks/useToken";
 import { pointInRing, type Insets, type MapLink, type MapRegion, type MapSite } from "./LiveMap";
 
+/** which of two verdicts a cluster should take its lead site from */
+const RANKED: Verdict[] = ["Critical", "Warning", "Healthy", "Not monitored"];
+const isWorse = (a: Verdict, b: Verdict) => RANKED.indexOf(a) < RANKED.indexOf(b);
+
 /** every colour reaching a WebGL layer has to be a literal: `var()` is dropped in silence */
 const INK = {
   "--lm-bad-fill": "#c82d40", "--lm-warn-fill": "#d7b43b", "--lm-good-fill": "#00bb7b",
@@ -140,6 +144,73 @@ type Label = { key: string; kind: "site" | "region"; lon: number; lat: number; t
  * measured as a single task of six seconds with the page frozen inside it.
  */
 const LABEL_BUDGET = 160;
+
+/**
+ * The sites, and what to draw where several fall on the same pixel.
+ *
+ * One dot per site is right for a dozen and a green smear for four thousand: on the
+ * twenty-thousand-device estate a city with twelve stores drew twelve fourteen-pixel circles
+ * on top of each other, and a region drew a blob with no edges. Past the threshold the sites
+ * within a cell of the screen become one mark that says how many it stands for and carries
+ * the worst of their verdicts, so the colour still means what it means. The grid is in
+ * pixels, not degrees, so it follows the zoom: zooming in splits a cluster into the sites it
+ * was hiding, which is the only honest way to make that mark disappear.
+ */
+const CLUSTER_ABOVE = 300;
+const CELL_PX = 26;
+
+type Dot = { name: string; code: string; latitude: number; longitude: number; verdict: Verdict; dc: boolean };
+
+/* `DotLayer` carries no click of its own — opening a site is `Motion`'s hit test, which
+   works off the site list and is unchanged by the clustering. */
+function Dots({ sites, colour }: { sites: MapSite[]; colour: Record<Verdict, string> }) {
+  const { current: map } = useMap();
+  const [dots, setDots] = useState<(Dot & { of: number })[]>([]);
+
+  const build = useCallback(() => {
+    const one = (s: MapSite, of: number, name?: string) => ({
+      name: name ?? s.name, code: s.code, latitude: s.lat, longitude: s.lon, verdict: s.verdict, dc: !!s.dc, of,
+    });
+    if (!map || sites.length <= CLUSTER_ABOVE) { setDots(sites.map((s) => one(s, 1))); return; }
+    const cells = new Map<string, { lead: MapSite; n: number; v: Verdict[] }>();
+    for (const s of sites) {
+      const p = map.project([s.lon, s.lat]);
+      const k = `${Math.round(p.x / CELL_PX)}|${Math.round(p.y / CELL_PX)}`;
+      const c = cells.get(k);
+      /* a data centre is never folded into the cluster that surrounds it: it is the end of
+         every line on the map and it keeps its own mark */
+      if (s.dc) { cells.set(`dc:${s.code}`, { lead: s, n: 1, v: [s.verdict] }); continue; }
+      if (c) { c.n++; c.v.push(s.verdict); if (isWorse(s.verdict, c.lead.verdict)) c.lead = s; }
+      else cells.set(k, { lead: s, n: 1, v: [s.verdict] });
+    }
+    setDots([...cells.values()].map(({ lead, n, v }) => ({
+      ...one(lead, n, n > 1 ? `${n} sites · worst ${worst(v)}` : lead.name), verdict: worst(v),
+    })));
+  }, [map, sites]);
+
+  useEffect(() => {
+    if (!map) return;
+    const m = map.getMap();
+    const t = setTimeout(build, 0);
+    m.on("moveend", build); m.on("zoomend", build);
+    return () => { clearTimeout(t); m.off("moveend", build); m.off("zoomend", build); };
+  }, [map, build]);
+
+  /* `shapeSize` is one number for the whole layer, so the three sizes are three layers: a
+     site, a handful and a crowd. Three buckets is enough to tell them apart and keeps the
+     mark honest — the number itself is in the tooltip, where it is exact. */
+  const band = (lo: number, hi: number) => dots.filter((d) => d.of >= lo && d.of <= hi);
+  const layer = (data: (Dot & { of: number })[], size: number, key: string) => (data.length ? (
+    <DotLayer<Dot & { of: number }> key={key} data={data} shape="circle" shapeSize={size}
+      color={(d) => colour[d.verdict]}>
+      <DotLayer.Tooltip>
+        {(dot) => <span>{String((dot.data as { name?: string })?.name ?? "")}</span>}
+      </DotLayer.Tooltip>
+    </DotLayer>
+  ) : null);
+
+  return <>{layer(band(1, 1), 14, "one")}{layer(band(2, 9), 20, "few")}{layer(band(10, Infinity), 28, "many")}</>;
+}
 
 function Labels({ labels }: { labels: Label[] }) {
   const { current: map } = useMap();
@@ -428,7 +499,38 @@ function Motion({ routes, hit: hitRegions, all, focus, focusKey, refit, colour, 
      * a period of seven, and it accepts fractions: where the dash does not wrap it is a
      * leading gap of `p`, and where it does, the tail of it opens the pattern.
      */
-    const dashAt = (p: number) => (p <= 4 ? [0, p, 3, 4 - p] : [p - 4, 4, 7 - p, 0]);
+    /**
+     * No element of the pattern may be zero.
+     *
+     * maplibre builds a dash atlas from these four numbers, and a length of zero gives it a
+     * segment with no extent: the lookup comes back null and the renderer throws
+     * `Cannot read properties of null (reading 'y')` inside `setConstantDashPositions` —
+     * on every frame, because this runs on every frame. Measured on the twenty-thousand
+     * device estate: thirty-three thousand uncaught exceptions in one sitting, the map still
+     * drawing and the console unusable. Both branches here produce a zero — the first at the
+     * head, the second at the tail, and both at p exactly 4 — so each element is floored at a
+     * hair above nothing, which the atlas accepts and the eye cannot tell from zero.
+     */
+    const NIL = 0.001;
+    /**
+     * A fixed number of phases, because maplibre caches each one for ever.
+     *
+     * Every distinct `line-dasharray` becomes an entry in maplibre's dash atlas, and the
+     * atlas has a fixed height. Cutting the dash to a fraction on every frame — which is what
+     * made the motion continuous instead of the prototype's eight canned steps — asks for a
+     * pattern it has never seen sixty times a second, so within seconds the atlas is full,
+     * `getDash` returns null and the renderer throws `Cannot read properties of null
+     * (reading 'y')` on every frame after that. Measured on the twenty-thousand device
+     * estate: thirty-three thousand uncaught exceptions in one sitting.
+     *
+     * Fifty-six phases over the seven-unit period is one step every 20 ms at this speed —
+     * smooth to the eye, and fifty-six atlas entries that are written once and then hit.
+     */
+    const PHASES = 56;
+    const dashAt = (p: number) => {
+      const q = (Math.round((p / 7) * PHASES) % PHASES) * (7 / PHASES);
+      return (q <= 4 ? [0, q, 3, 4 - q] : [q - 4, 4, 7 - q, 0]).map((v) => Math.max(NIL, v));
+    };
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
       /**
@@ -660,11 +762,7 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
 
   /* the generics are pinned by annotating the arrays: without them TypeScript widens the
      rows to `Location` / `Connection` and the colour callbacks no longer match */
-  type Dot = { name: string; code: string; latitude: number; longitude: number; verdict: Verdict; dc: boolean };
   type Conn = { path: { longitude: number; latitude: number }[]; verdict: Verdict };
-  const dots: Dot[] = useMemo(() => sites.map((s) => ({
-    name: s.name, code: s.code, latitude: s.lat, longitude: s.lon, verdict: s.verdict, dc: !!s.dc,
-  })), [sites]);
   /* only the quiet links are the platform's: the alerting ones carry the marching ants, and
      that is a layer of ours with a dash stepped per frame */
   const conns: Conn[] = useMemo(() => routes.filter((r) => r.verdict !== "Critical").map((r) => ({
@@ -730,12 +828,8 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
           color={(c) => colour[c.verdict]} />
         <Motion routes={routes} hit={regions ?? []} all={all} focus={frame} focusKey={focusKey} refit={refit} colour={colour}
           sites={sites} onSite={onSite} onRegion={onRegion} pad={insets} />
-        {/* the sites: one dot each, coloured by what Dynatrace has open on them */}
-        <DotLayer<Dot> data={dots} shape="circle" shapeSize={14} color={(d) => colour[d.verdict]}>
-          <DotLayer.Tooltip>
-            {(dot) => <span>{String((dot.data as { name?: string })?.name ?? "")}</span>}
-          </DotLayer.Tooltip>
-        </DotLayer>
+        {/* the sites, clustered where several land on the same pixel */}
+        <Dots sites={sites} colour={colour} />
         <Labels labels={labels} />
       </MapView>
       {/* The three buttons the canvas drew itself, in the place it drew them.
