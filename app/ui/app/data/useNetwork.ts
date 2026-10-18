@@ -89,6 +89,33 @@ function readPresent(): Partial<Record<SourceGroup, number>> {
 function writePresent(v: Partial<Record<SourceGroup, number>>) {
   try { window.localStorage.setItem(PRESENT_KEY(), JSON.stringify(v)); } catch { /* per session only */ }
 }
+/**
+ * Which family publishes which metric, remembered between loads.
+ *
+ * The family gate asks "does this environment send Cisco", and the answer here is yes — a
+ * hundred and thirty-six Cisco devices report memory. It does not ask whether Cisco reports
+ * *interfaces*, and on this estate it does not: `ifHourlyUp:cisco` took 6.2 seconds in the
+ * first wave to return nothing, `uptime:generic` 4.1 seconds for nothing, `errSummary:cisco`
+ * 2.3. The time is the queue, not the data, so an empty answer costs exactly as much as a
+ * full one and buys nothing.
+ *
+ * So an empty answer is remembered and the question is not asked again for a day. A day,
+ * and not for ever, because an extension deployed this afternoon must appear by tomorrow
+ * without anyone clearing anything — and Refresh clears it now, for anyone who will not wait.
+ */
+const BARREN_KEY = () => `${ABSENT_KEY()}.barren`;
+const BARREN_MS = 24 * 60 * 60 * 1000;
+/* Only the questions where "nothing" means "this family does not publish this". A query whose
+   emptiness is news — no reboots, no alerts — must keep being asked. */
+const BARREN_MEASURES = /^(ifHourly|ifHourlyUp|cpuHourly|memHourly|ifSummary|errSummary|ifTraffic|ifErrors|cpu|memory|uptime):/;
+function readBarren(): Record<string, number> {
+  try { return JSON.parse(window.localStorage.getItem(BARREN_KEY()) ?? "{}") as Record<string, number>; }
+  catch { return {}; }
+}
+function writeBarren(v: Record<string, number>) {
+  try { window.localStorage.setItem(BARREN_KEY(), JSON.stringify(v)); } catch { /* per session only */ }
+}
+
 function readAbsent(): Partial<Record<SourceGroup, number>> {
   try {
     const v = JSON.parse(window.localStorage.getItem(ABSENT_KEY()) ?? "{}") as Record<string, number>;
@@ -99,10 +126,41 @@ function writeAbsent(v: Partial<Record<SourceGroup, number>>) {
   try { window.localStorage.setItem(ABSENT_KEY(), JSON.stringify(v)); } catch { /* per session only */ }
 }
 
+/**
+ * How long the query service may hold a request open before answering with a token instead.
+ *
+ * Measured on a live environment, not chosen: the SDK sends no value and its own documentation
+ * says the default is "immediate response", so every read — including the ones Grail answers in
+ * a fifth of a second — came back as a token and paid a poll round trip plus the hook's wait
+ * before it polls. One of the lighter queries on Traffic, a metric.series filter, took 4.4 s
+ * through the app and 204 ms when run by hand with this field set.
+ *
+ * Two seconds, and the figure was tried rather than reasoned. The dev proxy speaks HTTP/1.1, so
+ * the browser holds six connections to it and forty-three of the fifty-eight reads already wait
+ * for one; a read that keeps its connection longer makes that queue worse, and a read that gives
+ * it up too early pays for a poll. Measured on Ahead: 1 s gave 4.66 s to content and five polls,
+ * 2 s gave 3.94 s and two, 3 s gave 4.05 s and two. The NetFlow hour scan takes six to eight
+ * seconds whatever this says, and holds a token rather than a connection, which is right.
+ */
+const INLINE_MS = 2000;
+
 const REQUIRED = ["devices", "interfaces"];
-// Enough to judge every device; logs and flows refine the views when they arrive (progressive loading).
-// Of the extension families, the common set carries the first screen; vendor families complete it later.
-const FAMILY_CORE = Object.keys(QUERIES).filter((k) => /^(ifSummary|errSummary|cpu|memory|uptime):/.test(k) || k === "ifTraffic:network_device" || k === "ifErrors:network_device");
+/**
+ * Enough to judge every device; logs and flows refine the views when they arrive.
+ *
+ * `cpu`, `memory` and `uptime` used to be in here, one query per family per metric, and they
+ * are the reason Traffic was slow. Measured on this environment: fifteen of the thirty-one
+ * reads in the first wave were those three, each taking between 3.3 and 4.2 seconds whatever
+ * it returned — `uptime:generic` took 4.1s to return nothing and `cpu:f5` 3.6s to return
+ * three rows — because the time is Grail's per-user queue, not the data. Traffic draws none
+ * of them, and its own two reads, `flowNets` at 7.1s and `flowFanIn` at 5.5s, were queued
+ * behind them.
+ *
+ * What stays is what the first screen of every page actually needs: the interface summary and
+ * the error counters, which is how a link gets its state. The three device metrics are tagged
+ * to the views that read them instead, below.
+ */
+const FAMILY_CORE = Object.keys(QUERIES).filter((k) => /^(ifSummary|errSummary):/.test(k) || k === "ifTraffic:network_device" || k === "ifErrors:network_device");
 // the alerts are the status of every device: they come with the first screen, so nothing turns red after it
 const CORE = ["devices", "interfaces", "families", ...FAMILY_CORE, "problems", "alerts", "icmp", "lldp", "neighbors", "routing"];
 const NAMES = Object.keys(QUERIES);
@@ -134,7 +192,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   // runInBackground: the SDK cancels a running query when the tab loses focus and does not start it again,
   // so a user who switched tabs during the load came back to a load that never finished
   const inventory = useDql(
-    { query: QUERIES.devices.query, maxResultRecords: QUERIES.devices.maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500 },
+    { query: QUERIES.devices.query, maxResultRecords: QUERIES.devices.maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500, requestTimeoutMilliseconds: INLINE_MS },
     { enabled: live, staleTime: STALE_MS, runInBackground: true },
   );
   const estate = inventory.isSuccess ? (inventory.data?.records ?? []).length : null;
@@ -160,13 +218,68 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   // the view just opened counts from this render, not from the effect that remembers it: a render where
   // the page is on screen and its queries are not yet wanted is a render that says the page has nothing
   const reading = useMemo(() => [...new Set([...opened, ...views])], [opened, viewKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const viewWants = (name: string) => { const v = QUERIES[name].views; return !v || v.some((x) => reading.includes(x)); };
-  // What the open page draws goes with the core, not behind it. A query that names its views runs only
-  // where it is drawn, so it is already the shortest list there is — and queueing it in the last wave
-  // meant Traffic waited out the whole inventory before its first read even started.
-  const waveOf = (name: string) => (REQUIRED.includes(name) || name === "families" ? 0 : CORE.includes(name) || QUERIES[name].views ? 1 : 2);
+  /**
+   * Every page is read, whether or not it has been opened.
+   *
+   * A view's queries used to wait for the view, so the first visit to each page paid for it and
+   * switching tabs meant watching a load. They all run now — but not all at once: what the open
+   * page draws stays in the wave behind the core, and every other page's reads go in the last
+   * wave, which starts only once the core has settled. So the page in front of the reader is no
+   * slower than it was, and the pages behind it are already there when they get there.
+   *
+   * It is not free, and there is one size at which it stops being worth it. Measured on this
+   * environment: a Live map load moved 144 MB, and 75.6 MB of it was the fortnight of hourly
+   * buckets for every port — a reading only Ahead and an opened device panel draw. Paying
+   * that on a page that never shows it, to make a later visit instant, is the wrong way
+   * round at this scale.
+   *
+   * So the rule is narrow: a query that is marked `detail` *and* names its views waits for
+   * one of them. Everything else still runs everywhere, which is what keeps the page
+   * switches instant. The absent-source memory still applies, so a source this environment
+   * does not send is still not read.
+   */
+  const viewWants = (name: string) => {
+    const q = QUERIES[name];
+    return !q.detail || !q.views || q.views.some((v) => reading.includes(v));
+  };
+  const openNow = (name: string) => { const v = QUERIES[name].views; return !v || v.some((x) => reading.includes(x)); };
+  /**
+   * `openNow` answers "does the open page need this", and for a query that names no view the
+   * answer is yes — which made every untagged query jump from the last wave to the first. Wave
+   * one went from six reads to twenty and the page's own reads queued behind them on the six
+   * connections the browser allows: eleven seconds to the verdict instead of four. The wave
+   * asks a narrower question, and an untagged query stays where it was.
+   */
+  const waveOf = (name: string) => {
+    if (REQUIRED.includes(name) || name === "families") return 0;
+    if (CORE.includes(name)) return 1;
+    const v = QUERIES[name].views;
+    if (!v) return 2;
+    return v.some((x) => reading.includes(x)) ? 1 : 2;
+  };
+  /**
+   * The last wave trickles instead of arriving.
+   *
+   * Holding it until the open page had settled fixed the page and moved the problem: the
+   * twenty-five reads for pages nobody had opened were then released in one burst straight
+   * into the window where the Ahead analyzers run, and the forecast that used to finish at
+   * 66s finished at 88s. Grail queues per user, so a burst is never free — it is only ever
+   * taken from whatever else this session is asking for.
+   *
+   * Three at a time, each starting as the one before it lands. One lane was tried and was no
+   * better on any of the three numbers — the run-to-run spread on this tenant is wide enough
+   * that a single lane buys nothing measurable and only makes the prefetch take a minute. The
+   * prefetch still happens; it just stops being a wall, and nothing the reader is waiting on
+   * ever has more than three background reads in front of it.
+   */
+  const LANES = 3;
+  const [done2, setDone2] = useState(0);
+
   const buckets = useLogBuckets();
   const [absent, setAbsent] = useState(readAbsent);
+  const [barren, setBarren] = useState(readBarren);
+  const isBarren = (name: string) => BARREN_MEASURES.test(name)
+    && !REQUIRED.includes(name) && Date.now() - (barren[name] ?? 0) < BARREN_MS;
   const [answered, setAnswered] = useState(readPresent);
   // probe results decide the companions, so they are looked up by name before the hooks run
   const probeRows = useProbeRows();
@@ -174,7 +287,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   // that is there; if the answer fails, every family runs, as before
   const familiesAt = NAMES.indexOf("families");
   const familiesQ = useDql(
-    { query: QUERIES.families.query, maxResultRecords: QUERIES.families.maxResultRecords ?? 100 },
+    { query: QUERIES.families.query, maxResultRecords: QUERIES.families.maxResultRecords ?? 100, requestTimeoutMilliseconds: INLINE_MS },
     { enabled: live, staleTime: STALE_MS, runInBackground: true },
   );
   const present = familiesQ.isSuccess ? new Set((familiesQ.data?.records ?? []).map((r) => familyOfToken(String(r?.family ?? ""))).filter(Boolean)) : null;
@@ -189,6 +302,13 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     .map((n) => [n, planFor(n, inBuckets(QUERIES[n].query, buckets), QUERIES[n].incremental!)] as const)) as Record<string, Plan>,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [gen, bucketKey]);
+  /* the queue of the last wave, in the order the registry declares them, and the gate that
+     lets a query in once the three ahead of it are out of the way */
+  const wave2 = NAMES.filter((n) => waveOf(n) === 2);
+  const inLane = (name: string) => {
+    if (waveOf(name) !== 2) return true;
+    return wave2.indexOf(name) < done2 + LANES;
+  };
   const raw = NAMES.map((name, i) => {
     if (i === familiesAt) return familiesQ;
     const g = groupOf(name);
@@ -197,8 +317,8 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
       || (!isProbe && answered[g] == null && !(SOURCE_GROUPS[g].probes as readonly string[]).some((p) => (probeRows.get(p) ?? 0) > 0)));
     // eslint-disable-next-line react-hooks/rules-of-hooks
     return useDql(
-      { query: plans[name]?.query ?? inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500 },
-      { enabled: live && !gated && !familyWaits(name) && !familyAbsent(name) && (!QUERIES[name].detail || detailOk) && viewWants(name) && waveOf(name) <= phase, staleTime: STALE_MS, runInBackground: true },
+      { query: plans[name]?.query ?? inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500, requestTimeoutMilliseconds: INLINE_MS },
+      { enabled: live && !gated && !familyWaits(name) && !familyAbsent(name) && !isBarren(name) && (!QUERIES[name].detail || detailOk) && viewWants(name) && waveOf(name) <= phase && inLane(name), staleTime: STALE_MS, runInBackground: true },
     );
   });
   // what the rest of the app sees of an incremental query is the whole window: the kept part and the new one
@@ -235,6 +355,22 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     if (alsoChanged) { writePresent(yes); setAnswered(yes); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, probeStamp]);
+  /* an empty answer is written down, a full one rubs the note out */
+  const barrenStamp = NAMES.map((n, i) => (BARREN_MEASURES.test(n) && results[i].isSuccess
+    ? ((results[i].data?.records ?? []).length ? "1" : "0") : "-")).join("");
+  useEffect(() => {
+    if (!live) return;
+    const next = { ...readBarren() };
+    let changed = false;
+    NAMES.forEach((n, i) => {
+      if (!BARREN_MEASURES.test(n) || !results[i].isSuccess) return;
+      const empty = !(results[i].data?.records ?? []).length;
+      if (empty && next[n] == null) { next[n] = Date.now(); changed = true; }
+      if (!empty && next[n] != null) { delete next[n]; changed = true; }
+    });
+    if (changed) { writeBarren(next); setBarren(next); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, barrenStamp]);
   const skippedSource = (i: number) => { const g = groupOf(NAMES[i]); return !!g && absent[g] != null; };
 
   // a query that will not run counts as settled: its source was found empty, or its probe brought nothing
@@ -244,15 +380,26 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     const probes = SOURCE_GROUPS[g].probes.map((p) => results[NAMES.indexOf(p)]);
     return probes.every((r) => r.isSuccess || r.isError) && !probes.some((r) => (r.data?.records ?? []).length);
   };
-  // a query no open view reads is settled, not pending: the load is over when what is on screen is in
-  const skipped = (i: number) => (!!QUERIES[NAMES[i]].detail && !detailOk) || skippedSource(i) || probeSaysNo(i) || familyAbsent(NAMES[i]) || !viewWants(NAMES[i]);
+  /**
+   * Settled: either the environment cannot answer it, or the open page does not need it to draw.
+   *
+   * Dropping the second half — now that every page is read rather than only the open one — was
+   * a regression I measured before believing: the verdict went from four seconds to twelve,
+   * because `coreSettled` is built on this and the model waits on `coreSettled`. The page in
+   * front of the reader was being held for reads belonging to pages behind it.
+   *
+   * So the two questions are separated. This one gates rendering and asks only about the open
+   * page; `unread` below asks what this app actually has, and answers for all of them.
+   */
+  const skipped = (i: number) => (!!QUERIES[NAMES[i]].detail && !detailOk) || skippedSource(i)
+    || probeSaysNo(i) || familyAbsent(NAMES[i]) || isBarren(NAMES[i]) || !openNow(NAMES[i]);
   const settled = results.filter((r, i) => r.isSuccess || r.isError || skipped(i)).length;
+  /* reset by the same thing that restarts the reads, so a refresh counts up from zero again */
+  const highWater = useRef(0);
+  highWater.current = settled === 0 ? 0 : Math.max(highWater.current, settled);
   const failed = NAMES.filter((_, i) => results[i].isError);
   const requiredOk = REQUIRED.every((n) => { const i = NAMES.indexOf(n); return results[i].isSuccess || skipped(i); });
   const coreSettled = CORE.every((n) => { const i = NAMES.indexOf(n); const r = results[i]; return r.isSuccess || r.isError || skipped(i); });
-  useEffect(() => { if (coreSettled && phase < 2) setPhase(2); }, [coreSettled, phase]);
-  const stamp = results.map((r, i) => (r.isSuccess ? 1 : r.isError ? 2 : skipped(i) ? 3 : 0)).join("");
-
   // A slow environment must not hold the whole app hostage: once the inventory is in and the core has had
   // its time, the app renders with what arrived and fills the rest in as it lands.
   const [overdue, setOverdue] = useState(false);
@@ -261,6 +408,31 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     const t = setTimeout(() => setOverdue(true), 8000);
     return () => clearTimeout(t);
   }, [live, coreSettled]);
+  /**
+   * The last wave waits for the open page, not just for the core.
+   *
+   * It waited for `coreSettled`, and the open page's own reads are not in the core — the Ahead
+   * hourly series are tagged to the view, so they are wave one but not CORE. The core settled
+   * at around eight seconds, phase two released twenty-seven reads belonging to pages nobody
+   * had opened, and they landed on top of the heaviest queries on screen: measured on this
+   * environment, thirty-six queries in flight at once and wave one finishing at 9.9s instead
+   * of the 5s its own slowest read takes. Grail queues per user, so the overlap is not free
+   * parallelism — it is the open page waiting behind pages that are not.
+   */
+  const waveOneSettled = NAMES.every((n, i) =>
+    waveOf(n) > 1 || results[i].isSuccess || results[i].isError || skipped(i));
+  /* `overdue` is the same escape hatch the model uses: a wave-one read that never answers must
+     not keep the rest of the app from ever being fetched */
+  useEffect(() => { if ((waveOneSettled || overdue) && phase < 2) setPhase(2); },
+    [waveOneSettled, overdue, phase]);
+  /* how far the trickle has got: a query that was skipped counts as out of the way, or a
+     source this environment does not send would stall the queue behind it for ever */
+  const settled2 = wave2.filter((n) => {
+    const i = NAMES.indexOf(n);
+    return results[i].isSuccess || results[i].isError || skipped(i);
+  }).length;
+  useEffect(() => { setDone2((had) => (settled2 > had ? settled2 : had)); }, [settled2]);
+  const stamp = results.map((r, i) => (r.isSuccess ? 1 : r.isError ? 2 : skipped(i) ? 3 : 0)).join("");
 
   const model = useMemo<NetworkModel | null>(() => {
     if (!live) return demo;
@@ -276,8 +448,18 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   }, [live, demo, coreSettled, overdue, requiredOk, stamp]);
 
   const counts = Object.fromEntries(NAMES.map((n, i) => [n, results[i].isSuccess ? (results[i].data?.records ?? []).length : null]));
-  // read by no open view, so not read at all: nothing was measured here and nothing may be claimed
-  const unread = NAMES.filter((n) => !viewWants(n));
+  /**
+   * Nothing may be claimed from a query that has not answered.
+   *
+   * This used to be "no open view asked for it", which was the same thing while a page's reads
+   * waited for the page. Now that every page is read from the start, that set is empty from the
+   * first render — and coverage computed against data still in flight reports a confident 0%
+   * instead of "not measured yet", which is the defect this list exists to prevent. Pending and
+   * failed, then: both are reads this app does not have.
+   */
+  const unread = NAMES.filter((n, i) => !results[i].isSuccess
+    && !((!!QUERIES[n].detail && !detailOk) || skippedSource(i) || probeSaysNo(i) || familyAbsent(n)
+      || isBarren(n)));
 
   // what Grail read, from the metadata of each answer (the part read, for an incremental query)
   const cost = useMemo<LoadCost | null>(() => {
@@ -316,7 +498,17 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     estate,
     detailLoaded: detailOk,
     loading: live ? settled < NAMES.length : !demo,
-    done: live ? settled : NAMES.length,
+    /**
+     * The count never goes backwards, because a reader reads it as progress.
+     *
+     * `settled` mixes two things: a query that answered, and a query that does not apply
+     * right now — skipped because its view is closed, its family is absent, its source
+     * probe said no, or its bucket came back barren. The second set changes *while* the
+     * first grows: a probe answers, a view opens, and something that was counted as out of
+     * the way is back in the queue. Measured on a recording, the header went "38 of 97" at
+     * four seconds and "37 of 97" at sixteen.
+     */
+    done: live ? Math.max(highWater.current, settled) : NAMES.length,
     total: NAMES.length,
     failed,
     // Refresh means now: refetch would hand back the cached answer for as long as it is fresh (staleTime)
@@ -328,10 +520,11 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
         if (skipped(i) || (inc && planFor(n, inBuckets(QUERIES[n].query, buckets), inc).query !== plans[n]?.query)) return;
         r.forceRefetch();
       });
+      writeBarren({}); setBarren({});
       setGen((g) => g + 1);
     },
     absent,
-    recheck: () => { writeAbsent({}); setAbsent({}); writePresent({}); setAnswered({}); },
+    recheck: () => { writeAbsent({}); setAbsent({}); writePresent({}); setAnswered({}); writeBarren({}); setBarren({}); },
     cost,
   };
 }

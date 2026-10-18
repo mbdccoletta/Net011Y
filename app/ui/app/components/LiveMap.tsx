@@ -21,7 +21,6 @@ export interface MapSite {
 
 /** A state, province or prefecture to draw: its outline, and what the sites inside it add up to. */
 /** The order the outline is painted in, worst first, so the red sliver always starts at the same point. */
-const SHARE_ORDER: Verdict[] = ["Critical", "Warning", "Healthy", "Not monitored"];
 
 export interface MapRegion {
   code: string;
@@ -36,6 +35,15 @@ export interface MapRegion {
   bad: number;
   /** how the sites standing here divide by status, which the outline is drawn in proportion to */
   counts: Partial<Record<Verdict, number>>;
+  /**
+   * Where the alerting sites actually stand, so the share is drawn on their side of the shape.
+   *
+   * The proportion alone answers "how much of this region is alerting" and says nothing about
+   * which part. Stroked from the ring's first vertex, Bahia's red arc landed wherever the
+   * outline happened to begin — on a state that size, a different place from the site it
+   * stands for, and the reader has a compass in their head when they look at a map.
+   */
+  marks?: { verdict: Verdict; lon: number; lat: number }[];
 }
 
 export interface MapLink {
@@ -87,11 +95,11 @@ function readPalette(el: HTMLElement): Palette {
   const v = (name: string, fallback: string) => { const c = cs.getPropertyValue(name).trim(); return /^[\d.]+$/.test(c) || valid(c) ? c || fallback : fallback; };
   return {
     status: { Critical: v("--lm-bad-fill", "#c82d40"), Warning: v("--lm-warn-fill", "#d7b43b"), Healthy: v("--lm-good-fill", "#00bb7b"), "Not monitored": v("--lm-neutral", "#7c7f9e") },
-    route: v("--lm-route", v("--lm-cyan", "#06b6d4")), land: v("--lm-land", "rgba(173, 176, 255, 0.4)"), bg: v("--lm-bg", "#05080f"),
+    route: v("--lm-route", v("--lm-series", "#00afbe")), land: v("--lm-land", "rgba(173, 176, 255, 0.4)"), bg: v("--lm-bg", "#141419"),
     ink: v("--lm-ink", "#e2e8f0"), ink2: v("--lm-ink-3", "#b8bfcc"),
     // the halo behind a label and the strength of the hotspot glow differ per theme: a glow that reads
     // on a dark stage turns into a stain on a white one
-    halo: v("--lm-halo", v("--lm-bg", "#05080f")), glow: Number(v("--lm-glow", "0.2")) || 0.2,
+    halo: v("--lm-halo", v("--lm-bg", "#141419")), glow: Number(v("--lm-glow", "0.2")) || 0.2,
     // how heavy the dotted continents are drawn: a light stage needs a bigger dot to read as land
     landDot: Number(v("--lm-land-dot", "1")) || 1,
     // How much of the drawing survives when it is not the focus. On a dark stage a route at 4% alpha still
@@ -127,7 +135,7 @@ const land = (() => {
 })();
 
 /** Ray casting over a flat ring of lon/lat pairs. */
-function pointInRing(ring: Float64Array, lon: number, lat: number): boolean {
+export function pointInRing(ring: Float64Array, lon: number, lat: number): boolean {
   let inside = false;
   for (let i = 0, j = ring.length - 2; i < ring.length; j = i, i += 2) {
     const xi = ring[i], yi = ring[i + 1], xj = ring[j], yj = ring[j + 1];
@@ -236,6 +244,40 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
   }, [fitTo]);
   const first = useRef(true);
   useEffect(() => { fitTo(focus, !first.current); first.current = false; }, [focusKey, fitTo]); // eslint-disable-line react-hooks/exhaustive-deps
+  /**
+   * A change of layout is a change of where everything is.
+   *
+   * The camera refits when the focus changes, and switching between the geographic and the
+   * schematic layout changes neither the focus nor the insets — so it kept the frame it had
+   * over coordinates that are not the same coordinates. The schematic places its discs on a
+   * ring centred at nought, and the frame left over from Brazil showed two of thirteen
+   * sites, with the rest off the edge and no way to tell they were there.
+   */
+  const wasSchematic = useRef(schematic);
+  useEffect(() => {
+    if (wasSchematic.current === schematic) return;
+    wasSchematic.current = schematic;
+    touched.current = false;
+    fitTo(props.current.focus, false);
+  }, [schematic, fitTo]);
+  /**
+   * The frame keeps up with the estate while the estate is still arriving.
+   *
+   * The camera fitted once, at mount, over whatever sites existed in that render — on this
+   * environment the two data centres and one site, because the rest land over the next
+   * half minute. Nothing refitted afterwards, so the schematic showed three of thirteen
+   * with the ring off the edge and no sign that anything was missing. It refits while the
+   * count grows and stops the moment the reader pans or zooms: after that the frame is
+   * theirs, and the zoom-to-fit button is how they ask for it back.
+   */
+  const touched = useRef(false);
+  const seen = useRef(sites.length);
+  useEffect(() => {
+    if (sites.length === seen.current) return;
+    seen.current = sites.length;
+    if (touched.current) return;
+    fitTo(props.current.focus, false);
+  }, [sites.length, fitTo]);
 
   useEffect(() => {
     const el = wrap.current;
@@ -258,7 +300,9 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
     let raf = 0;
     const stageStyle = wrap.current ? getComputedStyle(wrap.current) : null;
     const font = stageStyle?.getPropertyValue("--lm-sans").trim() || "DynatraceFlow, Roboto, Helvetica, sans-serif";
-    const mono = stageStyle?.getPropertyValue("--lm-mono").trim() || "'Roboto Mono', monospace";
+    /* the label voice, and the fallback is what that token holds — it read `--lm-mono` with
+       Roboto Mono behind it, so a failed read drew the canvas in a face the page never uses */
+    const mono = stageStyle?.getPropertyValue("--lm-label").trim() || "DynatraceFlow, Roboto, sans-serif";
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
       const c = canvas.current;
@@ -314,20 +358,36 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         }
         landLayer.current = { key: landKey, canvas: lc };
       }
-      // hotspot glow behind the affected sites of the focus
+      /**
+       * The focus, as a ring on each site it holds.
+       *
+       * It was one blurred disc at the centre of them, which is a point and not a place:
+       * with two sites in the focus the centre fell in the sea and the mark sat on open
+       * water while the sites it stood for were unmarked. And it was painted amber whenever
+       * nothing was critical — a status colour over a focus where nothing was wrong, with a
+       * drill-down that then had nothing to explain it with.
+       *
+       * The ring is the page's ink unless the site itself carries a status, in which case it
+       * carries the same one: colour on this map means status and nothing else.
+       */
       if (F) {
         const hot = S.filter((s) => F.has(s.code));
-        if (hot.length) {
-          const gx = hot.reduce((a, s) => a + sx(s.lon), 0) / hot.length, gy = hot.reduce((a, s) => a + sy(s.lat), 0) / hot.length;
-          const spread = Math.max(50, Math.min(180, Math.max(...hot.map((s) => Math.hypot(sx(s.lon) - gx, sy(s.lat) - gy))) + 50));
-          const worstHot = hot.some((s) => s.verdict === "Critical") ? COL.Critical : COL.Warning;
-          const g = ctx.createRadialGradient(gx, gy, 0, gx, gy, spread);
-          g.addColorStop(0, withAlpha(worstHot, P.glow)); g.addColorStop(1, withAlpha(worstHot, 0));
-          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(gx, gy, spread, 0, Math.PI * 2); ctx.fill();
+        for (const s of hot) {
+          const x = sx(s.lon), y = sy(s.lat);
+          if (x < -40 || y < -40 || x > w + 40 || y > h + 40) continue;
+          ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2);
+          const bad = s.verdict === "Critical" || s.verdict === "Warning";
+          ctx.strokeStyle = withAlpha(bad ? COL[s.verdict] : P.ink, bad ? 0.9 : 0.45);
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
         }
       }
 
       if (!props.current.schematic && !RG?.some((r) => r.rings.length)) ctx.drawImage(landLayer.current.canvas, 0, 0, w, h);
+
+      /* No shape is drawn for a schematic group. A disc around each region was tried here and
+         taken out: the layout already separates them, the name and the count already say what
+         the group is, and an outline is a mark on the canvas that stands for nothing measured. */
 
       // The state layer. Drawn in place of the dotted land, because two grounds under the same marks
       // read as noise: the fill carries the status of what stands in the region, the border its shape.
@@ -355,34 +415,56 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
           // ...and the outline carries the shares. Washing the shape in the colour of its worst site
           // said "Rio de Janeiro is critical" of three sites in a hundred and ninety-seven; drawing
           // three hundredths of its border red says the true thing instead, and leaves the inside of
-          // the state as the context it is. Each ring is stroked once per status, as a single dash as
-          // long as that status's share of the perimeter.
+          // the state as the context it is.
+          //
+          // The shares used to be stroked in status order from the ring's first vertex, which put a
+          // state's red arc wherever its outline happened to begin. They are placed by bearing now:
+          // see `MapRegion.marks`.
           if (rg.sites) {
             for (const ring of rg.rings) {
-              let per = 0;
-              for (let i = 2; i < ring.length; i += 2) per += Math.hypot(sx(ring[i]) - sx(ring[i - 2]), sy(ring[i + 1]) - sy(ring[i - 1]));
+              // the cumulative length along the ring, so a share can be placed by distance
+              const d = new Float64Array(ring.length / 2);
+              for (let i = 2; i < ring.length; i += 2) {
+                d[i / 2] = d[i / 2 - 1] + Math.hypot(sx(ring[i]) - sx(ring[i - 2]), sy(ring[i + 1]) - sy(ring[i - 1]));
+              }
+              const per = d[d.length - 1];
               if (per < 8) continue;
               ctx.beginPath();
               for (let i = 0; i < ring.length; i += 2) { const px = sx(ring[i]), py = sy(ring[i + 1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
               ctx.closePath();
               ctx.lineWidth = 2;
-              let at = 0;
-              for (const v of SHARE_ORDER) {
-                const n = rg.counts[v] ?? 0;
-                if (!n) continue;
-                // a single alerting site in a large state is a sliver: it never falls below two pixels
-                const len = Math.max(2, (n / rg.sites) * per);
-                ctx.strokeStyle = COL[v];
-                // the share that is fine is the quiet one: it is the default state of the world, and
-                // drawn at the weight of an alert it turns every border into decoration. What the eye
-                // should find on a green outline is the sliver that is not green.
-                ctx.globalAlpha = v === "Critical" ? 0.95 : v === "Warning" ? 0.9 : v === "Healthy" ? 0.3 : 0.2;
-                ctx.setLineDash([len, Math.max(1, per - len)]);
-                ctx.lineDashOffset = -at;
-                ctx.stroke();
-                at += len;
-              }
+              /* the quiet share is the default state of the world: drawn at the weight of an
+                 alert it turns every border into decoration, so it is the base the marks sit on */
               ctx.setLineDash([]);
+              ctx.globalAlpha = 0.3;
+              ctx.strokeStyle = COL.Healthy;
+              ctx.stroke();
+              /**
+               * Each alerting site's share, centred on the point of the ring that faces it.
+               *
+               * The angle from the region's own centre to the site picks the vertex pointing
+               * the same way; the arc is centred there. A site in the south of a state paints
+               * the southern edge.
+               */
+              const marks = rg.marks ?? [];
+              for (const m of marks) {
+                const want = Math.atan2(m.lat - rg.lat, m.lon - rg.lon);
+                let bestAt = 0, bestGap = Infinity;
+                for (let i = 0; i < ring.length; i += 2) {
+                  const a = Math.atan2(ring[i + 1] - rg.lat, ring[i] - rg.lon);
+                  let gap = Math.abs(a - want);
+                  if (gap > Math.PI) gap = 2 * Math.PI - gap;
+                  if (gap < bestGap) { bestGap = gap; bestAt = d[i / 2]; }
+                }
+                // a single alerting site in a large state is a sliver: it never falls below two pixels
+                const len = Math.max(2, per / rg.sites);
+                ctx.strokeStyle = COL[m.verdict];
+                ctx.globalAlpha = m.verdict === "Critical" ? 0.95 : 0.9;
+                ctx.setLineDash([len, Math.max(1, per - len)]);
+                ctx.lineDashOffset = -(bestAt - len / 2);
+                ctx.stroke();
+              }
+          ctx.setLineDash([]);
               ctx.globalAlpha = 1;
             }
           }
@@ -654,6 +736,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
   };
 
   const zoomBy = (f: number, px?: number, py?: number) => {
+    touched.current = true;
     const { w, h } = size.current, v = view.current, ins = props.current.insets;
     const ox = ins.left + (w - ins.left - ins.right) / 2, oy = ins.top + (h - ins.top - ins.bottom) / 2;
     const x = px ?? ox, y = py ?? oy;
@@ -688,7 +771,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
           if (d) {
             const dx = e.clientX - d.x, dy = e.clientY - d.y;
             if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
-            if (d.moved) { view.current = { ...d.view, cx: d.view.cx - dx / d.view.k, cy: d.view.cy - dy / d.view.k }; tween.current = null; dirty.current = true; }
+            if (d.moved) { touched.current = true; view.current = { ...d.view, cx: d.view.cx - dx / d.view.k, cy: d.view.cy - dy / d.view.k }; tween.current = null; dirty.current = true; }
             return;
           }
           const hit = siteAt(e.clientX, e.clientY);
@@ -725,7 +808,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
       <div className="lm-zoom" style={{ right: insets.right + 12, bottom: insets.bottom + 12 }}>
         <button type="button" onClick={() => zoomBy(1.4)} aria-label="Zoom in"><PlusIcon /></button>
         <button type="button" onClick={() => zoomBy(1 / 1.4)} aria-label="Zoom out"><MinusIcon /></button>
-        <button type="button" onClick={() => fitTo(focus, true)} aria-label="Fit to focus"><ZoomToFitIcon /></button>
+        <button type="button" onClick={() => { touched.current = false; fitTo(focus, true); }} aria-label="Fit to focus"><ZoomToFitIcon /></button>
         <button type="button" onClick={toggleFull} aria-pressed={full} title={full ? "Leave full screen (Esc)" : "Full screen"}
           aria-label={full ? "Leave full screen" : "Show the map full screen"}>{full ? <MinimizeIcon /> : <MaximizeIcon />}</button>
       </div>

@@ -8,7 +8,7 @@ import { fmtBps } from "../utils/format";
 
 // categorical hues only: an exporter is not a status, and borrowing the amber and green tokens for the
 // fourth and fifth band made two of them look like a verdict
-const COLORS = ["var(--lm-cyan)", "var(--lm-accent)", "var(--lm-violet)", "var(--lm-cyan-2, #4aa3c7)", "var(--lm-violet-2, #8b7fd4)", "var(--lm-neutral)"];
+const COLORS = ["var(--lm-series)", "var(--lm-accent)", "var(--lm-series-2)", "var(--dt-colors-charts-categorical-color-01-default, #0072f5)", "var(--dt-colors-charts-categorical-color-10-default, #aa673f)", "var(--lm-neutral)"];
 const W = 1000, H = 120, PAD = 6;
 
 export function TrafficRate({ rate }: { rate: NonNullable<NetworkModel["flowMap"]>["rate"] }) {

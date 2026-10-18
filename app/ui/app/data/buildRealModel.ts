@@ -368,7 +368,18 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     });
   }
   const devOf = (sid: string) => devices.get(idAlias.get(sid) ?? "");
-  const ipToName = new Map([...devices.values()].filter((d) => d.ip).map((d) => [d.ip, d.name]));
+/**
+ * Every address a device carries, not only the one SNMP polls it on.
+ *
+ * A router answers on four addresses and the ping targets all of them; syslog arrives from
+ * whichever interface the line left by. Keyed on the primary alone, a reading about
+ * 172.18.0.27 belonged to nobody — which is how an alert about two silent addresses of
+ * CTR-007 came out as "could not be placed on this inventory". The primary is written last
+ * so it still wins any address two devices both claim.
+ */
+  const ipToName = new Map<string, string>();
+  [...devices.values()].forEach((d) => (d.ips ?? []).forEach((ip) => { if (ip) ipToName.set(ip, d.name); }));
+  [...devices.values()].forEach((d) => { if (d.ip) ipToName.set(d.ip, d.name); });
   const chassisToName = new Map([...byName.values()].filter((d) => d.chassis_mac && d.monitoring_mode === "Extension").map((d) => [d.chassis_mac, d.name]));
 
   // Every extension family names its device its own way: the Smartscape node when it has one, else the
@@ -386,6 +397,20 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     if (!d || d.cpu.length) continue;
     d.cpu = clean(row.cpu).map((v) => round(v));
     d.cpuNow = d.cpu.length ? d.cpu[d.cpu.length - 1] : null;
+  }
+  // A fortnight of hourly processor samples, for the Ahead page. Absent on every other page,
+  // because the query that fills it only runs where it is drawn.
+  for (const row of LF("cpuHourly")) {
+    const d = devFor(row);
+    if (!d || d.cpuHourly) continue;
+    const c = clean(row.c).map((v) => round(v));
+    if (c.length) { d.cpuHourly = c; if (typeof row.family === "string") d.cpuFamily = row.family; }
+  }
+  for (const row of LF("memHourly")) {
+    const d = devFor(row);
+    if (!d || d.memHourly) continue;
+    const m = clean(row.m).map((v) => round(v));
+    if (m.length) { d.memHourly = m; if (typeof row.family === "string") d.memFamily = row.family; }
   }
   for (const row of LF("memory")) {
     const d = devFor(row);
@@ -469,6 +494,65 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     if (seen.has(sid)) continue;
     const dname = chassisToName.get(node["device.chassis_mac"]);
     if (dname) addIface(dname, sid, node.name, num(node.speed), [], []);
+  }
+
+  /**
+   * A fortnight of hourly traffic per port, as a percentage of that port's own line rate, plus
+   * whether its discard rate rose over the same window. Only the Ahead page reads it.
+   *
+   * The percentage needs a speed, and roughly half the interfaces in a real estate do not publish
+   * one — `if.speed` is absent from some families altogether and reported as zero by many devices.
+   * A port without a speed gets no daily series rather than a guessed one, and the page counts it
+   * among the subjects it cannot speak for.
+   *
+   * Discards are a rate question, not a count question. A counter that has been non-zero for
+   * months is a configuration artifact, and on one live environment forty percent of interfaces
+   * carry one; what matters is the second half of the window dropping more than the first.
+   */
+  /* uplinks first, then every port: `iface.hourly` below keeps whichever arrives first, so the
+     fast read fills the ports the page ranks and the full one fills the rest when it lands */
+  for (const row of [...LF("ifHourlyUp"), ...LF("ifHourly")]) {
+    const d = devFor(row);
+    if (!d) continue;
+    const iname = ifName(row);
+    const iface = d.interfaces.find((x) => x.name === iname);
+    if (!iface || iface.hourly) continue;
+    const sp = clean(row.s);
+    const speed = (sp.length ? sp[sp.length - 1] : null) ?? iface.speed;
+    if (!speed || speed <= 0) continue;
+    // the family that reported it, so a forecast can be asked for this exact series later
+    if (typeof row.family === "string") iface.family = row.family;
+    const bits = speed * 1e6 * 3600;
+    const bump = (a: number[], b: number[]) => a.map((v, i) => v + (b[i] ?? 0));
+    const octets = bump(clean(row.i), clean(row.o));
+    /**
+     * An hour that says the port carried more than its own line rate did not happen.
+     *
+     * Measured on a live environment: 172 of 397 interfaces with a line rate report at least one
+     * hour above 100% of it. The arithmetic is right and the counter is not — an SNMP octet
+     * counter that wrapped, or a gap in polling that made one delta cover several intervals,
+     * arrives as a single enormous bucket. One of them is enough to ruin everything downstream:
+     * it becomes that day's peak, it drags the fit, and it prints a utilisation no cable can do.
+     *
+     * So it is dropped rather than clamped. Clamping to 100 would assert the port was saturated
+     * in an hour where nothing is known; a hole says what is true, and every reader of `hourly`
+     * already skips holes.
+     */
+    const hourly = octets.map((v) => {
+      const pctOf = (v * 8 / bits) * 100;
+      return pctOf > 100 ? NaN : round(pctOf);
+    });
+    if (hourly.some(Number.isFinite)) iface.hourly = hourly;
+    const dis = clean(row.d);
+    // the series, not only its trend: a discard is evidence about the hour it happened in, and
+    // the utilisation of that same hour is what says whether capacity could explain it
+    if (dis.length) iface.discHourly = dis;
+    if (dis.length >= 8) {
+      const half = Math.floor(dis.length / 2);
+      const early = dis.slice(0, half).reduce((a, b) => a + b, 0);
+      const late = dis.slice(half).reduce((a, b) => a + b, 0);
+      if (late > early) iface.dropsRising = Math.round(late - early);
+    }
   }
 
   // a device whose Smartscape node carries no interface_count still has the ports the app read
@@ -616,6 +700,78 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     const since = icmpDownSince.get(d.ip) ?? (d.icmp ? undefined : snmpSilentSince.get(d.name));
     if (since) d.unreachableSince = since;
   });
+
+  /**
+   * The ping targets that are actually failing, and which monitor pings them.
+   *
+   * A monitor problem names one entity — the monitor — and the app fans it out to every
+   * device that monitor watches. Measured on this environment, P-26103695 reached forty-seven
+   * devices that way, every one of them answering SNMP and answering ping, while the two
+   * addresses the problem is really about — 172.18.0.201 and 172.18.0.202, 407 packets each
+   * and nought received over six hours — appeared nowhere at all, because neither is in the
+   * inventory.
+   *
+   * So the targets are read directly. A target with packets sent and none received is the
+   * fault; it is what the fan-out should attach to, and what the panel should name.
+   */
+/* A device is one of the failing targets when any address it carries is, not only the one
+   SNMP polls it on: CTR-007 answers on 10.175.2.27 and is silent on 172.18.0.27, and the
+   alert is about the second. Matching the primary alone attached the alert to the wrong
+   devices and left the right ones out. */
+const pingsFailing = (d: Device, failing: Set<string>) =>
+  failing.has(d.ip) || (d.ips ?? []).some((ip) => failing.has(ip));
+
+  const failingByMonitor = new Map<string, Set<string>>();
+  const pingDown: NonNullable<NetworkModel["pingDown"]> = [];
+  for (const row of L("icmpReach")) {
+    const sent = (row.sent ?? []).map((v: unknown) => num(v) ?? 0);
+    const recv = (row.recv ?? []).map((v: unknown) => num(v) ?? 0);
+    const total = sent.reduce((a: number, b: number) => a + b, 0);
+    const got = recv.reduce((a: number, b: number) => a + b, 0);
+    /* two dead buckets, the same bar `unreachableSince` uses: one missed poll is not an outage */
+    if (!total || got > 0 || sent.filter((v: number, i: number) => v > 0 && recv[i] === 0).length < 2) continue;
+    const ip = String(row["request.target_address"] ?? "");
+    const mid = row["dt.entity.multiprotocol_monitor"] ? String(row["dt.entity.multiprotocol_monitor"]) : null;
+    if (!ip) continue;
+    if (mid) { const set = failingByMonitor.get(mid); if (set) set.add(ip); else failingByMonitor.set(mid, new Set([ip])); }
+    const d = devices.get(ipToName.get(ip) ?? "");
+    pingDown.push({
+      ip, monitor: row["monitor.name"] ? String(row["monitor.name"]) : null,
+      sent: total, since: deadSince(row, sent, (i: number) => sent[i] > 0 && recv[i] === 0) ?? null,
+      device: d?.name ?? null, site: d?.site ?? null,
+    });
+  }
+  pingDown.sort((a, b) => b.sent - a.sent);
+
+  /**
+   * Every pinged address of every device, answering or not.
+   *
+   * `pingDown` holds only the silent ones, and silence on its own does not tell a reader
+   * what to do: two addresses of a router answering nothing reads as an outage until the
+   * other two, answering every packet, are beside them. Then it reads as what it is — the
+   * device is up and two of its addresses are not reachable from where the ping is sent.
+   */
+  for (const row of L("icmpReach")) {
+    const ip = String(row["request.target_address"] ?? "");
+    const name = ipToName.get(ip);
+    const d = name ? devices.get(name) : undefined;
+    if (!d) continue;
+    const sent = (row.sent ?? []).map((v: unknown) => num(v) ?? 0);
+    const recv = (row.recv ?? []).map((v: unknown) => num(v) ?? 0);
+    const total = sent.reduce((a: number, b: number) => a + b, 0);
+    if (!total) continue;
+    /* `deadSince` walks back from the end, so a target that was already silent in the first
+       bucket comes back with the start of the window — which on screen reads as the moment it
+       stopped. Nothing stopped then; that is simply as far back as this read goes. No observed
+       transition, no time: the column says so instead of naming one. */
+    const silentThroughout = sent[0] > 0 && recv[0] === 0;
+    (d.icmpTargets ??= []).push({
+      ip, monitor: row["monitor.name"] ? String(row["monitor.name"]) : null,
+      sent: total, recv: recv.reduce((a: number, b: number) => a + b, 0),
+      since: silentThroughout ? null : deadSince(row, sent, (i: number) => sent[i] > 0 && recv[i] === 0) ?? null,
+    });
+  }
+  devices.forEach((d) => d.icmpTargets?.sort((a, b) => (a.recv === 0 ? 0 : 1) - (b.recv === 0 ? 0 : 1) || a.ip.localeCompare(b.ip)));
 
   // ---------- WAN circuits from the circuit tags on the ICMP monitors ----------
   const circuitRows = new Map<string, Rec>();
@@ -786,7 +942,18 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
       if (direct) { onDevice.set(direct, onDevice.get(direct)); named.add(direct); }
       const viaIface = byInterface.get(id);
       if (viaIface) { onDevice.set(viaIface.device, viaIface.iface); named.add(viaIface.device); }
-      (devicesByMonitor.get(id) ?? []).forEach((d) => onDevice.set(d, onDevice.get(d)));
+      /* The same narrowing the alert path below already does, and it was missing here.
+         A monitor problem names one entity — the monitor — and this fanned it out to every
+         device the monitor pings. Measured on P-26103695: the monitor covers 162 target
+         addresses, 53 of which answer nothing, and the problem was attached to two devices
+         that answer every packet. The reader was shown a red fault on two healthy devices
+         and no sign of the addresses it is really about. When the record says which targets
+         are failing, the problem belongs to those; with no reading either way it still falls
+         back to all of them. */
+      const failing = failingByMonitor.get(id);
+      (devicesByMonitor.get(id) ?? [])
+        .filter((d) => !failing || pingsFailing(d, failing))
+        .forEach((d) => onDevice.set(d, onDevice.get(d)));
     });
     const onCircuits = new Set(ids.map((id) => circuitByMonitor.get(id)).filter((c): c is Circuit => !!c));
     if (!onDevice.size && !onCircuits.size) {
@@ -827,7 +994,12 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     ids.forEach((x) => {
       const direct = byEntity.get(x);
       if (direct) { hit.set(direct, hit.get(direct)); named.add(direct); }
-      (devicesByMonitor.get(x) ?? []).forEach((d) => hit.set(d, hit.get(d)));
+      /* when the app can see which of the monitor's targets are failing, the alert belongs to
+         those and to nothing else; with no reading either way it falls back to all of them */
+      const failing = failingByMonitor.get(x);
+      (devicesByMonitor.get(x) ?? [])
+        .filter((d) => !failing || pingsFailing(d, failing))
+        .forEach((d) => hit.set(d, hit.get(d)));
     });
     if (ifaceId) { const via = byInterface.get(ifaceId); if (via) { hit.set(via.device, via.iface); named.add(via.device); } }
     const onCircuits = new Set(ids.map((x) => circuitByMonitor.get(x)).filter((c): c is Circuit => !!c));
@@ -1005,6 +1177,20 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     sites, siteVerdicts,
     devices: devList.sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || b.impact - a.impact || a.name.localeCompare(b.name)),
     circuits, links, peers, traps, unmappedAlerts, alerting, availWindow,
+    pingDown,
+    /* already counted in Grail — one row per facility, mnemonic, device and port */
+    netChanges: L("netChanges").map((r) => {
+      /* `ipToName` is the same map the syslog counts use: a device sends from whichever
+         interface its logging is sourced on, which is often not the one SNMP polls, and
+         matching on `Device.ip` alone left most of these rows orphaned */
+      const d = devices.get(ipToName.get(String(r.ip ?? "")) ?? "");
+      return {
+        fac: String(r.fac ?? ""), mnem: String(r.mnem ?? ""), ip: String(r.ip ?? ""),
+        iface: r.iface ? String(r.iface) : null,
+        events: num(r.events) ?? 0, last: String(r.last ?? ""),
+        device: d?.name ?? null, site: d?.site ?? null,
+      };
+    }).filter((r) => r.fac && r.ip && r.events > 0),
     syslogSenders: unknownSenders.size ? {
       unknown: unknownSenders.size,
       lines: [...unknownSenders.values()].reduce((a, b) => a + b, 0),

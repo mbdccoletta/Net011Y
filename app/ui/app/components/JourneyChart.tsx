@@ -16,8 +16,8 @@ export type JourneyPick = { kind: "node"; id: string } | { kind: "link"; from: s
  * the whole drawing read as one teal wash in which neither the ends nor the paths stood out.
  */
 const TONE: Record<JourneyNode["kind"], string> = {
-  site: "var(--lm-accent)", internet: "var(--lm-cyan)", private: "var(--lm-neutral)",
-  device: "var(--lm-ink)", app: "var(--lm-violet)",
+  site: "var(--lm-accent)", internet: "var(--lm-series)", private: "var(--lm-neutral)",
+  device: "var(--lm-ink)", app: "var(--lm-series-2)",
 };
 export const JOURNEY_LEGEND: { kind: JourneyNode["kind"]; label: string }[] = [
   { kind: "site", label: "Site" }, { kind: "internet", label: "Internet" }, { kind: "private", label: "Private, no site" },

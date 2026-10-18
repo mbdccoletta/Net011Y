@@ -33,7 +33,37 @@ export const FAMILIES: Family[] = [
   {
     id: "network_device", devDims: "dt.smartscape.ext_network_device, device.address", ifDims: "dt.smartscape.ext_network_interface, if.name, if.speed", label: "Network devices (common set of the SNMP extensions)", prefix: "com.dynatrace.extension.network_device",
     ifIn: "if.bytes_in.count", ifOut: "if.bytes_out.count", ifErrIn: "if.in.errors.count", ifErrOut: "if.out.errors.count",
-    ifDiscIn: "if.in.discards.count", ifDiscOut: "if.out.discards.count", cpu: "cpu_usage", memUsed: "memory_used", memTotal: "memory_total", uptime: "sysuptime",
+    ifDiscIn: "if.in.discards.count", ifDiscOut: "if.out.discards.count", cpu: "cpu_usage",
+    /**
+     * `memory_free`, not `memory_total`, and that is a measurement rather than a preference.
+     *
+     * This family declared `memTotal`, and the builder prefers a stated total over a free —
+     * rightly, since `used / total` counts the buffers that `used + free` leaves out. But the
+     * devices have to publish it. Counted on this environment: 150 report `memory_used`, 147
+     * report `memory_free`, and **three** report `memory_total`, with no device reporting
+     * both a free and a total. So the app was asking 150 devices for a denominator that three
+     * of them have, and a hundred and forty-seven switches showed no memory at all while
+     * Ahead counted 169 processors against 135 memories.
+     *
+     * Those three are covered by `network_device_total` below, because a family is how this
+     * app asks a question and these devices answer a different one.
+     */
+    memUsed: "memory_used", memFree: "memory_free", uptime: "sysuptime",
+    docs: "https://docs.dynatrace.com/docs/observe/infrastructure-monitoring/extensions/snmp-generic",
+  },
+  {
+    /**
+     * The same extension, for the devices that state a total instead of a free.
+     *
+     * It carries nothing but the memory pair: `BUILD` returns null for every measure whose
+     * fields are absent, so this entry generates exactly one query and adds nothing to the
+     * interface, CPU or uptime reads. The model takes the first family that answers for a
+     * device, so a device reporting a free is served above and never reaches this one.
+     */
+    id: "network_device_total", devDims: "dt.smartscape.ext_network_device, device.address",
+    ifDims: "dt.smartscape.ext_network_interface, if.name, if.speed",
+    label: "Network devices reporting a memory total", prefix: "com.dynatrace.extension.network_device",
+    memUsed: "memory_used", memTotal: "memory_total",
     docs: "https://docs.dynatrace.com/docs/observe/infrastructure-monitoring/extensions/snmp-generic",
   },
   {
@@ -78,14 +108,115 @@ const dev = (f: Family) => f.devDims;
 const port = (f: Family) => `${f.devDims}, ${f.ifDims}`;
 
 /**
+ * The same port, without its speed in the grouping.
+ *
+ * `if.speed` is a dimension on two of the families, so a port whose speed is reported
+ * inconsistently — a flap, a renegotiation, one poll that missed it — becomes two series, each
+ * holding part of the record. Measured on a live environment, 198 rows over 6,812 interfaces came
+ * back split that way, and because each half is tested for "enough record" on its own, a port with
+ * a fortnight of history could be judged on half of it and dropped. The split is silent: the count
+ * is simply lower than the number of ports, with nothing to say which were lost.
+ *
+ * The speed is read as a metric in the same query, so nothing is lost by dropping the dimension.
+ */
+const portSteady = (f: Family) => `${f.devDims}, ${f.ifDims}`.replace(/,\s*if\.speed\b/, "");
+
+/**
+ * The first dimension a query groups by — the only field a sort may safely name.
+ *
+ * The two hourly reads sorted by `dt.smartscape.ext_network_interface` and
+ * `dt.smartscape.ext_network_device`, which the common SNMP families do carry and two families
+ * do not: F5 groups its ports by `interface.name` and Palo Alto by `if.descr`, and Palo Alto's
+ * devices by `device.address, sys.name` with no Smartscape id at all. Grail answers a sort on a
+ * field that is not in the result with 400 FIELD_DOES_NOT_EXIST, so `ifHourly:f5` had been
+ * failing on every load — invisibly, because the page it feeds treated an unasked-for read and
+ * a failed one the same way. Sorting on a dimension the query itself groups by cannot miss.
+ */
+const firstDim = (dims: string) => dims.split(",")[0].trim();
+
+/**
  * One query per family and measure, so they run side by side and a family that is absent answers at once.
  * Named "<measure>:<family>"; the model reads them in catalog order, the common set first.
  */
-export type Measure = "ifTraffic" | "ifErrors" | "ifSummary" | "errSummary" | "cpu" | "memory" | "uptime" | "reboots";
+export type Measure = "ifTraffic" | "ifErrors" | "ifSummary" | "errSummary" | "cpu" | "memory" | "uptime" | "reboots"
+  | "ifHourly" | "ifHourlyUp" | "cpuHourly" | "memHourly";
+/** the model's uplink rule (`isUplink` in buildRealModel), written as a scan-time filter */
+const UPLINK = 'toLong(`if.speed`) >= 10000 or startsWith(`if.name`, "Te") or startsWith(`if.name`, "Po")'
+  + ' or startsWith(`if.name`, "xe-") or startsWith(`if.name`, "et-") or startsWith(`if.name`, "lc-")';
+
 const BUILD: Record<Measure, (f: Family) => string | null> = {
   // traffic per port, every 5 minutes over 2 h
   ifTraffic: (f) => f.ifIn && f.ifOut
     ? `timeseries {i = sum(${mk(f, f.ifIn)}), o = sum(${mk(f, f.ifOut)})${f.ifSpeedMetric ? `, s = avg(${mk(f, f.ifSpeedMetric)})` : ""}}, by:{${port(f)}}, from:now()-2h, interval:5m | ${tag(f)}` : null,
+  // One point per hour for a fortnight, per port, with the port's own speed alongside.
+  //
+  // It was a month of daily buckets, which gave eighteen points on a real estate and a chart with
+  // nothing in it: a line between eighteen dots is a sketch, not telemetry. Hourly over fourteen
+  // days gives three hundred, and measured on a live environment it is also *denser* — 90% of the
+  // hours report against 41% of the days, because a day counted as missing was usually a day with
+  // a few hours of silence in it. One million points came back in seven seconds.
+  //
+  // Capacity is sized against the peak hour, not the mean day, and only this resolution shows one.
+  ifHourly: (f) => f.ifIn && f.ifOut
+    ? `timeseries {i = sum(${mk(f, f.ifIn)}), o = sum(${mk(f, f.ifOut)})`
+      + `${f.ifSpeedMetric ? `, s = avg(${mk(f, f.ifSpeedMetric)})` : ""}`
+      /* Both directions. It counted inbound only, so a port discarding on the way out read as
+         a clean port — and when the platform was asked about the same ports it found an
+         increase on a series this app's record showed as flat zero. Everything downstream
+         rests on this series: the discard state, the ceiling a port has demonstrated, and the
+         rate the cause draws. */
+      + `${f.ifDiscIn ? `, d = sum(${mk(f, f.ifDiscIn)})` : ""}`
+      + `${f.ifDiscOut ? `, d2 = sum(${mk(f, f.ifDiscOut)})` : ""}`
+      + `}, by:{${portSteady(f)}}, from:now()-14d, interval:1h`
+      + `${f.ifDiscIn && f.ifDiscOut ? " | fieldsAdd d = d[] + d2[] | fieldsRemove d2" : ""}`
+      // A fixed order and a ceiling equal to the reader's own cap (queries.ts), so a cut is the
+      // same cut on every load and neither side trims below the other. Measured: 13,137 rows for
+      // 6,812 ports on a 181-device estate, so the ceiling binds only well past that size.
+      + ` | sort ${firstDim(portSteady(f))} asc | limit 60000 | ${tag(f)}` : null,
+  /**
+   * The same fortnight of hours, uplinks only — the heaviest read in the app cut to the part
+   * the page draws first.
+   *
+   * Ahead ranks one uplink per device and forecasts those; every other port is wanted only
+   * when a reader opens a device in the detail panel. Reading all of them up front made the
+   * card wait for the lot: measured here, 14,496 rows in 30.2s against 3,298 rows in 9.3s
+   * for the uplinks alone.
+   *
+   * The filter sits inside `timeseries`, not in a `| filter` after it. Both return the same
+   * 3,298 rows; the piped version scans every port first and only then discards them, and
+   * took 12.2s against this one's 9.3s.
+   *
+   * A port the rule misses is not lost. The unfiltered read follows in the last wave and
+   * fills it in, because the model keeps whichever series for a port arrives first.
+   */
+  ifHourlyUp: (f) => {
+    const q = BUILD.ifHourly(f);
+    return q ? q.replace(", from:now()-14d", `, filter: {${UPLINK}}, from:now()-14d`) : null;
+  },
+  // the same fortnight of hours for the processor, whose limit needs no tag and no contract
+  cpuHourly: (f) => f.cpu
+    ? `timeseries {c = avg(${mk(f, f.cpu)})}, by:{${dev(f)}}, from:now()-14d, interval:1h`
+      + ` | sort ${firstDim(dev(f))} asc | limit 50000 | ${tag(f)}` : null,
+  /**
+   * The same fortnight of hours for memory in use.
+   *
+   * The `memory` read above is a snapshot — two hours of five-minute buckets, of which the
+   * model kept the last sample — so the app could say what memory is now and nothing about
+   * where it is going. A processor and a port both get fourteen days of hours; memory is the
+   * third thing a device can run out of and it was the only one with no record.
+   *
+   * Two shapes, as above: a family that publishes a percentage outright, and one that
+   * publishes used and total (or used and free) for this to divide.
+   */
+  memHourly: (f) => {
+    const expr = f.memPct
+      ? `timeseries {m = avg(${mk(f, f.memPct)})}, by:{${dev(f)}}, from:now()-14d, interval:1h`
+      : f.memUsed && (f.memTotal || f.memFree)
+        ? `timeseries {u = avg(${mk(f, f.memUsed)}), t = avg(${mk(f, (f.memTotal ?? f.memFree)!)})}, by:{${dev(f)}}, from:now()-14d, interval:1h`
+          + ` | fieldsAdd m = 100 * u[] / ${f.memTotal ? "t[]" : "(u[] + t[])"} | fieldsRemove u, t`
+        : null;
+    return expr ? `${expr} | sort ${firstDim(dev(f))} asc | limit 50000 | ${tag(f)}` : null;
+  },
   // errors, discards and CRC per port over 2 h, summed: the ports only need the totals
   ifErrors: (f) => {
     if (!f.ifErrIn) return null;

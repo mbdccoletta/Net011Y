@@ -3,6 +3,8 @@
 // label, "[verb]ing [object]..." while loading, and the AI disclaimer under every answer.
 import React, { useEffect, useRef, useState } from "react";
 import { AiLoadingIndicator, AiResponse } from "@dynatrace/strato-components/content";
+import { Button } from "@dynatrace/strato-components/buttons";
+import { Flex } from "@dynatrace/strato-components/layouts";
 import { ExternalLink, Text } from "@dynatrace/strato-components/typography";
 import { AiIcon } from "@dynatrace/strato-icons";
 import { askAssist } from "../utils/assist";
@@ -99,13 +101,25 @@ export function AssistPanel({ subject, questions, context, object }: Props) {
   return (
     <section ref={box} className="lm-assist" aria-label="Dynatrace Intelligence">
       <div className="lm-assist__head"><AiIcon aria-hidden="true" /><span>Intelligence</span></div>
-      <div className="lm-assist__chips">
+      {/* The triggers are the platform's buttons.
+          They were `lm-chip`, this app's own pill, and a question that runs a request is a
+          button in anyone's language — the presence pattern only asks that it carry the AI
+          icon, which is what `Button.Prefix` is for. `aria-pressed` on the open one is kept:
+          it is how a reader is told which answer is below. */}
+      <Flex flexDirection="row" gap={4} flexWrap="wrap" className="lm-assist__chips">
         {questions.map(asQuestion).map((q) => (
-          <button key={q.prompt} type="button" className={`lm-chip${question?.prompt === q.prompt ? " is-on" : ""}`} aria-pressed={question?.prompt === q.prompt} onClick={() => ask(q)}>
-            <AiIcon aria-hidden="true" /> {q.label}
-          </button>
+          <Button key={q.prompt} size="condensed"
+            /* `default` is the platform's ghost button — measured on screen it comes out with
+               no border and no surface, so four questions read as four lines of text with an
+               icon. `emphasized` is the one that carries chrome, and the open question takes
+               `accent` so the answer below it has a visible owner. */
+            variant={question?.prompt === q.prompt ? "accent" : "emphasized"}
+            aria-pressed={question?.prompt === q.prompt} onClick={() => ask(q)}>
+            <Button.Prefix><AiIcon /></Button.Prefix>
+            {q.label}
+          </Button>
         ))}
-      </div>
+      </Flex>
       {entry?.state === "loading" && <div className="lm-assist__body"><AiLoadingIndicator>{object ? `Analyzing ${object}...` : "Analyzing..."}</AiLoadingIndicator></div>}
       {entry?.state === "done" && (
         <div className="lm-assist__body lm-assist__answer">
@@ -113,9 +127,11 @@ export function AssistPanel({ subject, questions, context, object }: Props) {
           <Text textStyle="small" className="lm-assist__disclaimer">
             <ExternalLink href={DOCS_INTELLIGENCE}>Dynatrace Intelligence</ExternalLink> uses AI. Always verify important information and decisions.
           </Text>
-          <button type="button" className="lm-chip lm-assist__continue" onClick={() => question && openAssist(question.prompt, context())}>
-            <AiIcon aria-hidden="true" /> Continue in Assist
-          </button>
+          <Button size="condensed" variant="emphasized" className="lm-assist__continue"
+            onClick={() => question && openAssist(question.prompt, context())}>
+            <Button.Prefix><AiIcon /></Button.Prefix>
+            Continue in Assist
+          </Button>
         </div>
       )}
       {entry?.state === "error" && <div className="lm-assist__body lm-assist__error" role="alert">{entry.text}</div>}

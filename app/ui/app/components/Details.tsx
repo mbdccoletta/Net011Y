@@ -109,20 +109,12 @@ export function DeviceDetails({ model, device, onDevice }: { model: NetworkModel
         {notMonitored && <Text textStyle="small">Enable the matching SNMP extension for {device.ip} to collect CPU, interfaces and availability.</Text>}
       </Section>
 
-      {!notMonitored && (
-        <dl className="np-kv">
-          <dt>Role</dt><dd>{ROLE_LABEL[device.role] ?? device.role} · {device.vendor}</dd>
-          <dt>Availability, 24 h</dt>
-          <dd>{device.availPct != null ? `${fmtNum(device.availPct)}%` : "—"}</dd>
-          <dt>CPU now</dt>
-          <dd>{device.cpuNow != null ? `${Math.round(device.cpuNow)}%` : "—"}</dd>
-          <dt>ICMP round trip, last hour</dt><dd>{device.icmp?.rttMs != null ? `${fmtNum(device.icmp.rttMs)} ms` : "—"} · loss {device.icmp?.loss != null ? `${fmtNum(device.icmp.loss)}%` : "—"}</dd>
-          <dt>Interfaces</dt>
-          <dd>{ports.loading ? "loading the ports of this device…"
-            : all.length ? `${all.filter((i) => i.oper.startsWith("up")).length} up of ${all.length}${ports.fromModel ? "" : " · fetched for this device"}`
-            : device.ifStats ? `${device.ifStats.interfaces} ports · ${device.ifStats.maxUtil == null ? "utilization not readable" : `max ${fmtNum(device.ifStats.maxUtil)}% utilization`}${device.ifStats.overSpeed ? ` · ${device.ifStats.overSpeed} above their own speed` : ""}` : "—"}</dd>
-        </dl>
-      )}
+      {/* A key-value list stood here with Availability 24 h, CPU now, ICMP round trip and
+          loss, and the ports up of total. Every one of those is a row of the metrics table
+          above it, stated there with the window it was measured over and its own series —
+          so the panel printed each reading twice, in two formats, and the duplicate had no
+          window on it. The vendor was the one thing only this list carried; it is on the
+          identity line now. */}
 
       <Section title="Syslog, SNMP and traps"><Timeline model={model} device={device} /></Section>
 

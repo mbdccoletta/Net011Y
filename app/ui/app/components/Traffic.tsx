@@ -9,8 +9,8 @@ import { Tile, TONE } from "./Visual";
 
 const SPLIT: { key: keyof Pick<SiteTraffic, "toSites" | "internet" | "private" | "local">; label: string; tone: string }[] = [
   { key: "toSites", label: "other sites", tone: "var(--lm-accent)" },
-  { key: "internet", label: "Internet", tone: "var(--lm-cyan)" },
-  { key: "private", label: "unmapped private", tone: "var(--lm-violet)" },
+  { key: "internet", label: "Internet", tone: "var(--lm-series)" },
+  { key: "private", label: "unmapped private", tone: "var(--lm-series-2)" },
   { key: "local", label: "inside the site", tone: "var(--lm-neutral)" },
 ];
 

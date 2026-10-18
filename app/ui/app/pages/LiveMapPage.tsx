@@ -3,9 +3,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Device, Iface, NetworkModel, Verdict } from "../model/types";
 import type { SiteInfo } from "../model/site";
-import { ChangesPanel } from "../components/Changes";
 import { isBad, worst } from "../model/verdict";
 import { buildCauses, type Cause } from "../model/causes";
+import { LiveMapGeo } from "../components/LiveMapGeo";
 import { LiveMap, MAP_COLORS, type Insets, type MapLink, type MapRegion, type MapSite } from "../components/LiveMap";
 import { countriesOf, loadRegions, regionAt, type RegionShape } from "../data/geo/admin1/load";
 import { fmtInt, hhmm } from "../utils/format";
@@ -16,13 +16,16 @@ import { useSiteHierarchy } from "../hooks/useSiteHierarchy";
 import { causeContext, isolationContext, networkContext } from "../utils/assist";
 import { causeQuestions, isolationQuestions, networkQuestions } from "../utils/prompts";
 import { AssistPanel } from "../components/AssistPanel";
+import { appNetExpressions, demandExpression, useAnomaly } from "../hooks/useAnomaly";
 import { DataNeeds } from "../components/DataNeeds";
 import { PageEmpty } from "../components/PageEmpty";
+import { Skeleton, SkeletonText } from "@dynatrace/strato-components/content";
 import { SuspicionStrip } from "../components/Suspicion";
 import { suspicionFor, trafficDrop } from "../model/suspicion";
 import { useDropThreshold } from "../hooks/useDropThreshold";
 import { VIEW_NEEDS, type Need, type NeedKey } from "../data/requirements";
-import { CauseChain, EvidenceBadges, NetworkStatus } from "../components/CauseVisuals";
+import { useDiscardNovelty } from "../hooks/useNovelty";
+import { CauseDetail, EvidenceBadges, NetworkStatus } from "../components/CauseVisuals";
 
 interface Props {
   needs: Record<NeedKey, Need>;
@@ -30,6 +33,8 @@ interface Props {
   infos: SiteInfo[];
   /** Selected cause id, "all" for the whole network, null for the default (largest cause) */
   causeId: string | null;
+  /** every read this page states something from has answered (or failed, which is an answer) */
+  ready?: boolean;
   failed: string[];
   onCause: (id: string) => void;
   onSite: (code: string) => void;
@@ -64,11 +69,46 @@ function causeMeta(c: Cause) {
   ].filter(Boolean).join(" · ");
 }
 
-export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onSite, onDevice, onSites, onExample, onSettings, next, onLive, selectedSite }: Props) {
-  const causes = useMemo(() => buildCauses(model, infos), [model, infos]);
+export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onSite, onDevice, onSites, onExample, onSettings, next, onLive, selectedSite, ready = true }: Props) {
+  /* The discard cause is the platform's finding, not this app's: the page asks which ports
+     changed and the causes are rebuilt when the answer lands. */
+  const families = useMemo(() => [...new Set(model.devices
+    .flatMap((d) => d.interfaces.map((i) => i.family))
+    .filter((f): f is string => !!f))].sort(), [model]);
+  const { data: rising, loading: risingLoading } = useDiscardNovelty(families, 14);
+  /* whether demand fell is the platform's call: the same series the strip measures, judged by
+     the seasonal baseline detector rather than by a percentage this app picked */
+  const platform = {
+    demand: useAnomaly("seasonal", demandExpression(model), { condition: "BELOW", days: 7 }),
+    /* the two readings that say whether the applications feel the network: the app used to
+       decide both against factors of its own */
+    retransmitted: useAnomaly("adaptive", appNetExpressions(model)?.retransmitted ?? null, { condition: "ABOVE", days: 1 }),
+    roundTrip: useAnomaly("adaptive", appNetExpressions(model)?.roundTrip ?? null, { condition: "ABOVE", days: 1 }),
+  };
+  const causes = useMemo(() => buildCauses(model, infos, rising), [model, infos, rising]);
   const shared = causes.filter((c) => c.sites.length > 1 || c.kind === "carrier" || c.kind === "datacenter");
   const isolated = causes.filter((c) => !shared.includes(c));
-  const cause = causeId === "all" ? null : causes.find((c) => c.id === causeId) ?? shared[0] ?? null;
+  /**
+   * A cause that arrives late does not take the screen from the reader.
+   *
+   * `?? shared[0]` is how the panel opens on something rather than on nothing, and it was
+   * re-evaluated on every render — so a cause that landed after the page had settled became
+   * `shared[0]` and the panel jumped to it. Measured on a recording: at 24 s the panel held
+   * one cause; at 28 s the discard cause arrived — it comes from the novelty analyzer, which
+   * is not one of the queries the loader counts — and the panel was showing it with nobody
+   * having asked.
+   *
+   * Anchoring that to the first *shared* cause was the same bug one step along, and the
+   * second recording caught it: there was no shared cause at all until the discard one
+   * arrived at twenty-seven seconds, so it still became the default and still took the
+   * panel. The anchor is the first render that has **any** cause, which is the moment the
+   * page first has something to open on. After that the default never moves; a later arrival
+   * shows up in the list, where new information belongs, and the reader picks it or not.
+   */
+  const firstCause = useRef<string | null>(null);
+  if (firstCause.current == null && causes.length) firstCause.current = (shared[0] ?? causes[0]).id;
+  const fallback = causes.find((c) => c.id === firstCause.current) ?? null;
+  const cause = causeId === "all" ? null : causes.find((c) => c.id === causeId) ?? fallback;
 
   // map data
   const siteCause = useMemo(() => new Map(causes.flatMap((c) => c.sites.map((s) => [s.code, c.title] as const))), [causes]);
@@ -82,6 +122,14 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   // when geography would leave sites out, the bar says how many it is drawing.
   const chosen = layout ?? (placedShare > 0 ? "geo" : "schematic");
   const schematic = chosen === "schematic";
+  /**
+   * The platform's map draws the world; the schematic stays on the canvas.
+   *
+   * Its coordinates are a layout and not a place — eight discs on a ring, so a geographic map
+   * would put Southeast Brazil in the Atlantic. Both components take the same props, and the
+   * switch is a component rather than a call so the two keep their own hooks.
+   */
+  const Stage = schematic ? LiveMap : LiveMapGeo;
   const states = chosen === "states";
   const placedCount = infos.filter((i) => i.site.lat != null && i.site.lon != null).length;
   // The layout returns both what it placed and the groups it placed them in. It used to hand the groups
@@ -91,6 +139,18 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
     const base = (i: SiteInfo) => ({ code: i.code, name: i.site.name, verdict: i.verdict, dc: i.site.dc, region: i.site.region, cause: i.cause ? i.cause : siteCause.get(i.code) ?? null });
     if (!schematic) return { sites: infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({ ...base(i), lat: i.site.lat!, lon: i.site.lon! })), groups: [] };
     const dcs = infos.filter((i) => i.site.dc), rest = infos.filter((i) => !i.site.dc);
+    /**
+     * A site that has reported something, now or over the record.
+     *
+     * The schematic is a picture of the estate, and the middle of it is for the part that
+     * answers: a processor read, an availability, a port with a series, or an alert
+     * Dynatrace has open. A site whose devices are only discovered has none of those — it
+     * exists in the inventory and says nothing — and it was taking the same space as the
+     * ones carrying the network.
+     */
+    const reports = (i: SiteInfo) => i.devices.some((d) => d.cpuNow != null || d.availPct != null
+      || d.memNow != null || (d.problems ?? []).length > 0
+      || d.interfaces.some((f) => f.in.length || f.out.length || f.hourly?.length));
     const groups = [...new Set(rest.map((i) => i.site.region ?? "No region"))].sort();
     const ring = (n: number, k: number, r: number, cx = 0, cy = 0) => ({ lon: cx + r * Math.cos((2 * Math.PI * k) / Math.max(n, 1) - Math.PI / 2), lat: cy + r * 0.8 * Math.sin((2 * Math.PI * k) / Math.max(n, 1) - Math.PI / 2) });
     const out: MapSite[] = dcs.map((i, k) => ({ ...base(i), ...(dcs.length > 1 ? ring(dcs.length, k, 3) : { lat: 0, lon: 0 }) }));
@@ -105,12 +165,21 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
     const spread = groups.length > 1
       ? Math.max(18, (widest + 2.5) / Math.sin(Math.PI / groups.length))
       : 0;
+    /* Two belts, not one: the regions that report sit on the inner ring with the data
+       centres, and the ones where nothing has answered sit outside them. Same picture of
+       the whole estate — the difference is that the middle of it now means something. */
+    const speaks = (g: string) => members.get(g)!.some(reports);
+    const inner = groups.filter(speaks), outer = groups.filter((g) => !speaks(g));
+    const ringOf = (g: string) => (speaks(g) ? inner : outer);
+    const radiusOf = (g: string) => (speaks(g) || !inner.length ? spread : spread * 1.75);
     const placedGroups: { name: string; lon: number; lat: number; sites: number; bad: number; verdict: Verdict }[] = [];
-    groups.forEach((g, gi) => {
+    groups.forEach((g) => {
       const list = members.get(g)!;
-      const c = spread ? ring(groups.length, gi, spread) : { lat: 0, lon: 0 };
+      const belt = ringOf(g);
+      const c = spread ? ring(belt.length, belt.indexOf(g), radiusOf(g)) : { lat: 0, lon: 0 };
       const disc = discOf(list.length);
-      placedGroups.push({ name: g, lon: c.lon, lat: c.lat + disc * 0.8 + 1.6, sites: list.length, bad: list.filter((i) => isBad(i.verdict)).length, verdict: worst(list.map((i) => i.verdict)) });
+      placedGroups.push({ name: g, lon: c.lon, lat: c.lat + disc * 0.8 + 1.6, sites: list.length,
+        bad: list.filter((i) => isBad(i.verdict)).length, verdict: worst(list.map((i) => i.verdict)) });
       list.forEach((i, k) => out.push({ ...base(i), ...(list.length > 1 ? ring(list.length, k, disc, c.lon, c.lat) : c) }));
     });
     return { sites: out, groups: placedGroups };
@@ -162,6 +231,11 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
         sites: members.length,
         bad: members.filter((i) => isBad(i.verdict)).length,
         counts: split(members),
+        /* only the ones that are alerting: the quiet share is the base the outline is drawn
+           in, so a healthy site needs no mark of its own */
+        marks: members
+          .filter((i) => isBad(i.verdict) && i.site.lat != null && i.site.lon != null)
+          .map((i) => ({ verdict: i.verdict, lon: i.site.lon!, lat: i.site.lat! })),
       };
     });
   }, [states, shapes, infos, schematic, placed]);
@@ -223,15 +297,35 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   const { levels } = useSiteHierarchy();
   // until levels are chosen in Settings, group by the region the app already knows
   const defaultLevels = useMemo(() => (infos.some((i) => i.site.region) ? ["site.region"] : []), [infos]);
-  const [leftTab, setLeftTab] = useState<"causes" | "sites" | "changes">(() => { try { const v = window.localStorage.getItem("network-pulse.left-tab"); return v === "sites" || v === "changes" ? v : "causes"; } catch { return "causes"; } });
-  const chooseTab = (t: "causes" | "sites" | "changes") => { setLeftTab(t); try { window.localStorage.setItem("network-pulse.left-tab", t); } catch { /* per session only */ } };
+  const [leftTab, setLeftTab] = useState<"causes" | "sites">(() => { try { return window.localStorage.getItem("network-pulse.left-tab") === "sites" ? "sites" : "causes"; } catch { return "causes"; } });
+  const chooseTab = (t: "causes" | "sites") => { setLeftTab(t); try { window.localStorage.setItem("network-pulse.left-tab", t); } catch { /* per session only */ } };
   const [group, setGroup] = useState<{ id: string; codes: Set<string> } | null>(null);
-  const causeFocus = useMemo(() => (cause ? new Set(cause.sites.map((s) => s.code)) : null), [cause]);
+  /**
+   * A default is not a selection, and only a selection moves the map.
+   *
+   * The panel opens on the first cause so the page is not blank, and that default was also
+   * reaching the map as a focus: the camera flew to the two sites of a cause nobody had
+   * clicked and everything else went dim. Measured on this environment at 1440 px — the
+   * schematic opened on Data Center Tivit and Gaspar, with eleven of thirteen sites off the
+   * frame. The whole network stays in view until the reader picks a cause; `causeId` is only
+   * set by a click, so it is the one signal that says somebody asked.
+   */
+  const picked = causeId && causeId !== "all" ? causes.find((c) => c.id === causeId) ?? null : null;
+  const causeFocus = useMemo(() => (picked ? new Set(picked.sites.map((s) => s.code)) : null), [picked]);
   const focus = leftTab === "sites" && group ? group.codes : causeFocus;
 
   // responsive insets: panels float over the map only on wide stages
   const stage = useRef<HTMLDivElement>(null);
-  const [wide, setWide] = useState(true);
+  /**
+   * The first value is a measurement too, not an assumption.
+   *
+   * It started at `true`, so on a narrow window the very first frame handed the map the wide
+   * layout's insets — 336 left and 376 right on a stage barely six hundred wide, which leaves
+   * the camera a negative area to fit into. The observer corrects it a frame later, but a fit
+   * that runs inside that frame lands somewhere nobody asked for. The stage is as wide as the
+   * window, give or take its padding, so the window is the honest first guess.
+   */
+  const [wide, setWide] = useState(() => (typeof window === "undefined" ? false : window.innerWidth >= 1100));
   useEffect(() => {
     const el = stage.current;
     if (!el) return;
@@ -276,6 +370,46 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
     </button>
   );
 
+  /**
+   * Nothing is stated until everything this page states from has answered.
+   *
+   * The page used to assemble itself in front of the reader, and a recording caught how
+   * much of it moved: at ten seconds the header read "13 sites · 196 devices" over a map
+   * holding two dots, beside "Loading 72 of 97", "3 of 12 received" and "27% of the app in
+   * use"; at fifteen seconds the same four numbers read 96, 6 and 62%, with the map filled
+   * in; at twenty-seven a second cause appeared and the panel jumped to it.
+   *
+   * Each of those was true when it was drawn and wrong a moment later, which is the one
+   * thing a status page cannot afford. The Ahead page already refuses it — it waits for
+   * `hourlyReady` and shows a skeleton — and this is the same rule for the same reason.
+   *
+   * The analyzer is *not* in this gate, and that is the second half of the same argument.
+   * The discard cause comes from `NoveltyScoreAnalyzer`, which answers ten to fifteen
+   * seconds after the reads do — waiting for it here held the whole page, map and all, at a
+   * skeleton for half a minute, and a page that shows nothing for thirty seconds is its own
+   * kind of wrong. It is gated where it is actually spoken: the causes column waits for it,
+   * and nothing else does.
+   */
+  if (!ready) {
+    return (
+      <div className="lm">
+        <div className="lm-bar">
+          <span className="lm-pill lm-pill--live"><span className="lm-live" aria-hidden="true" />Reading the network</span>
+        </div>
+        <div className="lm-boot" aria-busy="true" aria-label="Reading the network">
+          <p className="lm-boot__why">A half-read network is a true answer about a few sites and a false one
+            about the rest, so nothing is drawn until every read this page speaks from has landed —
+            including the analyzer that says which ports changed.</p>
+          <Skeleton height="26px" />
+          <div style={{ height: 10 }} />
+          <SkeletonText lines={3} />
+          <div style={{ height: 14 }} />
+          <Skeleton height="320px" />
+        </div>
+      </div>
+    );
+  }
+
   // Nothing has arrived yet: the map explains what to send, while the other pages stay reachable and
   // show whatever their own data allows.
   if (!infos.length) {
@@ -297,14 +431,18 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
         <span className="lm-pill lm-pill--live"><span className="lm-live" aria-hidden="true" />Live {hhmm(model.meta.generatedAt)}</span>
         <span className="lm-pill">{fmtInt(infos.length)} sites{regions ? ` · ${regions} regions` : ""}{dcs ? ` · ${dcs} data centers` : ""} · {fmtInt(model.devices.length)} devices</span>
         {model.demo && (onLive
-          ? <button type="button" className="lm-pill lm-pill--warn lm-pill--btn" onClick={onLive}>Example data · back to this environment</button>
-          : <span className="lm-pill lm-pill--warn">Example data</span>)}
-        {!model.demo && failed.length > 0 && <span className="lm-pill lm-pill--warn" title={failed.join(", ")}>{failed.length} data source(s) unavailable</span>}
+          ? <button type="button" className="lm-pill lm-pill--note lm-pill--btn" onClick={onLive}>Example data · back to this environment</button>
+          : <span className="lm-pill lm-pill--note">Example data</span>)}
+        {!model.demo && failed.length > 0 && <span className="lm-pill lm-pill--note" title={failed.join(", ")}>{failed.length} data source(s) unavailable</span>}
         <span className="vz-seg" role="group" aria-label="Map layout" title={placedShare < 1 ? `${Math.round(placedShare * 100)}% of the sites have coordinates (geo_lat / geo_lon tags or a known place)` : undefined}>
           <button type="button" className={chosen === "geo" ? "is-on" : ""} aria-pressed={chosen === "geo"} disabled={placedShare === 0} onClick={() => setLayout("geo")}>Geographic</button>
           <button type="button" className={states ? "is-on" : ""} aria-pressed={states} disabled={placedShare === 0}
-            title="States, provinces and prefectures of the countries the sites are in, filled by what stands in each one. The outlines are fetched when this view is opened, one country at a time."
-            onClick={() => setLayout("states")}>States</button>
+            /* "States" read as a misspelling of "Status" — and the pill beside this button
+               already counts them as regions ("27 regions in 1 countries"), which is also
+               the word the rest of the app uses for a subdivision. Same layout, the name the
+               app was already using for it. */
+            title="States, provinces and prefectures of the countries the sites are in, outlined, with the share of each one that is alerting drawn on its edge. The outlines are fetched when this view is opened, one country at a time."
+            onClick={() => setLayout("states")}>Regions</button>
           <button type="button" className={schematic ? "is-on" : ""} aria-pressed={schematic} onClick={() => setLayout("schematic")}>Schematic</button>
         </span>
         {states && (
@@ -315,10 +453,27 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
           </span>
         )}
         {!schematic && placedShare < 1 && (
-          <button type="button" className="lm-pill lm-pill--warn lm-pill--btn" onClick={() => setLayout("schematic")}
+          <button type="button" className="lm-pill lm-pill--note lm-pill--btn" onClick={() => setLayout("schematic")}
             title="Sites without geo_lat / geo_lon tags, and whose location the app could not recognise, cannot be drawn on a map. The schematic layout holds every site.">
             {fmtInt(placedCount)} of {fmtInt(infos.length)} sites on the map · see all
           </button>
+        )}
+        {/**
+          * How many connections are drawn, and why there are not more.
+          *
+          * The schematic is the layout a reader opens to see the shape of the network, and
+          * on an estate whose devices report no neighbours it draws almost nothing — which
+          * reads as the app failing rather than as the environment being silent. Measured
+          * here: no Smartscape edge, no neighbour discovery in the last twenty minutes and
+          * no LLDP series, so every line on this map is a pair NetFlow measured.
+          *
+          * The threshold is the shape of a hub-and-spoke estate: fewer links than sites
+          * means most sites are not joined to anything.
+          */}
+        {mapSites.length > 2 && mapLinks.length < mapSites.length - 1 && (
+          <span className="lm-pill lm-pill--note" title={"A line is drawn where something reports the two ends are joined: a neighbour (CDP or LLDP) seen by the devices, a hub tag on the site, or traffic NetFlow measured between them. Settings › Data lists what each one needs."}>
+            {fmtInt(mapLinks.length)} connection{mapLinks.length === 1 ? "" : "s"} drawn of {fmtInt(mapSites.length)} sites · no neighbour reported
+          </span>
         )}
         <span className="lm-legend" aria-label="Legend">
           <span><Marker verdict="Critical" />Critical</span>
@@ -330,7 +485,8 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
       <div className="dn-row"><DataNeeds keys={VIEW_NEEDS.map} needs={needs} compact next={next} /></div>
       <div ref={stage} className={`lm-stage${wide ? " is-wide" : ""}`}>
         {mapSites.length ? (
-          <LiveMap sites={mapSites} links={mapLinks} focus={focus} insets={insets} onSite={onSite} schematic={schematic} regions={mapRegions}
+          <Stage sites={mapSites} links={mapLinks} focus={focus} insets={insets} onSite={onSite}
+            schematic={schematic} regions={mapRegions}
             onRegion={(r) => {
               const codes = regionSites.current.get(`${r.code}|${r.name}`);
               if (!codes?.size) return;
@@ -348,17 +504,29 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
           </div>
         )}
 
-        <aside className="lm-panel lm-left" aria-label={leftTab === "sites" ? "Sites" : leftTab === "changes" ? "Changes in the last 24 hours" : "Probable causes"}>
+        <aside className="lm-panel lm-left" aria-label={leftTab === "sites" ? "Sites" : "Probable causes"}>
           <span className="vz-seg lm-lefttabs" role="group" aria-label="List">
             <button type="button" className={leftTab === "causes" ? "is-on" : ""} aria-pressed={leftTab === "causes"} onClick={() => chooseTab("causes")}>Causes</button>
             <button type="button" className={leftTab === "sites" ? "is-on" : ""} aria-pressed={leftTab === "sites"} onClick={() => chooseTab("sites")}>Sites</button>
-            <button type="button" className={leftTab === "changes" ? "is-on" : ""} aria-pressed={leftTab === "changes"} onClick={() => chooseTab("changes")}>Changes</button>
           </span>
-          {leftTab === "changes" ? (
-            <ChangesPanel model={model} onDevice={onDevice} onSite={onSite} />
-          ) : leftTab === "sites" ? (
+          {leftTab === "sites" ? (
             <SiteTree infos={infos} levels={levels.length ? levels : defaultLevels} selected={group?.id ?? null}
               onGroup={(id, codes) => setGroup(id && codes ? { id, codes } : null)} onSite={onSite} />
+          ) : risingLoading ? (
+            /* The column alone waits for the analyzer, because the column alone speaks for it:
+               a count of causes printed before `NoveltyScoreAnalyzer` answers is a count that
+               grows by one in front of the reader, and the list under it gains a row. The map
+               beside this says nothing that the analyzer could contradict, so it is already
+               drawn and already usable. */
+            <div className="lm-boot" aria-busy="true" aria-label="Asking Dynatrace which ports changed">
+              <p className="lm-boot__why">Asking Dynatrace which ports changed. The count of causes waits
+                for that answer rather than growing by one once it lands.</p>
+              <Skeleton height="22px" />
+              <div style={{ height: 10 }} />
+              <SkeletonText lines={2} />
+              <div style={{ height: 12 }} />
+              <Skeleton height="64px" />
+            </div>
           ) : (<>
           <h2 className="lm-h">{causes.length ? `${fmtInt(causes.length)} cause${causes.length > 1 ? "s" : ""} · ${fmtInt(affected.length)} sites` : "Nothing is alerting on this network"}</h2>
           <div className="lm-stats">
@@ -385,10 +553,39 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
           <button type="button" className={`lm-cause lm-cause--all${cause ? "" : " is-on"}`} aria-pressed={!cause} onClick={() => onCause("all")}>
             <b><span className="lm-cause__title">Whole network</span><em>{fmtInt(affected.length)}/{fmtInt(infos.length)}</em></b>
           </button>
-          {shared.length > 0 && <h3 className="lm-sub">Shared causes · {shared.length}</h3>}
+          {/* The two headings sorted the list and said nothing about why. The rule is in the
+              code right above — more than one site, or a carrier or a data centre, which are
+              shared by what they carry even when one site sits behind them — and it is the
+              whole reason this column is ordered the way it is: one action on a shared cause
+              reaches every site under it. */}
+          {shared.length > 0 && (
+            <h3 className="lm-sub">Shared causes · {shared.length}
+              <span className="lm-sub__why">one fault under several sites — or on a carrier or a data centre,
+                which are shared by what they carry. One action reaches all of them.</span>
+            </h3>
+          )}
           {byRelevance(shared).map(causeButton)}
-          {isolated.length > 0 && <h3 className="lm-sub">Isolated faults · {isolated.length}</h3>}
+          {isolated.length > 0 && (
+            <h3 className="lm-sub">Isolated faults · {isolated.length}
+              <span className="lm-sub__why">one site each, and nothing else behind them.</span>
+            </h3>
+          )}
           {byRelevance(isolated).map(causeButton)}
+          {/* The alerts the app cannot place are a gap in coverage, not a fault of the
+              network, so they are counted here rather than listed as causes — with the one
+              thing that would place them, which is what their entries used to say. */}
+          {(() => {
+            const lost = (model.unmappedAlerts ?? []).filter((a) => !a.muted
+              && (a.scope === "network" || a.scope === "environment"));
+            if (!lost.length) return null;
+            const net = lost.filter((a) => a.scope === "network").length;
+            return (
+              <p className="lm-gap">{fmtInt(lost.length)} open alert{lost.length === 1 ? "" : "s"} could not be
+                placed on this inventory, so {lost.length === 1 ? "it is" : "they are"} not listed above.{" "}
+                {net > 0 ? "Tag the monitor with the circuit tags, or point it at the address of a device the SNMP extensions poll. " : ""}
+                {lost.length - net > 0 ? "The ones bound to the environment need the entity dimension set on the metric event." : ""}</p>
+            );
+          })()}
           </>)}
         </aside>
 
@@ -400,8 +597,23 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
                 <span>{cause.title}{cause.subtitle && <small>{cause.subtitle}</small>}</span>
                 {cause.since && <em>{clock(parseTs(cause.since))}</em>}
               </h2>
-              <CauseChain cause={cause} />
+              {/* The four-bead chain stood here — origin → sites → devices → app impact. It
+                  could not be filled: measured on this environment every cause ends at 0
+                  devices red or amber and no reported user impact, because no application
+                  telemetry is tied to these sites and the WAN circuits carry no tags. A
+                  skeleton of an answer the data cannot complete reads as the app being
+                  broken; what follows — the evidence, and what the platform actually saw —
+                  is the part that informs. */}
+              {/* Everything this alert is, before anything that would ask about it.
+                  The Intelligence row sat directly under the title, so the first thing under
+                  the name of a fault was three buttons, and the evidence — what the platform
+                  reported, the rate, the ports, what to check — began below them. A reader
+                  who can see the finding asks a question about it afterwards, not instead of
+                  reading it. */}
               <EvidenceBadges cause={cause} onLogs={() => openLogs(logsQuery(ips, cause.since))} />
+              <CauseDetail cause={cause} onDevice={onDevice} />
+              <AssistPanel subject={cause.id} questions={causeQuestions(cause.title)} object="cause"
+                context={() => causeContext(model, cause)} />
             </>
           ) : (
             <>
@@ -409,22 +621,34 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
               <NetworkStatus infos={infos} onRegion={(region) => onSites({ status: "issues", region, q: "" })} />
             </>
           )}
-          {/* is what is degraded explained by the network? A suspicion for the whole environment, with the
-              analysis handed to Assist. Only shown when there is something to compare it against. */}
-          {suspicion.kind !== "blind" && suspicion.kind !== "watching" && (
+          {/* Is what is degraded explained by the network? A suspicion for the whole environment,
+              with the analysis handed to Assist. Only shown when there is something to compare
+              it against — and only when no cause is open.
+
+              It used to show either way, so opening a cause stacked two panels of the same
+              shape: a title, an Intelligence block and a row of drill-outs, once about this
+              fault and once about the whole environment. Two Intelligence blocks in one
+              column read as the app saying the same thing twice. One subject per view: the
+              cause when a cause is open, the environment when none is. */}
+          {!cause && suspicion.kind !== "blind" && suspicion.kind !== "watching" && (
             <SuspicionStrip s={suspicion} users={model.users} model={model}
               assist={<AssistPanel subject={`isolate|network`} questions={isolationQuestions("this network")} object="impact"
-                context={() => isolationContext(model, suspicion, undefined, dropPct)} />} />
+                context={() => isolationContext(model, suspicion, undefined, dropPct, platform)} />} />
           )}
           <NativeDrill devices={scopeDevices} since={cause?.since} demo={model.demo}
             // a carrier cause spans many routers and links: no single device to open; a device or data center cause has one
             focus={cause && cause.kind !== "carrier" && cause.devices.length === 1 ? cause.devices[0] : null}
             circuits={cause ? cause.sites.flatMap((s) => s.circuits.filter((c) => c.status === "down" || isBad(c.verdict))) : []}
             after={<button type="button" className="lm-btn" onClick={() => onSites({ status: "issues", region: cause?.impact.regions.length === 1 ? cause.impact.regions[0] : null, q: "" })}><b>Sites</b><small>in this app</small></button>} />
-          <AssistPanel subject={cause?.id ?? "network"}
-            questions={cause ? causeQuestions(cause.title) : networkQuestions()}
-            object={cause ? "cause" : "network"}
-            context={() => (cause ? causeContext(model, cause) : networkContext(model, infos, causes))} />
+          {/* The whole-network Assist stays at the foot, where it is a closing question about
+              the page. The one for an open cause moved to the top of the panel: it was here,
+              under the evidence, the drill-outs and the suspicion strip, which on a cause
+              with forty evidence lines put "explain this" a screen and a half below the
+              thing to be explained. */}
+          {!cause && (
+            <AssistPanel subject="network" questions={networkQuestions()} object="network"
+              context={() => networkContext(model, infos, causes)} />
+          )}
         </aside>
 
       </div>

@@ -2,54 +2,17 @@
 // with the replay, evidence badges, and the network status ring with region bars.
 import React from "react";
 import {
-  ApplicationsIcon, DataCenterIcon, EventIcon, FirewallIcon, LinkBrokenIcon, LocationMarkerIcon, LogsIcon, NetworkDevicesIcon, UserSessionsIcon,
+  EventIcon, LinkBrokenIcon, LogsIcon, NetworkDevicesIcon, UserSessionsIcon,
 } from "@dynatrace/strato-icons";
 import type { Verdict } from "../model/types";
 import type { Cause, Evidence } from "../model/causes";
 import type { SiteInfo } from "../model/site";
 import { isBad } from "../model/verdict";
+import { discardGroups } from "../model/discards";
 import { fmtInt } from "../utils/format";
 import { MAP_COLORS } from "./LiveMap";
 import { fitInCircle } from "./Visual";
 
-const compact = (n: number) => (Math.abs(n) >= 10000 ? `${(n / 1000).toFixed(0)}k` : fmtInt(n));
-
-function Node({ icon, value, label, tone, hint }: { icon: React.ReactNode; value: string; label: string; tone: Verdict | "neutral"; hint?: string }) {
-  const color = tone === "neutral" ? "var(--lm-muted)" : MAP_COLORS[tone];
-  return (
-    <div className="lm-chain__node" style={{ "--lm-tone": color } as React.CSSProperties} title={hint ? `${value} ${label} — ${hint}` : `${value} ${label}`}>
-      <span className="lm-chain__icon">{icon}</span>
-      <b>{value}</b>
-      <span>{label}</span>
-    </div>
-  );
-}
-
-/** Origin → sites → devices → application, each with its magnitude. */
-export function CauseChain({ cause }: { cause: Cause }) {
-  const origin = cause.kind === "carrier" ? <LinkBrokenIcon /> : cause.kind === "datacenter" ? (cause.devices[0]?.role === "firewall" ? <FirewallIcon /> : <DataCenterIcon />) : cause.kind === "application" ? <ApplicationsIcon /> : <NetworkDevicesIcon />;
-  const originValue = cause.kind === "carrier" ? String(cause.elements.length || cause.sites.length) : String(Math.max(1, cause.devices.length));
-  const p90 = Math.max(0, ...cause.sites.map((s) => s.path?.hops.find((h) => h.kind === "app")?.stats.p90Ms ?? 0));
-  // the last node changes what it measures with what the environment can say, so each one carries the
-  // sentence that explains it: a reader asked what "2.6 s app p90" meant, and nothing on screen answered
-  const app = cause.impact.sessionsLost ? { v: `−${compact(cause.impact.sessionsLost)}`, l: "sessions/h", t: "Critical" as Verdict, h: "user sessions per hour missing from the sites this cause touches, against what those hours usually hold" }
-    : cause.impact.sessionsSlowed ? { v: compact(cause.impact.sessionsSlowed), l: "slow sessions/h", t: "Warning" as Verdict, h: "sessions per hour from these sites that are being served more slowly than usual" }
-      : p90 ? { v: `${(p90 / 1000).toFixed(1)}s`, l: "app p90", t: p90 >= 2000 ? ("Warning" as Verdict) : ("Healthy" as Verdict), h: "the slowest tenth of page loads from these sites takes at least this long" } : { v: "—", l: "app impact", t: "neutral" as const, h: "no user sessions or requests are reported for these sites, so the app cannot say what people felt" };
-  const nodes = [
-    <Node key="o" icon={origin} value={originValue} label={cause.kind === "carrier" ? "links" : "origin"} tone={cause.verdict}
-      hint={cause.kind === "carrier" ? "WAN links this outage is on" : "devices the alert was raised on"} />,
-    <Node key="s" icon={<LocationMarkerIcon />} value={fmtInt(cause.impact.sites)} label={cause.impact.offline ? `sites · ${cause.impact.offline} dark` : "sites"} tone={cause.impact.offline ? "Critical" : "Warning"}
-      hint={`sites behind it${cause.impact.offline ? `, of which ${cause.impact.offline} have nothing answering` : ""}`} />,
-    <Node key="d" icon={<NetworkDevicesIcon />} value={fmtInt(cause.impact.devices)} label="devices" tone="neutral"
-      hint="devices at those sites that are red or amber right now" />,
-    <Node key="a" icon={<UserSessionsIcon />} value={app.v} label={app.l} tone={app.t} hint={app.h} />,
-  ];
-  return (
-    <div className="lm-chain" role="img" aria-label={`Cause chain: ${originValue} origin, ${cause.impact.sites} sites, ${cause.impact.devices} devices with issues, application ${app.v} ${app.l}`}>
-      {nodes.flatMap((n, k) => (k ? [<span key={`c${k}`} className="lm-chain__link" aria-hidden="true" />, n] : [n]))}
-    </div>
-  );
-}
 
 const SOURCES: { key: Evidence["source"]; icon: React.ReactNode }[] = [
   { key: "WAN link", icon: <LinkBrokenIcon /> },
@@ -76,6 +39,280 @@ export function EvidenceBadges({ cause, onLogs }: { cause: Cause; onLogs: () => 
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * What the cause is made of, which the panel never showed.
+ *
+ * A cause carried both lists all along — `elements`, the devices and circuits it is on, and
+ * `evidence`, what each of them reported — and the panel rendered a count badge whose only
+ * detail was a `title` attribute. On screen that is a column of numbers and a verdict with
+ * nothing under it: "89 ports losing packets on 23 devices", and no way to learn which 23.
+ *
+ * Both lists are here now, under the badges and above the interpretation, because the reader
+ * should meet the readings before the sentence drawn from them. Each device opens.
+ */
+export function CauseDetail({ cause, onDevice }: { cause: Cause; onDevice: (name: string) => void }) {
+  const devices = cause.elements.filter((e) => e.kind === "device");
+  const circuits = cause.elements.filter((e) => e.kind === "circuit");
+  /* What the cause is about first, what happened to be logged nearby after it. Unsorted, the
+     panel led with "LOGIN_SUCCESS" syslog from a device that happens to be in the set, three
+     lines above the discard readings the cause was built from. */
+  const RANK: Record<string, number> = { Davis: 0, "WAN link": 1, SNMP: 2, Trap: 3, Application: 4, Syslog: 5 };
+  /* `Davis` is the value the evidence carries and the app compares on; what the reader is
+     shown is what the rest of the app calls it, which is the same word on the buttons
+     beside this list */
+  const srcLabel = (src: string) => (src === "Davis" ? "Intelligence" : src);
+  /**
+   * One fact is one line, however many devices it was recorded on.
+   *
+   * A monitoring outage writes the same sentence against every device it covers: on this
+   * environment, forty lines of "Reachability is not being measured … (P-26103695) · since
+   * 16:49", identical but for the hostname they start with. Forty of them pushed the metrics,
+   * the logs and the Assist below the fold of a panel whose whole job is to put those in
+   * front of a reader — so the list was the reason the panel looked like it said nothing.
+   *
+   * The device name is the only part that differs, so it is what the fold-up counts.
+   */
+  const deduped = (() => {
+    const by = new Map<string, { e: Evidence; devices: string[] }>();
+    for (const e of cause.evidence) {
+      if (e.source === "Davis" && e.t) continue;
+      /**
+       * The sentence with whatever names the device taken off the front.
+       *
+       * Matching on `e.device` is not enough: the line opens with the short name the device
+       * calls itself — `FWC-001:` — while the field holds the inventory's full one,
+       * `BR-RS-RGR-FWC-001`. Any leading unspaced token followed by a colon is that prefix,
+       * which is exactly the part that differs between forty copies of one sentence.
+       */
+      const body = e.text.replace(/^\S+\s*:\s*/, "");
+      const k = `${e.source}|${e.level}|${body}`;
+      const had = by.get(k);
+      if (had) { if (e.device) had.devices.push(e.device); }
+      else by.set(k, { e: { ...e, text: body }, devices: e.device ? [e.device] : [] });
+    }
+    return [...by.values()];
+  })();
+  const shown = deduped
+    .sort((a, b) => (RANK[a.e.source] ?? 9) - (RANK[b.e.source] ?? 9));
+  if (!devices.length && !circuits.length && !shown.length) return null;
+  const SHOW = 12;
+
+  /**
+   * What this is, in one sentence, from the cause's own fields.
+   *
+   * Not the title again: the title names the fault, this says what it amounts to. For a
+   * cause built from a platform alert that is the alert and where it sits; for one built
+   * from a measurement it is the measurement. Everything here is a field — nothing is
+   * phrased as a likelihood.
+   */
+  /* the line the lead is built from is not printed again under "What it reported": the same
+     sentence twice, eight lines apart, read as the panel repeating itself */
+  const lead = cause.ports?.length ? null
+    : shown.find((x) => x.e.source === "Davis") ?? shown.find((x) => x.e.source === "SNMP") ?? shown[0];
+  const rest = lead ? shown.filter((x) => x !== lead) : shown;
+  const summary = cause.ports?.length
+    ? `${fmtInt(cause.ports.length)} ${cause.ports.length === 1 ? "port is" : "ports are"} dropping packets`
+      + `${cause.perHour?.length ? ` over ${cause.perHour.length} h of record` : ""}.`
+    : lead ? lead.e.text : cause.subtitle;
+  /* the devices the lead was recorded on, which used to travel with the line in the list */
+  const leadOn = lead?.devices ?? [];
+  /* what it costs, counted and never estimated; a zero is an answer and says so */
+  const cost = [
+    /* the estate's own total is not in this component, so the count stands alone rather
+       than inventing a denominator */
+    `${fmtInt(cause.impact.sites)} site${cause.impact.sites === 1 ? "" : "s"}`,
+    cause.impact.offline ? `${fmtInt(cause.impact.offline)} offline` : "none offline",
+    cause.impact.sessionsLost ? `${fmtInt(cause.impact.sessionsLost)} sessions/h lost` : "no session loss measured against it",
+    cause.since ? `since ${cause.since.slice(11, 16)} UTC` : null,
+  ].filter(Boolean).join(" · ");
+  return (
+    <div className="lm-detail">
+      {/**
+        * The answer first, the evidence under it.
+        *
+        * Opening a cause used to fly the camera and then hand the reader a column that began
+        * with raw lines from the devices and ended, far below the fold, with what the record
+        * can actually tell apart. A reader who clicks a fault is asking what it is and what
+        * to do, and both were computed already — they were just last.
+        */}
+      <div className="lm-lead">
+        <b>{summary}</b>
+        {leadOn.length > 0 && (
+          <span className="lm-lead__on">on {fmtInt(leadOn.length)} {leadOn.length === 1 ? "device" : "devices"} ·{" "}
+            <button type="button" className="lm-detail__go" onClick={() => onDevice(leadOn[0])}>{leadOn[0]}</button>
+            {leadOn.length > 1 ? ` and ${fmtInt(leadOn.length - 1)} more` : ""}</span>
+        )}
+        {cost && <span className="lm-lead__cost">{cost}</span>}
+      </div>
+      {/**
+        * What the record separates the ports into, as counts and figures.
+        *
+        * This was three sentences of reasoning — what a drop with no error and no
+        * congestion could mean, and what to read next. That is an explanation, and the
+        * panel beside it exists to write explanations from the same facts. The app states
+        * what it measured: the group, how many ports are in it, the figures that put them
+        * there, and which ports. Assist is handed the same groups.
+        */}
+      {cause.ports && cause.ports.length > 0 && (() => {
+        const groups = discardGroups(cause.ports);
+        if (!groups.length) return null;
+        return (
+          <>
+            <div className="lm-detail__h">What the record separates</div>
+            <table className="lm-detail__t lm-cases">
+              <thead><tr><th>Group</th><th className="n">Ports</th><th>Figures</th><th>Which</th></tr></thead>
+              <tbody>
+                {groups.map((g) => (
+                  <tr key={g.kind}>
+                    <td>{g.label}</td>
+                    <td className="n">{fmtInt(g.rows.length)}</td>
+                    <td className="lm-cases__fig">{g.figures.join(" · ")}</td>
+                    <td className="lm-cases__which">{g.rows.slice(0, 3).map((r) => `${r.iface} ${r.device.replace(/^BR-[A-Z]{2}-[A-Z0-9]+-/, "")}`).join(", ")}
+                      {g.rows.length > 3 ? ` +${g.rows.length - 3}` : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        );
+      })()}
+      {/**
+        * Which addresses the ping gets nothing back from.
+        *
+        * An alert raised on a network availability monitor names the monitor, and the panel
+        * used to pass that on as "the monitor that pings this device is out". Measured: the
+        * monitor of P-26103695 sent twenty-four packets to each of its targets in the last
+        * interval and a hundred and thirty-nine answered. Nothing was out. What is true is
+        * that CTR-007 answers on one of the four addresses pinged at it, and the other three
+        * are the ones somebody has to act on.
+        *
+        * This was a table of address, device, sent, received and since. Five columns in a
+        * panel three hundred and forty pixels wide clipped every row, and the four readings
+        * beside each address said one thing between them: nothing comes back. So it is the
+        * count and the addresses, in the same chips the devices above already use, and the
+        * sentence that joins them is Assist's to write.
+        */}
+      {(() => {
+        /* one entry per address, not per monitor: the same address is pinged by more than one
+           monitoring configuration, and two identical readings of it are noise */
+        const by = new Map<string, { device: string; recv: number }>();
+        cause.devices.forEach((d) => (d.icmpTargets ?? []).forEach((t) => {
+          const had = by.get(t.ip);
+          if (!had || (had.recv > 0 && t.recv === 0)) by.set(t.ip, { device: d.name, recv: t.recv });
+        }));
+        const silent = [...by].filter(([, v]) => v.recv === 0).map(([ip]) => ip).sort();
+        if (!silent.length) return null;
+        return (
+          <>
+            <div className="lm-detail__h">{fmtInt(silent.length)} of {fmtInt(by.size)} pinged
+              address{by.size === 1 ? "" : "es"} answer nothing</div>
+            <div className="lm-detail__els">
+              {silent.slice(0, SHOW).map((ip) => (
+                <span key={ip} className="lm-detail__el lm-ping__ip">{ip}</span>
+              ))}
+              {silent.length > SHOW && <span className="lm-detail__more">and {fmtInt(silent.length - SHOW)} more</span>}
+            </div>
+          </>
+        );
+      })()}
+      {rest.length > 0 && (
+        <>
+          <div className="lm-detail__h">What it reported</div>
+          <ul className="lm-detail__ev">
+            {rest.slice(0, 8).map(({ e, devices }) => (
+              <li key={e.id}>
+                <i style={{ background: MAP_COLORS[e.level] }} aria-hidden="true" />
+                <span className="lm-detail__src">{srcLabel(e.source)}</span>
+                <span>
+                  <span className="lm-detail__txt">{e.text}</span>
+                  {devices.length === 1 && (
+                    <button type="button" className="lm-detail__go" onClick={() => onDevice(devices[0])}
+                      title={`Open ${devices[0]}`}>{devices[0]}</button>
+                  )}
+                  {devices.length > 1 && (
+                    <small className="lm-detail__on">{`on ${devices.length} devices · `}
+                      <button type="button" onClick={() => onDevice(devices[0])} title={`Open ${devices[0]}`}>{devices[0]}</button>
+                      {` and ${devices.length - 1} more`}</small>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {/* The rate, drawn: a count of ports cannot say whether this is getting worse or when it
+          started, and the hours are already summed across every port the platform named. */}
+      {cause.perHour && cause.perHour.length > 2 && (() => {
+        const h = cause.perHour!;
+        const top = Math.max(...h, 1);
+        const W = 240, H = 26, step = W / h.length;
+        return (
+          <>
+            <div className="lm-detail__h">Discards per hour · {h.length} h of record</div>
+            <svg className="lm-detail__spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+              role="img" aria-label={`discards per hour, peaking at ${Math.round(top).toLocaleString("en-US")}`}>
+              {h.map((v, k) => {
+                const bar = Math.max(v > 0 ? 1 : 0, (v / top) * H);
+                return <rect key={k} x={k * step} y={H - bar} width={Math.max(0.6, step - 0.4)} height={bar}
+                  fill="var(--lm-series)" opacity={0.85} />;
+              })}
+            </svg>
+          </>
+        );
+      })()}
+      {cause.ports && cause.ports.length > 0 && (
+        <>
+          <div className="lm-detail__h">{fmtInt(cause.ports.length)} {cause.ports.length === 1 ? "port" : "ports"},
+            {" "}what each one shows</div>
+          <table className="lm-detail__t">
+            <thead><tr><th>Port</th><th>Device</th><th>What Dynatrace saw</th><th className="n">Discards</th><th className="n">Busiest</th></tr></thead>
+            <tbody>
+              {cause.ports.slice(0, 8).map((r) => (
+                <tr key={`${r.device}|${r.iface}`}>
+                  <td>{r.iface}</td>
+                  <td><button type="button" className="lm-detail__go" onClick={() => onDevice(r.device)}>{r.device.replace(/^BR-[A-Z]{2}-[A-Z0-9]+-/, "")}</button></td>
+                  <td className="lm-detail__saw">{r.novelty.text.toLowerCase()}
+                    <em>{Math.round(r.novelty.score * 100)}%</em></td>
+                  {/* a dash is this app saying it has no record of that port, which is not the
+                      same as the port showing nothing */}
+                  <td className="n">{r.total == null ? "—" : fmtInt(r.total)}</td>
+                  <td className="n">{r.busy == null ? "—" : `${Math.round(r.busy)}%`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+      {(devices.length > 0 || circuits.length > 0) && (
+        <>
+          <div className="lm-detail__h">
+            {devices.length > 0 && `${fmtInt(devices.length)} ${devices.length === 1 ? "device" : "devices"}`}
+            {devices.length > 0 && circuits.length > 0 ? " and " : ""}
+            {circuits.length > 0 && `${fmtInt(circuits.length)} ${circuits.length === 1 ? "link" : "links"}`}
+            {" "}it is on
+          </div>
+          <div className="lm-detail__els">
+            {devices.slice(0, SHOW).map((e) => (
+              <button type="button" key={e.id} className="lm-detail__el" onClick={() => onDevice(e.id)}
+                title={`${e.id} · ${e.verdict}`}>
+                <i style={{ background: MAP_COLORS[e.verdict] }} aria-hidden="true" />{e.label}
+              </button>
+            ))}
+            {circuits.slice(0, SHOW).map((e) => (
+              <span key={e.id} className="lm-detail__el is-link">
+                <i style={{ background: MAP_COLORS[e.verdict] }} aria-hidden="true" />{e.label}
+              </span>
+            ))}
+            {devices.length + circuits.length > SHOW && (
+              <span className="lm-detail__more">and {fmtInt(devices.length + circuits.length - SHOW)} more</span>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -111,7 +348,9 @@ export function NetworkStatus({ infos, onRegion }: { infos: SiteInfo[]; onRegion
         {regions.map(({ r, list }) => (
           <button key={r} type="button" className="lm-region" onClick={() => onRegion?.(r)} disabled={!onRegion}
             aria-label={`${r}: ${list.filter((i) => isBad(i.verdict)).length} of ${list.length} sites with issues`}>
-            <span className="lm-region__name">{r}</span>
+            {/* the column is narrower than "Rio Grande do Sul", and an ellipsis with nothing
+                behind it is a name the reader cannot read */}
+            <span className="lm-region__name" title={r}>{r}</span>
             <span className="lm-region__bar" style={{ width: `${(list.length / widest) * 100}%` }}>
               {order.map((v) => { const n = count(list, v); return n ? <i key={v} style={{ flex: n, background: MAP_COLORS[v] }} /> : null; })}
             </span>

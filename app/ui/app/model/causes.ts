@@ -8,6 +8,8 @@ import type { Circuit, Device, DeviceProblem, NetworkModel, Verdict } from "./ty
 import { isBad, ORDER, openProblems, problemLevel, worst } from "./verdict";
 import type { SiteInfo } from "./site";
 import { hhmm, stripDevice } from "../utils/format";
+import { discardingPorts, type DiscardPort } from "./discards";
+import type { NoveltyMap } from "../hooks/useNovelty";
 
 export type CauseKind = "carrier" | "datacenter" | "device" | "application" | "unknown";
 
@@ -51,6 +53,13 @@ export interface Cause {
   impact: { sites: number; offline: number; devices: number; sessionsLost: number; sessionsSlowed: number; regions: string[] };
   evidence: Evidence[];
   timeline: Moment[];
+  /**
+   * The ports this cause is about, when it is about ports, and how many packets they dropped
+   * in each hour of the record. A cause that names a count of ports should be able to show
+   * them; a cause about a rate over time should be able to draw it.
+   */
+  ports?: DiscardPort[];
+  perHour?: number[];
   /** When each site became affected; missing means before the observed window */
 }
 
@@ -85,9 +94,21 @@ interface Scope {
   level: Verdict;
   /** shown under the title, before the site count */
   note?: string;
+  /** the ports behind a cause built from them, and their hourly rate */
+  ports?: DiscardPort[];
+  perHour?: number[];
+  /**
+   * What to say about each device, when the scope knows something the device record does not.
+   *
+   * The generic line is the device's own first reason, and a device that is only in a cause
+   * because of what one of its ports is doing has no reason of its own — so the panel printed
+   * "FWC-001: affected" eight times. A scope that was built from a measurement can say what it
+   * measured on that device instead.
+   */
+  deviceNote?: (d: Device) => string;
 }
 
-export function buildCauses(model: NetworkModel, infos: SiteInfo[]): Cause[] {
+export function buildCauses(model: NetworkModel, infos: SiteInfo[], rising: NoveltyMap | null = null): Cause[] {
   const byCode = new Map(infos.map((i) => [i.code, i]));
   const circuits = model.circuits ?? [];
 
@@ -133,49 +154,79 @@ export function buildCauses(model: NetworkModel, infos: SiteInfo[]): Cause[] {
     note: `${cs.length} circuit${cs.length > 1 ? "s" : ""} slower than their sla_ms tag`,
   }));
 
-  // 4. Everything Dynatrace is raising that the app cannot place on the map still has to be visible, and
-  // each reason needs a different fix from the customer, so they are three separate entries rather than
-  // one bucket. Environments differ: one has monitors nobody tagged, another has metric events bound to
-  // the environment, another alerts on hosts and services this app does not cover.
-  const orphans = (model.unmappedAlerts ?? []).filter((a) => !a.muted);
-  const unplaced: { scope: NonNullable<DeviceProblem["scope"]>; title: (n: number) => string; note: (names: string) => string }[] = [
-    {
-      scope: "network",
-      title: (n) => `${n} alert${n > 1 ? "s" : ""} on network elements outside this inventory`,
-      note: (names) => `Raised on monitors or devices the app cannot match to a site: ${names}. Tag the monitor with the circuit tags, or point it at the address of a device the SNMP extensions poll, and it lands on the map.`,
-    },
-    {
-      scope: "environment",
-      title: (n) => `${n} alert${n > 1 ? "s" : ""} not linked to any entity`,
-      note: (names) => `Raised on the environment, so nothing says which device they are about: ${names}. Set the entity dimension on the metric event and they land on the device.`,
-    },
-    {
-      scope: "other",
-      title: (n) => `${n} alert${n > 1 ? "s" : ""} outside the network domain`,
-      note: (names) => `Open on hosts, services or applications: ${names}. They are shown here because this environment is reporting them, not because the network is the cause.`,
-    },
-  ];
-  // everything outside the network is one entry, whatever domain it is in (applications, services,
-  // hosts or anything else): splitting the domains for the fault-domain reading must not hide them here
-  const OUTSIDE = new Set(["application", "service", "host", "other"]);
-  unplaced.forEach(({ scope, title, note }) => {
-    const group = orphans.filter((a) => {
-      const s = a.scope ?? "environment";
-      return scope === "other" ? OUTSIDE.has(s) : s === scope;
-    });
-    if (!group.length) return;
-    const names = [...new Set(group.map((a) => a.name))].slice(0, 4).join(", ");
+  /**
+   * 3b. Ports losing packets — one entry for the whole finding.
+   *
+   * This reading lived on the forecast page, which is where its series happened to be read and
+   * not where it belongs: a port discarding at a fraction of its line rate is a fault now, not
+   * a capacity problem later, and that page says so in its own verdict.
+   *
+   * It was one entry per device first, and measuring that is what settled the shape: this
+   * estate has seventeen such devices, so the landing page went from two causes to nineteen and
+   * the two that were alerting disappeared into the middle of a list. On `gru` it would be far
+   * worse — discards there are a condition rather than an event (a median of 62% of a
+   * discarding port's hours, none below 5%, none above 75%), which is hundreds of devices. One
+   * entry, with every device on it, is the only grouping that survives an estate that discards
+   * everywhere.
+   *
+   * The utilisation is carried beside the counter on purpose: losing packets while the busiest
+   * hour averaged a few per cent of the line rate rules capacity out and points at the physical
+   * layer, a buffer or a policer instead. Without it the number reads as congestion.
+   *
+   * It appears only where the hourly read happened. That read is `detail`-gated, so on an
+   * estate past the device cap it does not run — and an empty list would then say "no port is
+   * discarding" about an environment nobody looked at.
+   */
+  const discarding = discardingPorts(model, rising);
+  if (discarding.devices.length) {
+    /* Every sentence here is the platform's finding or a measurement of the ports it named.
+       The note used to be this app's own arithmetic — "N more discards in the recent half than
+       in the earlier half" — which was the detector, not a description of it. */
+    const top = discarding.rows[0];
+    const byDevice = new Map<string, typeof discarding.rows>();
+    for (const r of discarding.rows) byDevice.set(r.device, [...(byDevice.get(r.device) ?? []), r]);
     scopes.push({
-      id: `alerts:${scope}`, title: group.length === 1 ? group[0].name : title(group.length),
-      start: group.map((a) => a.start).filter(Boolean).sort()[0] ?? null, incident: null, devices: [], circuits: [],
-      level: scope === "other" ? "Warning" : group.some((a) => problemLevel(a) === "Critical") ? "Critical" : "Warning",
-      note: note(names),
+      id: "discards",
+      title: `${discarding.ports} port${discarding.ports > 1 ? "s" : ""} losing packets`
+        + ` on ${discarding.devices.length} device${discarding.devices.length > 1 ? "s" : ""}`,
+      start: top?.novelty.at ?? null, incident: null, devices: discarding.devices, circuits: [], level: "Warning",
+      ports: discarding.rows, perHour: discarding.perHour,
+      note: `Dynatrace: ${top ? `“${top.novelty.text}” on ${top.iface}` : "a change in the discard rate"}`
+        + `${top ? ` · novelty ${Math.round(top.novelty.score * 100)}%` : ""}`
+        + (discarding.busiest < 50
+          ? ` · the busiest hour on any of them reached ${discarding.busiest.toFixed(1)}% of its line rate, too little for capacity to explain`
+          : ` · busiest hour ${discarding.busiest.toFixed(1)}% of its line rate`),
+      deviceNote: (d) => {
+        const rows = byDevice.get(d.name) ?? [];
+        if (!rows.length) return "flagged";
+        const best = rows[0];
+        return `${rows.length} port${rows.length === 1 ? "" : "s"} · ${best.novelty.text.toLowerCase()}`
+          + ` · ${rows.map((r) => r.iface).slice(0, 3).join(", ")}`;
+      },
     });
-  });
+  }
+
+  /**
+   * Nothing goes in this list that the network has not been shown to have caused.
+   *
+   * Two entries stood here, for the alerts Dynatrace has open that this app cannot place:
+   * ones on network elements its inventory does not contain, and ones bound to the
+   * environment with no entity at all. Both were honest about themselves — their own notes
+   * told the reader to tag the monitor or set the entity dimension — and neither is a cause:
+   * nothing says what they impacted, or that the network impacted anything. A list of faults
+   * is not where a coverage gap belongs, and a reader opening one found a panel with no site,
+   * no device and nothing the network had done.
+   *
+   * They are not dropped from the app: the page counts them under the causes as a gap, with
+   * the same instruction, and the suspicion panel already counts the ones outside the network
+   * domain — which is the right place, because what those are evidence of is that the fault
+   * is not here. A third entry for those was removed earlier for the same reason.
+   */
 
   return scopes
     .map((scope) => toCause(model, byCode, scope))
-    .filter((c) => c.sites.length > 0 || c.elements.length > 0 || c.id.startsWith("alerts:"))
+    /* a cause with no site and no element is a cause about nothing */
+    .filter((c) => c.sites.length > 0 || c.elements.length > 0)
     .sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict] || b.impact.sites - a.impact.sites || (a.since ?? "").localeCompare(b.since ?? ""));
 }
 
@@ -198,7 +249,9 @@ function toCause(model: NetworkModel, byCode: Map<string, SiteInfo>, scope: Scop
 
   const elements: CauseElement[] = [
     ...scope.circuits.map((c): CauseElement => ({ id: c.id, label: `${c.site} · ${c.kind}`, kind: "circuit", verdict: c.status === "down" ? "Critical" : c.verdict, site: c.site })),
-    ...scope.devices.map((d): CauseElement => ({ id: d.name, label: shortDevice(d.name), kind: "device", verdict: d.verdict, site: d.site })),
+    ...scope.devices.map((d): CauseElement => ({ id: d.name,
+      label: scope.devices.filter((x) => shortDevice(x.name) === shortDevice(d.name)).length > 1 ? d.name : shortDevice(d.name),
+      kind: "device", verdict: d.verdict, site: d.site })),
   ].slice(0, 60);
 
   // impact
@@ -219,8 +272,15 @@ function toCause(model: NetworkModel, byCode: Map<string, SiteInfo>, scope: Scop
   down.slice(0, 6).forEach((c) => evidence.push({ id: `c-${c.id}`, t: c.since ?? null, level: c.kind === "primary" ? "Critical" : "Warning", source: "WAN link", text: `${c.siteName}: ${c.kind} ${c.tech} not answering` }));
   scope.circuits.filter((c) => c.status === "up" && c.latencyMs != null && c.latencyMs > c.slaMs).slice(0, 6)
     .forEach((c) => evidence.push({ id: `s-${c.id}`, t: null, level: "Warning", source: "WAN link", text: `${c.siteName}: ${c.latencyMs} ms against a ${c.slaMs} ms SLA` }));
+  /* Two devices at two sites can share a short name — `shortDevice` takes the site prefix off,
+     and the panel then listed "FWC-001" twice with different numbers, which reads as the same
+     device contradicting itself. Where the short form is not unique inside this cause, the
+     name is written out. */
+  const shortCount = new Map<string, number>();
+  for (const d of scope.devices) shortCount.set(shortDevice(d.name), (shortCount.get(shortDevice(d.name)) ?? 0) + 1);
+  const nameIn = (d: Device) => ((shortCount.get(shortDevice(d.name)) ?? 0) > 1 ? d.name : shortDevice(d.name));
   scope.devices.slice(0, 6).forEach((d) => evidence.push({ id: `d-${d.name}`, t: d.unreachableSince ?? null, level: d.verdict, source: "SNMP",
-    text: `${shortDevice(d.name)}: ${stripDevice(d.reasons[0]?.text ?? "affected")}`, device: d.name }));
+    text: `${nameIn(d)}: ${scope.deviceNote ? scope.deviceNote(d) : stripDevice(d.reasons[0]?.text ?? "affected")}`, device: d.name }));
 
   const hitAt = scope.start ?? earliest([...down.map((c) => c.since), ...scope.devices.map((d) => d.unreachableSince)]);
   const noticeFrom = hitAt ? new Date(Date.parse(hitAt) - 15 * 60e3).toISOString() : null;
@@ -275,7 +335,7 @@ function toCause(model: NetworkModel, byCode: Map<string, SiteInfo>, scope: Scop
     incident: scope.incident,
     sites, elements, devices: scope.devices.slice(0, 40),
     impact: { sites: sites.length, offline, devices: scopedDevices.filter((d) => isBad(d.verdict)).length, sessionsLost, sessionsSlowed, regions },
-    evidence: orderedEvidence, timeline,
+    evidence: orderedEvidence, timeline, ports: scope.ports, perHour: scope.perHour,
   };
 }
 

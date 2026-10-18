@@ -174,27 +174,67 @@ export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" 
       ["%SNMP-3-AUTHFAIL", "Authentication failure for SNMP request from 10.0.0.9"]],
   };
 
+  // the few days this simulated estate had something happen on it
+  const EVENT_DAYS = [9, 17, 22, 26];
+
   const iface = (name: string, speed: number, utilPct: number, uplink: boolean, oper = "up(1)"): Iface => {
     const bps = (speed * 1e6 * utilPct) / 100;
     const inn = Array.from({ length: 24 }, () => Math.round(bps * uni(0.55, 0.97)));
     const out = Array.from({ length: 24 }, () => Math.round(bps * uni(0.25, 0.6)));
     if (utilPct) inn[int(12, 23)] = Math.round(bps);
     const util = r1((Math.max(...inn, ...out) / (speed * 1e6)) * 100);
+    // A month of daily points for Ahead, built the way the record behaves rather than the way a
+    // demo flatters: most ports wander, about a third step to a new level and hold, a few drift
+    // upward, and a handful start discarding. Measured on two live environments, three to six
+    // percent of subjects produce a date at all, so a simulated estate where everything is on
+    // course would teach the reader the wrong thing about their own.
+    // Changes land on a handful of days, not spread evenly: measured on two environments, sixteen
+    // level changes fell on seven days with six of them on one, and every interface change in a
+    // third set landed on the same day. Scattering them uniformly would teach the reader that a
+    // change is background noise, when the whole point is that one day usually explains many.
+    const mood = rnd();
+    const stepAt = mood < 0.3 ? (rnd() < 0.86 ? EVENT_DAYS[int(0, EVENT_DAYS.length - 1)] : int(7, 23)) : -1;
+    const stepBy = stepAt > 0 ? uni(4, 26) * (rnd() < 0.8 ? 1 : -1) : 0;
+    const drift = mood > 0.86 ? uni(0.25, 1.1) : 0;
+    // 336 hourly points, with the working-day rhythm capacity is actually sized against: a flat
+    // simulated line taught the reader that traffic is smooth, and it is not.
+    const H = 336;
+    const hourly = uplink && utilPct
+      ? Array.from({ length: H }, (_, i) => {
+          const hour = i % 24, day = Math.floor(i / 24);
+          const work = 0.45 + 0.75 * Math.exp(-(((hour - 14) / 5) ** 2));
+          const weekend = (day % 7 === 5 || day % 7 === 6) ? 0.45 : 1;
+          const burst = rnd() < 0.015 ? uni(1.4, 2.2) : 1;
+          return Math.max(0, r1(
+            utilPct * work * weekend * burst * uni(0.86, 1.12)
+            + (drift * i) / 24 + (stepAt > 0 && day >= stepAt ? stepBy : 0)));
+        })
+      : undefined;
+    const rising = hourly && hourly[hourly.length - 1] > 72 && rnd() < 0.45 ? int(400, 90000) : undefined;
     return {
       name, speed, oper, admin: "up(1)", type: "ethernetCsmacd(6)", util, in: inn, out, errors: 0, discards: 0, crc: 0, uplink,
-      flag: null,
+      flag: null, ...(hourly ? { hourly } : {}), ...(rising ? { dropsRising: rising } : {}),
     };
   };
 
   interface DevOpts { cpu?: number; vendor?: string; blind?: boolean; rtt?: number | null; loss?: number; downMin?: number; incident?: string; events?: NetEvent[]; location?: string }
   const addDevice = (name: string, site: string, role: string, ip: string, hw: string, ifs: Iface[], o: DevOpts = {}) => {
     const cpu = o.cpu ?? r1(uni(4, 30));
+    // the same fortnight of hours for the processor, whose limit needs no tag and no contract
+    const cm = rnd(), cStep = cm < 0.22 ? (rnd() < 0.8 ? EVENT_DAYS[int(0, EVENT_DAYS.length - 1)] : int(7, 23)) : -1;
+    const cBy = cStep > 0 ? uni(3, 20) * (rnd() < 0.75 ? 1 : -1) : 0;
+    const cDrift = cm > 0.9 ? uni(0.2, 0.9) : 0;
+    const cpuHourly = Array.from({ length: 336 }, (_, i) => {
+      const day = Math.floor(i / 24), hour = i % 24;
+      const work = 0.6 + 0.6 * Math.exp(-(((hour - 15) / 6) ** 2));
+      return Math.max(0, r1(cpu * work * uni(0.9, 1.1) + (cDrift * i) / 24 + (cStep > 0 && day >= cStep ? cBy : 0)));
+    });
     // 24 buckets of fifteen minutes — six hours, the window the app reads device logs over and the one
     // the chart draws. They used to be filled as if they were hours, so the bars sat in the wrong place.
     const errTs = Array.from({ length: 24 }, () => (rnd() < 0.15 ? 1 : 0));
     const d: Device = {
       id: `DEMO-${name}`, name, site, role, vendor: o.vendor ?? "cisco", ip, mode: o.blind ? "Discovery" : "Extension",
-      desc: `${hw} · simulated device`, location: o.location ?? null, ifCount: ifs.length, cpu: [], cpuNow: null, availPct: null, availTs: null,
+      desc: `${hw} · simulated device`, location: o.location ?? null, ifCount: ifs.length, cpu: [], cpuNow: null, cpuHourly, availPct: null, availTs: null,
       // the error counter is the sum of the series it stores, as it is on live data, where both come out
       // of the same query: drawn apart, the bars and the number contradicted each other on screen
       syslog: { ERROR: errTs.reduce((a, b) => a + b, 0), WARN: int(1, 12), INFO: int(30, 140), NONE: 0 }, syslogErrTs: errTs,

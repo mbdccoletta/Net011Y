@@ -4,7 +4,9 @@
 // when; it does not judge it.
 import type { NetworkModel } from "./types";
 
-export type ChangeKind = "restart" | "unreachable" | "answering" | "alert-open" | "alert-closed" | "circuit-down";
+export type ChangeKind = "restart" | "unreachable" | "answering" | "alert-open" | "alert-closed" | "circuit-down"
+  /* what the devices themselves reported, counted in Grail rather than listed */
+  | "flap" | "config" | "secured" | "neighbour";
 
 export interface Change {
   t: string;
@@ -15,16 +17,38 @@ export interface Change {
   site?: string;
   /** a group of the same change within a few minutes: the members, newest first */
   members?: Change[];
+  /** how many times it happened, for a change the device counted rather than announced once */
+  events?: number;
 }
 
 export const CHANGE_LABEL: Record<ChangeKind, string> = {
   restart: "Restarts", unreachable: "Stopped answering", answering: "Answering again",
   "alert-open": "Alerts opened", "alert-closed": "Alerts closed", "circuit-down": "Circuits down",
+  flap: "Links going up and down", config: "Configuration written", secured: "Ports shut by the switch",
+  neighbour: "Routing neighbours changed",
 };
+
+/**
+ * The device's own vocabulary, mapped to the four things a reader does something about.
+ *
+ * A facility and a mnemonic is how a switch names an event — `%LINK-3-UPDOWN`,
+ * `%SYS-5-CONFIG_I`. Anything this table does not name is not shown: the point of the panel
+ * is the handful of kinds worth acting on, not a syslog tail.
+ */
+function kindOfLog(fac: string, mnem: string): ChangeKind | null {
+  if (mnem === "UPDOWN") return "flap";
+  if (mnem === "CONFIG_I") return "config";
+  if (mnem === "RESTART" || mnem.includes("RELOAD")) return "restart";
+  if (mnem.includes("ERR_DISABLE") || mnem.includes("PSECURE")) return "secured";
+  if (mnem.includes("ADJCHG")) return "neighbour";
+  void fac;
+  return null;
+}
 
 const DAY = 24 * 3600e3;
 /** the same change on several elements within this window is one event (an outage, a power cut) */
 const GROUP_MS = 5 * 60e3;
+const fmtTimes = (n: number) => (n === 1 ? "once" : `${n.toLocaleString("en-GB")} times`);
 const ms = (s: string | null | undefined) => (s ? Date.parse(s.replace(/(\.\d{3})\d*Z$/, "$1Z")) : NaN);
 
 export function changesOf(model: NetworkModel, now = Date.now()): Change[] {
@@ -64,17 +88,90 @@ export function changesOf(model: NetworkModel, now = Date.now()): Change[] {
     } else if (recent(p.start)) out.push({ t: p.start, kind: "alert-open", title: p.name, detail: where, device: dev?.name, site: dev?.site });
     if (p.end && recent(p.end)) out.push({ t: p.end, kind: "alert-closed", title: p.name, detail: where, device: dev?.name, site: dev?.site });
   }
+  /**
+   * What the devices reported, already counted.
+   *
+   * These do not arrive one per event — two hundred thousand syslog lines a day is not a list
+   * — so each row is a port or a device with how many times it happened and when it last did.
+   * That is also the only form in which they are useful: one link transition is noise, two
+   * thousand on one port in six hours is a fault with an address.
+   */
+  const byIp = new Map(model.devices.map((d) => [d.ip, d] as const));
+  /* the heaviest twenty of each kind. The query already returns them worst-first, and a list
+     of three hundred ports that each blinked twice is the tail the panel exists to cut */
+  const perKind = new Map<ChangeKind, number>();
+  /**
+   * One port going down is one change, not two.
+   *
+   * A switch logs the same transition twice under two facilities — `%LINK-3-UPDOWN` for the
+   * interface and `%LINEPROTO-5-UPDOWN` for the protocol on it — and the query counts them
+   * separately because it groups by facility. Unmerged, the panel listed
+   * GigabitEthernet1/0/17 twice, at 433 and at 410, as if they were different ports.
+   */
+  const merged = new Map<string, { kind: ChangeKind; ip: string; iface: string | null; events: number;
+    last: string; device: string | null; site: string | null }>();
+  for (const r of model.netChanges ?? []) {
+    const kind = kindOfLog(r.fac, r.mnem);
+    if (!kind || !recent(r.last)) continue;
+    const k = `${kind}|${r.ip}|${r.iface ?? ""}`;
+    const had = merged.get(k);
+    if (had) { had.events += r.events; if (ms(r.last) > ms(had.last)) had.last = r.last; }
+    else merged.set(k, { kind, ip: r.ip, iface: r.iface, events: r.events, last: r.last, device: r.device, site: r.site });
+  }
+  for (const r of [...merged.values()].sort((a, b) => b.events - a.events)) {
+    const kind = r.kind;
+    const seen = perKind.get(kind) ?? 0;
+    if (seen >= 20) continue;
+    perKind.set(kind, seen + 1);
+    const d = r.device ? byName.get(r.device) : byIp.get(r.ip);
+    const what = r.iface || d?.name || r.ip;
+    out.push({
+      t: r.last, kind, events: r.events,
+      title: kind === "flap" ? `${what} went up and down ${fmtTimes(r.events)}`
+        : kind === "config" ? `${d?.name ?? r.ip} had its configuration written ${fmtTimes(r.events)}`
+        : kind === "secured" ? `${what} was shut by the switch ${fmtTimes(r.events)}`
+        : kind === "neighbour" ? `${d?.name ?? r.ip} changed routing neighbour ${fmtTimes(r.events)}`
+        : `${d?.name ?? r.ip} restarted`,
+      detail: d ? `${d.name} · ${siteName(d.site)}` : `${r.ip} · not in the inventory`,
+      device: d?.name, site: d?.site,
+    });
+  }
   for (const c of model.circuits ?? []) {
     if (c.status === "down" && recent(c.since)) out.push({ t: c.since!, kind: "circuit-down", title: `${c.carrier} ${c.kind} circuit down`, detail: c.siteName, site: c.site });
   }
   // one row per burst: the same change on more than three elements within five minutes of each other
   // (clustered per kind, and per alert name, so bursts of different kinds do not break each other up)
+  /* A counted change is already a group of its own — "this port, this many times" — so the
+     burst rule must not run over it. It did, and wrote `18 × GigabitEthernet2/0/35 went up
+     and down 390 times closed`: eighteen ports folded into one row under the wording meant
+     for a run of closing alerts. */
+  const COUNTED: ChangeKind[] = ["flap", "config", "secured", "neighbour"];
   const keyOf = (c: Change) => (c.kind.startsWith("alert") ? `${c.kind}|${c.title}` : c.kind);
   const byKey = new Map<string, Change[]>();
   out.forEach((c) => { const l = byKey.get(keyOf(c)); if (l) l.push(c); else byKey.set(keyOf(c), [c]); });
   const grouped: Change[] = [];
-  byKey.forEach((list) => {
+  byKey.forEach((list, key) => {
     list.sort((a, b) => ms(b.t) - ms(a.t));
+    if (COUNTED.includes(list[0].kind)) { grouped.push(...list); return; }
+    /**
+     * One problem is one row, however long it took to reach every device.
+     *
+     * The burst rule below groups a run of the same change inside five minutes, which is right
+     * for a power cut and wrong for a monitoring outage: measured here, the same
+     * "Network availability monitor global outage" arrived on twenty-four devices between
+     * 20:30 and 20:41, eleven minutes, so every one of them got its own row and the panel read
+     * "86 changes" about one problem. An alert carries its own identity in its name; two of
+     * the same name in a day are the same event.
+     */
+    if (key.startsWith("alert") && list.length > 1) {
+      const sites = new Set(list.map((c) => c.site).filter(Boolean));
+      const span = Math.max(1, Math.round((ms(list[0].t) - ms(list[list.length - 1].t)) / 60e3));
+      grouped.push({ t: list[0].t, kind: list[0].kind, events: list.length,
+        title: `${list[0].title} · ${list.length} devices`,
+        detail: `${sites.size || "no"} site${sites.size === 1 ? "" : "s"} · over ${span} min`,
+        members: list });
+      return;
+    }
     for (let i = 0; i < list.length;) {
       let j = i + 1;
       while (j < list.length && ms(list[j - 1].t) - ms(list[j].t) <= GROUP_MS) j++;
@@ -90,6 +187,8 @@ export function changesOf(model: NetworkModel, now = Date.now()): Change[] {
       i = j;
     }
   });
-  grouped.sort((a, b) => ms(b.t) - ms(a.t));
+  /* newest first, and where two land in the same minute the busier one leads: a hundred
+     counted rows all end at the window's edge, so time alone leaves them in no order at all */
+  grouped.sort((a, b) => ms(b.t) - ms(a.t) || (b.events ?? 1) - (a.events ?? 1));
   return grouped;
 }

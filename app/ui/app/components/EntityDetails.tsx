@@ -14,9 +14,11 @@ import { SuspicionStrip } from "./Suspicion";
 import { suspicionFor } from "../model/suspicion";
 import { useDropThreshold } from "../hooks/useDropThreshold";
 import { AssistPanel } from "./AssistPanel";
+import { appNetExpressions, demandExpression, useAnomaly } from "../hooks/useAnomaly";
 import { fitInCircle, Gauge, LimitLine, StatusShape, Tile, TONE, verdictTone } from "./Visual";
 import { DeviceDetails, HopDetails } from "./Details";
 import { DataNeeds } from "./DataNeeds";
+import { DeviceMetrics } from "./DeviceMetrics";
 import { VIEW_NEEDS, type Need, type NeedKey } from "../data/requirements";
 import { useElementWidth } from "../hooks/useElementWidth";
 import { SitePathsTile, SiteTrafficTile } from "./Traffic";
@@ -230,6 +232,14 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
   useEffect(() => { setHop(null); }, [info.code]);
   const bad = info.devices.filter((d) => isBad(d.verdict)).length;
   const dropPct = useDropThreshold();
+  /* the same question the map asks, cached by expression so both panels cost one run */
+  const platform = {
+    demand: useAnomaly("seasonal", demandExpression(model), { condition: "BELOW", days: 7 }),
+    /* the two readings that say whether the applications feel the network: the app used to
+       decide both against factors of its own */
+    retransmitted: useAnomaly("adaptive", appNetExpressions(model)?.retransmitted ?? null, { condition: "ABOVE", days: 1 }),
+    roundTrip: useAnomaly("adaptive", appNetExpressions(model)?.roundTrip ?? null, { condition: "ABOVE", days: 1 }),
+  };
   const suspicion = useMemo(() => suspicionFor(model, { site: info, dropPct }), [model, info, dropPct]);
   const demand = useMemo(() => {
     const u = model.users;
@@ -301,15 +311,15 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
         <Tile title="Fault domain" right="this site · network or not">
           <SuspicionStrip s={suspicion} users={model.users} model={model}
             assist={<AssistPanel subject={`isolate|${info.code}`} questions={isolationQuestions(info.site.name)} object="impact"
-              context={() => isolationContext(model, suspicion, info, dropPct)} />} />
+              context={() => isolationContext(model, suspicion, info, dropPct, platform)} />} />
         </Tile>
       )}
       <Tile tone={TONE.violet}>
+        <AssistPanel subject={`site|${info.code}`} questions={siteQuestions(info.site.name, info.circuits.some((c) => c.kind === "backup"), !!model.flowMap?.sites[info.code])} object="site"
+          context={() => siteContext(model, info)} />
         <NativeDrill devices={info.devices} circuits={info.circuits} since={since} demo={model.demo}
           focus={info.causeDevice ?? info.devices.find((d) => d.role === "edge") ?? null}
           focusCircuit={info.circuits.find((c) => c.status === "down") ?? info.circuits.find((c) => isBad(c.verdict)) ?? info.circuits.find((c) => c.kind === "primary") ?? null} />
-        <AssistPanel subject={`site|${info.code}`} questions={siteQuestions(info.site.name, info.circuits.some((c) => c.kind === "backup"), !!model.flowMap?.sites[info.code])} object="site"
-          context={() => siteContext(model, info)} />
       </Tile>
       <DataNeeds keys={VIEW_NEEDS.site} needs={needs} compact />
     </div>
@@ -324,13 +334,16 @@ function PortLine({ d }: { d: Device }) {
   const p = portCounts(d);
   if (!p.known) return <span className="vz-stat"><b>{fmtInt(p.total)}</b>interfaces</span>;
   return (
-    <span className="vz-stat vz-ports" title={`${p.up} up · ${p.down} down with the port enabled · ${p.unused} shut or empty`}>
-      <b>
-        <i className="vz-port vz-port--up" />{fmtInt(p.up)}
-        <i className="vz-port vz-port--down" />{fmtInt(p.down)}
-        <i className="vz-port vz-port--off" />{fmtInt(p.unused)}
-      </b>
-      up · down · unused
+    /* Each word under its own number. The three counts sat in one row and the three words in
+       one sentence below it, so "unused" ran under the second figure and the reader had to
+       count positions to know which was which. */
+    <span className="vz-ports" title={`${p.up} up · ${p.down} down with the port enabled · ${p.unused} shut or empty`}>
+      {([["up", p.up, "up"], ["down", p.down, "down"], ["off", p.unused, "unused"]] as const).map(([k, n, label]) => (
+        <span className="vz-ports__one" key={k}>
+          <b><i className={`vz-port vz-port--${k}`} />{fmtInt(n)}</b>
+          <em>{label}</em>
+        </span>
+      ))}
     </span>
   );
 }
@@ -349,9 +362,20 @@ export function EntityDetails(props: Props) {
     const d = model.devices.find((x) => x.name === key);
     if (d) {
       const behind = model.sites[d.site]?.dc ? infos.filter((i) => i.site.hub === d.site).length : 1;
+      /* The same number, from the same function, rather than the same recipe.
+         Computing the busy hour here from the whole hourly series gave 27% where Ahead gave
+         27.5%: Ahead measures the regime after the last level change, not the whole record.
+         Two screens agreeing to within half a point is not agreement — so this asks the model
+         builder Ahead itself uses and reads the figure off the subject.
+         Both are read by `DeviceMetrics` now, which is the one place this panel states a
+         reading with the window it was measured over. */
+
       return (
         <div className="lm vz vz-details">
-          <Head title={shortDevice(d.name)} verdict={d.verdict} onClose={onClose} subtitle={`${d.name} · ${ROLE_LABEL[d.role] ?? d.role} · ${d.ip || "—"}`}
+          {/* the vendor joins the identity line: it was only in the key-value list below,
+              which repeated four readings the metrics table already states with windows */}
+          <Head title={shortDevice(d.name)} verdict={d.verdict} onClose={onClose}
+          subtitle={[d.name, ROLE_LABEL[d.role] ?? d.role, d.vendor, d.ip || null].filter(Boolean).join(" · ")}
             back={model.sites[d.site] ? { label: model.sites[d.site].name, onBack: () => onSelect(`site:${d.site}`) } : undefined} />
           {/* What is happening, before anything else. A device is red because Dynatrace raised something on
               it, and the panel used to open on a ring at 9% and a row of zeroes — a reader looking at a
@@ -371,28 +395,53 @@ export function EntityDetails(props: Props) {
           <Tile tone={verdictTone(d.verdict)} title={model.sites[d.site]?.name ?? d.site}
             right={model.sites[d.site]?.dc && behind === 0 ? "no site points here yet" : `${behind} ${behind === 1 ? "site" : "sites"} depend on it`}>
             <div className="vz-inst-top">
-              <Gauge value={d.cpuNow} label="CPU" />
+              {/* "CPU" alone, over the most recent sample, put a third number in circulation:
+                  this gauge read 30%, the strip below it 30% as a 24 h peak, and the Ahead
+                  panel 27.5% as the busy hour of thirteen days — one word, three statistics,
+                  and nothing on either screen saying which was which. Each one names its
+                  window now, and the busy hour is shown here too, so arriving from Ahead the
+                  reader meets the figure they clicked. */}
+              <Gauge value={d.cpuNow} label="CPU now" />
+              {/* Memory reads the same way the other two do — a per cent of its own total —
+                  so it is drawn the same way. It was a chip, and only when the device
+                  published one, which made "this firewall reports no memory" look like a
+                  reading nobody took. The dial is always here; it is empty when the device
+                  publishes none, and the row in All metrics below says so in words. */}
+              <Gauge value={d.memNow ?? null} label="Memory" />
               <Gauge value={d.availPct} label="Availability" />
+              {/**
+                * The ports, and nothing else that the table below already states.
+                *
+                * Four chips stood beside these: syslog errors of the lines, traps, CPU busy
+                * hour and VLANs. Every one is a row of All metrics two inches below, stated
+                * there with the window it was measured over and its own series — so the
+                * panel printed each of them twice, in two formats, and the copy up here was
+                * the one without a window. The ports stay because the table flattens them:
+                * "15/15" with the rest in words, where the split between up, enabled and
+                * down, and shut or empty is the reading an operator scans for.
+                */}
               <div className="vz-chipline vz-chipline--col">
                 <PortLine d={d} />
-                {/* "0 syslog errors" on a device sending fourteen thousand lines an hour reads as no
-                    syslog at all. The count it is out of belongs beside it. */}
-                <span className="vz-stat" title={`${d.syslog.ERROR} error · ${d.syslog.WARN} warning · ${d.syslog.INFO} information · ${d.syslog.NONE} unclassified`}>
-                  <b>{fmtInt(d.syslog.ERROR)}</b>of {fmtInt(d.syslog.ERROR + d.syslog.WARN + d.syslog.INFO + d.syslog.NONE)} syslog lines · 6 h
-                </span>
-                <span className="vz-stat"><b>{fmtInt(d.traps)}</b>traps</span>
-                {d.memNow != null && <span className="vz-stat"><b>{Math.round(d.memNow)}%</b>memory in use</span>}
-                {(d.vlans?.length ?? 0) > 0 && <span className="vz-stat"><b>{d.vlans!.length}</b>VLANs</span>}
               </div>
             </div>
-            <LimitLine values={d.cpu} label="CPU" />
+            <LimitLine values={d.cpu} label="CPU · most recent samples" />
           </Tile>
+          {/* Every reading the app holds for this device, each with its window and its own
+              series. The two gauges above answer "how hard is it working right now"; this
+              answers "and everything else", including the ones that used to be a bare number
+              in a chip or absent altogether. */}
+          <Tile title="All metrics" right="each one as measured, with the window it was measured over">
+            <DeviceMetrics device={d} />
+          </Tile>
+          {/* Everything the device is, then what can be asked about it, then where to open
+              it. The ports and events used to sit below the Intelligence tile, so the panel
+              put a question between two halves of the same subject. */}
+          <Tile title="Interfaces and events"><div className="vz-legacy"><DeviceDetails model={model} device={d} onDevice={(n) => onSelect(`device:${n}`)} /></div></Tile>
           <Tile tone={TONE.violet}>
-            <NativeDrill devices={[d]} focus={d} since={d.unreachableSince} demo={model.demo} />
             <AssistPanel subject={`device|${d.name}`} questions={deviceQuestions(d.name, d.verdict === "Healthy")} object="device" context={() => deviceContext(model, d, behind)} />
+            <NativeDrill devices={[d]} focus={d} since={d.unreachableSince} demo={model.demo} />
           </Tile>
           <DataNeeds keys={VIEW_NEEDS.device} needs={needs} compact />
-          <Tile title="Interfaces and events"><div className="vz-legacy"><DeviceDetails model={model} device={d} onDevice={(n) => onSelect(`device:${n}`)} /></div></Tile>
         </div>
       );
     }

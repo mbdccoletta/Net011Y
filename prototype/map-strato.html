@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Live map on MapLibre</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css" />
+<style>
+  :root {
+    --bg: #16161d; --panel: #1c1c26; --line: rgba(255,255,255,.1);
+    --ink: #ebebee; --ink-2: #b1b1b7; --ink-3: #8c8c94;
+    --obs: #95c0ff; --route: #76adff; --bad: #ff5c62; --warn: #eea746; --good: #00c181;
+    --land: #23232e; --land-line: #2e2e3b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 "DynatraceFlow", Roboto, Helvetica, sans-serif; }
+  #app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+  header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 14px; font-weight: 600; }
+  .note { color: var(--ink-3); font-size: 12px; max-width: 70ch; }
+  .ctl { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  button { font: inherit; font-size: 12px; color: var(--ink-2); cursor: pointer;
+    background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; }
+  button:hover { color: var(--ink); }
+  button.on { color: var(--ink); border-color: var(--ink-3); }
+  #map { width: 100%; height: 100%; }
+  .maplibregl-popup-content { background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 8px; font-size: 12px; }
+  .maplibregl-popup-tip { display: none; }
+  /* names are HTML, which is how the platform's own map puts text on a map */
+  .lbl { font: 500 11px/1.2 "DynatraceFlow", Roboto, sans-serif; color: var(--ink-2);
+    text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg), 0 0 3px var(--bg); pointer-events: none;
+    white-space: nowrap; }
+  .lbl--state { font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--ink-3); opacity: .85; }
+  .lbl--site { color: var(--ink); }
+  #boot { position: absolute; inset: auto 0 0 0; padding: 8px 16px; font-size: 12px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Live map · MapLibre with our own layers</h1>
+    <span class="note">The base is Dynatrace's own country GeoJSON, the same file
+      <code>strato-geo</code> fetches; the states are the admin-1 outlines this app already
+      ships. Every name is an HTML marker, because <code>strato-geo</code>'s own symbol layers
+      carry <code>icon-image</code> and never <code>text-field</code>, and the style sets no
+      glyph source — the platform's map draws no text on the canvas at all.</span>
+    <span class="ctl">
+      <button id="t-packets" class="on">Packets</button>
+      <button id="t-ants" class="on">Marching ants</button>
+      <button id="t-glow" class="on">Focus glow</button>
+      <button id="t-states" class="on">State names</button>
+      <button id="t-region">Region fill (worst wins)</button>
+      <button id="t-share" class="on">Proportional edge</button>
+      <button id="t-fly">Fly to Rio Grande</button>
+      <button id="t-reduce">Reduced motion</button>
+    </span>
+  </header>
+  <div id="map"></div>
+</div>
+<div id="boot">loading the world…</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
+<script>
+// ---------------------------------------------------------------- the estate
+// A handful of real sites from the example network, with one data centre they all reach.
+const DC = { name: "Data Center Tivit – Transamérica", uf: "SP", lon: -46.70, lat: -23.62 };
+const SITES = [
+  { name: "Rio Grande",      uf: "RS", lon: -52.10, lat: -32.03, verdict: "warn", vol: 0.35 },
+  { name: "Gaspar",          uf: "SC", lon: -48.96, lat: -26.93, verdict: "good", vol: 0.22 },
+  { name: "Rondonópolis",    uf: "MT", lon: -54.63, lat: -16.47, verdict: "good", vol: 0.55 },
+  { name: "Luís E. Magalhães", uf: "BA", lon: -45.80, lat: -12.09, verdict: "good", vol: 0.30 },
+  { name: "Urucuí",          uf: "PI", lon: -44.56, lat: -7.23,  verdict: "good", vol: 0.14 },
+  { name: "Placas Barreiras",uf: "BA", lon: -45.00, lat: -12.15, verdict: "bad",  vol: 0.62 },
+];
+const COLOUR = { good: "#00c181", warn: "#eea746", bad: "#ff5c62" };
+
+// a quadratic curve between two points, as the canvas map draws it
+const curve = (a, b, bend = 0.18, n = 48) => {
+  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const cx = mx - dy * bend, cy = my + dx * bend;
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const t = i / n, u = 1 - t;
+    return [u*u*a[0] + 2*u*t*cx + t*t*b[0], u*u*a[1] + 2*u*t*cy + t*t*b[1]];
+  });
+};
+const ROUTES = SITES.map((s) => ({ site: s, path: curve([s.lon, s.lat], [DC.lon, DC.lat]) }));
+
+const state = { packets: true, ants: true, glow: true, states: true, region: false, share: true, reduce: false, focus: null };
+
+// ---------------------------------------------------------------- the map
+const map = new maplibregl.Map({
+  container: "map",
+  style: { version: 8, sources: {}, layers: [{ id: "bg", type: "background", paint: { "background-color": "#16161d" } }] },
+  center: [-48, -17], zoom: 3.3, attributionControl: false, dragRotate: false,
+});
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+
+const fc = (features) => ({ type: "FeatureCollection", features });
+
+map.on("load", async () => {
+  // --- the base: Dynatrace's own country outlines, exactly the file strato-geo reads
+  const boot = document.getElementById("boot");
+  try {
+    const world = await fetch("https://dt-cdn.net/scripts/data/worldmap/maps/v006/WORLD-COUNTRIES.json").then((r) => r.json());
+    map.addSource("world", { type: "geojson", data: world });
+    map.addLayer({ id: "land", type: "fill", source: "world", paint: { "fill-color": "#23232e" } });
+    map.addLayer({ id: "land-line", type: "line", source: "world", paint: { "line-color": "#2e2e3b", "line-width": 0.6 } });
+    boot.textContent = "";
+  } catch (e) {
+    boot.textContent = "the world file did not load — the layers above still work: " + e;
+  }
+
+  // --- the states: the admin-1 outlines the app already carries, decoded to GeoJSON.
+  // The Dynatrace CDN serves countries, not regions, so this is the app's own data.
+  let stateLabels = [];
+  try {
+    const br = await fetch("br-states.json").then((r) => r.json());
+    /**
+     * The region, painted by the worst of what stands in it.
+     *
+     * This is what `ChoroplethLayer` does, and it takes ISO 3166-2 codes — `BR-RS`, `BR-SP` —
+     * which the app's admin-1 data already composes from `cc` and `code`. Here the same thing
+     * is a `fill` layer keyed on the state code, so the shape of the answer is identical: one
+     * row per region, one colour, and the rest is the component's.
+     *
+     * A region with nothing in it stays unpainted rather than green: no site there is not the
+     * same claim as no problem there.
+     */
+    const RANK = { good: 0, warn: 1, bad: 2 };
+    const worst = {};
+    for (const s of [{ ...DC, verdict: "good" }, ...SITES]) {
+      if (!worst[s.uf] || RANK[s.verdict] > RANK[worst[s.uf]]) worst[s.uf] = s.verdict;
+    }
+    for (const f of br.features) {
+      f.properties.verdict = worst[f.properties.code] ?? null;
+      f.properties.iso = `BR-${f.properties.code}`;
+    }
+    /**
+     * The edge, cut into arcs in proportion to what stands in the region.
+     *
+     * A flat fill is `worst wins`: one critical site among fifty paints the whole state red,
+     * and the reader concludes the state is down. The canvas map already refuses that — it
+     * strokes the outline once per verdict with `setLineDash`, so a lone alert is a sliver on
+     * an otherwise green border.
+     *
+     * maplibre cannot do it the same way: `line-dasharray` has no offset, and `line-gradient`
+     * is not data-driven, so neither varies per state inside one layer. So the split moves
+     * into the data — each ring is cut into runs of its own perimeter and emitted as one
+     * LineString per verdict — and a single layer colours them by `match`. Same reading, and
+     * now it is the geometry that carries it rather than a stroke trick.
+     */
+    /**
+     * Each site's arc sits on the side of the region the site is actually on.
+     *
+     * Cutting the perimeter in proportion answers "how much of this region is alerting". It
+     * does not answer "which part", and the first version started every run at vertex zero —
+     * so Bahia's red arc landed wherever the outline happened to begin, which on a state that
+     * size is a different place from the site it stands for.
+     *
+     * The arc is placed by bearing instead: the angle from the region's centre to the site
+     * picks the point on the ring facing the same way, and the run is centred there. A site
+     * in the south of a state paints the southern edge. That is the compass reading the
+     * reader already has in their head when they look at a map.
+     */
+    const ringWalk = (ring) => {
+      const d = [0];
+      for (let i = 1; i < ring.length; i++) d.push(d[i-1] + Math.hypot(ring[i][0]-ring[i-1][0], ring[i][1]-ring[i-1][1]));
+      const per = d[d.length-1];
+      const at = (t) => {
+        const u = ((t % per) + per) % per;
+        let i = 1; while (i < d.length - 1 && d[i] < u) i++;
+        const k = (u - d[i-1]) / ((d[i] - d[i-1]) || 1);
+        return [ring[i-1][0] + (ring[i][0]-ring[i-1][0])*k, ring[i-1][1] + (ring[i][1]-ring[i-1][1])*k];
+      };
+      return { d, per, at };
+    };
+
+    /** the distance along the ring whose bearing from the centre matches this one */
+    const facing = (ring, d, cx, cy, lon, lat) => {
+      const want = Math.atan2(lat - cy, lon - cx);
+      let best = 0, bestGap = Infinity;
+      for (let i = 0; i < ring.length; i++) {
+        const a = Math.atan2(ring[i][1] - cy, ring[i][0] - cx);
+        let gap = Math.abs(a - want);
+        if (gap > Math.PI) gap = 2 * Math.PI - gap;
+        if (gap < bestGap) { bestGap = gap; best = i; }
+      }
+      return d[best];
+    };
+
+    const seg = (ring, members, cx, cy) => {
+      const { d, per, at } = ringWalk(ring);
+      if (!per) return [];
+      /* the whole edge in the quiet colour first, so the arcs below read as marks on it
+         rather than as the only thing drawn */
+      const out = [{ type: "Feature", properties: { verdict: "base" },
+                     geometry: { type: "LineString", coordinates: ring } }];
+      for (const m of members) {
+        if (m.verdict === "good") continue;     // the quiet share is the base line
+        /* a single alerting site in a large state is a sliver, and it never falls below a
+           length the eye can find — the same floor the canvas keeps at two pixels */
+        const len = Math.max(per * 0.06, per / members.length);
+        const mid = facing(ring, d, cx, cy, m.lon, m.lat);
+        const pts = [];
+        const steps = Math.max(6, Math.ceil((len / per) * ring.length));
+        for (let k = 0; k <= steps; k++) pts.push(at(mid - len / 2 + (len * k) / steps));
+        out.push({ type: "Feature", properties: { verdict: m.verdict, site: m.name },
+                   geometry: { type: "LineString", coordinates: pts } });
+      }
+      return out;
+    };
+    const shareFeats = [];
+    for (const f of br.features) {
+      const uf = f.properties.code;
+      const members = [{ ...DC, verdict: "good" }, ...SITES].filter((s) => s.uf === uf);
+      if (!members.length) continue;
+      const counts = members.reduce((a, s) => ({ ...a, [s.verdict]: (a[s.verdict] ?? 0) + 1 }), {});
+      void counts;
+      f.properties.sites = members.length;
+      f.properties.alerting = members.filter((s) => s.verdict !== "good").length;
+      shareFeats.push(...seg(f.geometry.coordinates[0], members, f.properties.lon, f.properties.lat));
+    }
+    map.addSource("share", { type: "geojson", data: fc(shareFeats) });
+
+    map.addSource("states", { type: "geojson", data: br });
+    map.addLayer({ id: "region-status", type: "fill", source: "states",
+      filter: ["has", "verdict"],
+      layout: { visibility: "none" },
+      paint: {
+        "fill-color": ["match", ["get", "verdict"], "bad", "#ff5c62", "warn", "#eea746", "#00c181"],
+        "fill-opacity": ["case", ["==", ["get", "verdict"], null], 0, 0.16],
+      } });
+    map.addLayer({ id: "state-line", type: "line", source: "states",
+      paint: { "line-color": "#34344a", "line-width": 0.7 } }, "land-line");
+    // the sliver sits over the fill, and the quiet share is drawn quietly: what the eye should
+    // find on a green border is the piece that is not green
+    map.addLayer({ id: "region-share", type: "line", source: "share", paint: {
+      "line-color": ["match", ["get", "verdict"], "bad", "#ff5c62", "warn", "#eea746", "#00c181"],
+      "line-width": ["match", ["get", "verdict"], "base", 1.4, 3],
+      "line-opacity": ["match", ["get", "verdict"], "bad", 0.95, "warn", 0.9, 0.28],
+    } });
+
+    stateLabels = br.features.map((f) => {
+      const el = document.createElement("div");
+      el.className = "lbl lbl--state";
+      el.textContent = f.properties.sites
+        ? `${f.properties.name} · ${f.properties.sites}${f.properties.alerting ? ` · ${f.properties.alerting} alerting` : ""}`
+        : f.properties.name;
+      return new maplibregl.Marker({ element: el })
+        .setLngLat([f.properties.lon, f.properties.lat]).addTo(map);
+    });
+  } catch (e) { /* the states are an extra: the map stands without them */ }
+
+  // --- routes, one line layer, plus a second for the ones that are critical
+  map.addSource("routes", { type: "geojson", data: fc(ROUTES.map((r) => ({
+    type: "Feature", properties: { verdict: r.site.verdict, vol: r.site.vol, name: r.site.name },
+    geometry: { type: "LineString", coordinates: r.path },
+  }))) });
+  map.addLayer({ id: "routes", type: "line", source: "routes",
+    filter: ["!=", ["get", "verdict"], "bad"],
+    paint: {
+      "line-color": "#76adff",
+      "line-width": ["interpolate", ["linear"], ["get", "vol"], 0, 0.8, 1, 2.6],
+      "line-opacity": 0.55,
+    } });
+  // the critical ones get their own layer, because the dash is stepped on it every frame
+  map.addLayer({ id: "routes-bad", type: "line", source: "routes",
+    filter: ["==", ["get", "verdict"], "bad"],
+    paint: { "line-color": "#ff5c62", "line-width": 1.8, "line-dasharray": [2, 2] } });
+
+  // --- the focus glow: a blurred circle, which is what the canvas drew as a radial gradient
+  map.addSource("glow", { type: "geojson", data: fc([]) });
+  map.addLayer({ id: "glow", type: "circle", source: "glow", paint: {
+    "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 26, 8, 150],
+    "circle-color": "#eea746", "circle-blur": 1, "circle-opacity": 0.5,
+  } });
+
+  // --- the sites
+  map.addSource("sites", { type: "geojson", data: fc(
+    [{ ...DC, verdict: "good", dc: true }, ...SITES].map((s) => ({
+      type: "Feature", properties: { name: s.name, verdict: s.verdict, dc: !!s.dc },
+      geometry: { type: "Point", coordinates: [s.lon, s.lat] },
+    }))) });
+  map.addLayer({ id: "sites", type: "circle", source: "sites", paint: {
+    "circle-radius": ["case", ["get", "dc"], 7, 5],
+    "circle-color": ["match", ["get", "verdict"], "bad", "#ff5c62", "warn", "#eea746", "#00c181"],
+    "circle-stroke-width": 2, "circle-stroke-color": "#16161d",
+  } });
+  // Site names, also HTML. A `symbol` layer with `text-field` would let maplibre resolve
+  // collisions for us, and it needs a glyph source the platform does not configure — so this
+  // is the honest version of what the real integration can do today.
+  for (const s of [{ ...DC, dc: true }, ...SITES]) {
+    const el = document.createElement("div");
+    el.className = "lbl lbl--site";
+    el.textContent = s.name;
+    new maplibregl.Marker({ element: el, anchor: "top", offset: [0, 8] })
+      .setLngLat([s.lon, s.lat]).addTo(map);
+  }
+
+  // --- the packets: one GeoJSON source rewritten per frame
+  map.addSource("packets", { type: "geojson", data: fc([]) });
+  map.addLayer({ id: "packets", type: "circle", source: "packets", paint: {
+    "circle-radius": ["interpolate", ["linear"], ["get", "vol"], 0, 1.6, 1, 3.4],
+    "circle-color": ["match", ["get", "verdict"], "bad", "#ff5c62", "#95c0ff"],
+    "circle-opacity": 0.95,
+  } });
+
+  // a point at t along a path, plus the normal, so the two directions sit either side
+  const along = (path, t, off) => {
+    const f = Math.max(0, Math.min(0.999, t)) * (path.length - 1);
+    const i = Math.floor(f), k = f - i;
+    const a = path[i], b = path[Math.min(path.length - 1, i + 1)];
+    const x = a[0] + (b[0] - a[0]) * k, y = a[1] + (b[1] - a[1]) * k;
+    const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
+    return [x + (-dy / len) * off, y + (dx / len) * off];
+  };
+  const hash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0) / 4294967295; };
+
+  let raf = 0;
+  const frame = (now) => {
+    raf = requestAnimationFrame(frame);
+    const moving = !state.reduce;
+
+    if (state.packets && moving) {
+      const feats = [];
+      for (const r of ROUTES) {
+        const vol = r.site.vol, phase = hash(r.site.name);
+        const count = Math.max(1, Math.round(1 + vol * 5));
+        const period = 3400 - vol * 2400;
+        for (const back of [false, true]) {
+          for (let p = 0; p < count; p++) {
+            const t0 = ((now / period) + phase + (back ? 0.37 : 0) + p / count) % 1;
+            const t = back ? 1 - t0 : t0;
+            feats.push({ type: "Feature",
+              properties: { vol, verdict: r.site.verdict },
+              geometry: { type: "Point", coordinates: along(r.path, t, (back ? 1 : -1) * 0.12) } });
+          }
+        }
+      }
+      map.getSource("packets").setData(fc(feats));
+    } else if (!state.packets || !moving) {
+      map.getSource("packets").setData(fc([]));
+    }
+
+    // marching ants: the dash array stepped, which is the maplibre way of doing it
+    if (map.getLayer("routes-bad")) {
+      const seq = [[0,4,3,0],[0.5,4,2.5,0],[1,4,2,0],[1.5,4,1.5,0],[2,4,1,0],[2.5,4,0.5,0],[3,4,0,0.5],[0,0.5,3,3.5]];
+      const step = state.ants && moving ? seq[Math.floor(now / 70) % seq.length] : [2, 2];
+      map.setPaintProperty("routes-bad", "line-dasharray", step);
+    }
+  };
+  raf = requestAnimationFrame(frame);
+
+  // --- hover, so a dot says what it is
+  const pop = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
+  map.on("mousemove", "sites", (e) => {
+    map.getCanvas().style.cursor = "pointer";
+    pop.setLngLat(e.features[0].geometry.coordinates).setHTML(e.features[0].properties.name).addTo(map);
+  });
+  map.on("mouseleave", "sites", () => { map.getCanvas().style.cursor = ""; pop.remove(); });
+
+  // --- focus: the glow follows it, and the camera eases there the way easeTo does it
+  const focusOn = (s) => {
+    state.focus = s;
+    map.getSource("glow").setData(state.glow && s
+      ? fc([{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [s.lon, s.lat] } }])
+      : fc([]));
+    if (s) map.easeTo({ center: [s.lon, s.lat], zoom: 5.2, duration: state.reduce ? 0 : 1100,
+      easing: (t) => (t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2) });
+  };
+  map.on("click", "sites", (e) => {
+    const name = e.features[0].properties.name;
+    focusOn(SITES.find((s) => s.name === name) ?? null);
+  });
+
+  // --- the switches
+  const wire = (id, key, after) => {
+    const el = document.getElementById(id);
+    el.onclick = () => { state[key] = !state[key]; el.classList.toggle("on", state[key]); after?.(); };
+  };
+  wire("t-share", "share", () => {
+    if (map.getLayer("region-share"))
+      map.setLayoutProperty("region-share", "visibility", state.share ? "visible" : "none");
+  });
+  wire("t-region", "region", () => {
+    if (map.getLayer("region-status"))
+      map.setLayoutProperty("region-status", "visibility", state.region ? "visible" : "none");
+  });
+  wire("t-states", "states", () => {
+    const on = state.states;
+    stateLabels.forEach((m) => { m.getElement().style.display = on ? "" : "none"; });
+    if (map.getLayer("state-line")) map.setLayoutProperty("state-line", "visibility", on ? "visible" : "none");
+  });
+  wire("t-packets", "packets");
+  wire("t-ants", "ants");
+  wire("t-glow", "glow", () => focusOn(state.focus));
+  wire("t-reduce", "reduce", () => focusOn(state.focus));
+  document.getElementById("t-fly").onclick = () => focusOn(SITES[0]);
+});
+</script>
+</body>
+</html>

@@ -11,6 +11,7 @@ import { isBad } from "../model/verdict";
 import { Status } from "../components/Status";
 import { inSet, Spark } from "../components/Visual";
 import { fmtNum, hhmm } from "../utils/format";
+import { useTokens } from "../hooks/useToken";
 
 export interface Filters {
   status: string | null;
@@ -35,9 +36,19 @@ const text = (v: unknown) => (typeof v === "string" && v ? v : null);
 const contains = (hay: string, q: string) => !q || hay.toLowerCase().includes(q.trim().toLowerCase());
 const uniq = (xs: (string | undefined | null)[]) => [...new Set(xs.filter((x): x is string => !!x))].sort();
 
+/**
+ * Two lines in a cell, each readable in full on hover.
+ *
+ * The column is a fraction of the table's width and the name of a device here is thirty
+ * characters — measured with the detail panel open, ninety-five elements on this page were
+ * cut off and not one of them carried a tooltip, so `BR-BA-LEM1-SWA-001.bbr.sa.dir…` could
+ * be neither read nor copied. The component's own cells get that from `TextEllipsis`; a
+ * cell we render ourselves has to say it.
+ */
 function Two({ top, bottom, mono }: { top: React.ReactNode; bottom?: React.ReactNode; mono?: boolean }) {
+  const full = [top, bottom].filter((v) => typeof v === "string" || typeof v === "number").join(" · ");
   return (
-    <div className="np-cell2">
+    <div className="np-cell2" title={full || undefined}>
       <span className={mono ? "np-mono" : undefined}>{top}</span>
       {bottom ? <span className="np-muted np-small">{bottom}</span> : null}
     </div>
@@ -155,11 +166,22 @@ export function DevicesPage({ model, filters, onFilters, selected, onSelect }: P
     && (!filters.region || model.sites[d.site]?.region === filters.region)
     && contains(`${d.name} ${d.ip} ${model.sites[d.site]?.name ?? ""} ${d.reasons[0]?.text ?? ""}`, filters.q)) as DeviceRow[], [model, filters]);
 
+  /* the meter bar takes a colour, and it takes it as a literal: handed `var(--lm-series)`
+     it rendered `fill=""`, which paints black */
+  const [ink, inkRef] = useTokens({ "--lm-series": "#00afbe" });
+
   const columns = useMemo<DataTableColumnDef<DeviceRow>[]>(() => [
     { id: "status", header: "Status", accessor: (d) => d.verdict, width: 130, cell: ({ rowData }) => <Status verdict={rowData.verdict} /> },
     { id: "name", header: "Device", accessor: (d) => d.name, width: "1.4fr", cell: ({ rowData }) => <Two top={rowData.name} bottom={`${ROLE_LABEL[rowData.role] ?? rowData.role} · ${rowData.ip}`} mono /> },
-    { id: "site", header: "Site", accessor: (d) => model.sites[d.site]?.name ?? d.site, width: "1fr" },
-    { id: "cpu", header: "CPU", accessor: (d) => d.cpuNow, columnType: "meterbar", config: { min: 0, max: 100 }, width: 130 },
+    /* a fractional column holds a site name that is often longer than it: the value is the
+       tooltip, because a plain accessor cell gets none from the component */
+    { id: "site", header: "Site", accessor: (d) => model.sites[d.site]?.name ?? d.site, width: "1fr",
+      cell: ({ rowData }) => { const n = model.sites[rowData.site]?.name ?? rowData.site; return <span title={n}>{n}</span>; } },
+    /* the bar is a measurement, so it wears the measurement colour: the column type defaults
+       to `Categorical.Color11`, the pale blue the rest of the app no longer uses, and a blue
+       bar beside a teal curve in the same row read as two different quantities */
+    { id: "cpu", header: "CPU", accessor: (d) => d.cpuNow, columnType: "meterbar",
+      config: { min: 0, max: 100, color: ink["--lm-series"] }, width: 130 },
     { id: "cpuTrend", header: "CPU, 24 h", accessor: cpuLast, width: 140, alignment: "right",
       cell: ({ rowData }) => <Spark values={rowData.cpu} /> },
     { id: "avail", header: "Availability", accessor: (d) => d.availPct ?? -1, width: 110, alignment: "right",
@@ -172,11 +194,11 @@ export function DevicesPage({ model, filters, onFilters, selected, onSelect }: P
       cell: ({ rowData }) => <Ports d={rowData} /> },
     { id: "reason", header: "Main reason", accessor: (d) => d.reasons[0]?.text ?? "", width: "2fr",
       cell: ({ rowData }) => <span title={rowData.reasons[0]?.text ?? "Within expected range"}>{rowData.reasons[0]?.text ?? <span className="np-muted">Within expected range</span>} <Incident id={rowData.incident} /></span> },
-  ], [model]);
+  ], [model, ink]);
 
   const active = selected?.startsWith("device:") ? data.findIndex((d) => d.name === selected.slice(7)) : -1;
   return (
-    <div className="np-page">
+    <div className="np-page" ref={inkRef}>
       <FilterBar onFilterChange={(v) => onFilters({ q: String(v.q?.value ?? ""), status: text(v.status?.value), role: text(v.role?.value), region: text(v.region?.value) })}>
         <FilterBar.Item name="q" label="Search"><SearchInput defaultValue={filters.q} placeholder="Device, IP, site or reason" /></FilterBar.Item>
         {selectFilter("status", "Status", filters.status, STATUS_OPTIONS, "Any status")}
@@ -204,7 +226,8 @@ export function LinksPage({ model, filters, onFilters, selected, onSelect }: Pag
   const columns = useMemo<DataTableColumnDef<LinkRow>[]>(() => [
     { id: "status", header: "Status", accessor: (c) => c.verdict, width: 130, cell: ({ rowData }) => <Status verdict={rowData.verdict} /> },
     { id: "site", header: "Site", accessor: (c) => c.siteName, width: "1.3fr", cell: ({ rowData }) => <Two top={rowData.siteName} bottom={`${rowData.site} · ${rowData.kind === "primary" ? "Primary" : "Backup"}`} /> },
-    { id: "carrier", header: "Carrier", accessor: (c) => c.carrier, width: 110 },
+    { id: "carrier", header: "Carrier", accessor: (c) => c.carrier, width: 110,
+      cell: ({ rowData }) => <span title={rowData.carrier}>{rowData.carrier}</span> },
     { id: "tech", header: "Technology", accessor: (c) => c.tech, width: "1fr" },
     { id: "latency", header: "Latency", accessor: (c) => c.latencyMs ?? -1, width: 100, alignment: "right",
       cell: ({ rowData }) => <span className="np-mono">{rowData.latencyMs != null ? `${fmtNum(rowData.latencyMs)} ms` : "—"}</span> },
@@ -212,7 +235,7 @@ export function LinksPage({ model, filters, onFilters, selected, onSelect }: Pag
     { id: "loss", header: "Loss", accessor: (c) => c.lossPct ?? -1, width: 80, alignment: "right",
       cell: ({ rowData }) => <span className="np-mono">{rowData.lossPct != null ? `${fmtNum(rowData.lossPct)}%` : "—"}</span> },
     { id: "reason", header: "Reason", accessor: (c) => c.reasons[0]?.text ?? "", width: "1.6fr",
-      cell: ({ rowData }) => <span>{rowData.reasons[0]?.text ?? <span className="np-muted">Within SLA</span>}{rowData.since && rowData.status === "down" ? ` (${hhmm(rowData.since)})` : ""} <Incident id={rowData.incident} /></span> },
+      cell: ({ rowData }) => <span title={rowData.reasons[0]?.text ?? "Within SLA"}>{rowData.reasons[0]?.text ?? <span className="np-muted">Within SLA</span>}{rowData.since && rowData.status === "down" ? ` (${hhmm(rowData.since)})` : ""} <Incident id={rowData.incident} /></span> },
   ], []);
 
   const active = selected?.startsWith("link:") ? data.findIndex((c) => c.id === selected.slice(5)) : -1;

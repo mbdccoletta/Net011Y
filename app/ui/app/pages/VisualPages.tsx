@@ -6,13 +6,13 @@ import type { Circuit, Device, NetworkModel, Verdict } from "../model/types";
 import { devicesAt, ROLE_LABEL, type SiteInfo } from "../model/site";
 import { isBad, ORDER } from "../model/verdict";
 import { bubbleRadius } from "../model/mapClusters";
-import { fmtInt, fmtNum, stripDevice } from "../utils/format";
+import { fmtInt, stripDevice } from "../utils/format";
 import { NativeDrill } from "../components/NativeDrill";
-import { carrierContext, deviceContext, networkContext } from "../utils/assist";
-import { carrierQuestions, deviceQuestions, sitesQuestions } from "../utils/prompts";
+import { carrierContext, changeContext, devicesContext, networkContext } from "../utils/assist";
+import { carrierQuestions, devicesQuestions, sitesQuestions } from "../utils/prompts";
 import { AssistPanel } from "../components/AssistPanel";
 import { DeviceBubbles } from "../components/DeviceBubbles";
-import { Chips, Gauge, inSet, KpiTile, LimitLine, PageBar, StatusShape, Tile, TONE, verdictTone, type View } from "../components/Visual";
+import { Chips, inSet, KpiTile, PageBar, Tile, TONE, verdictTone, type View } from "../components/Visual";
 import { DevicesPage, LinksPage, SitesPage, type Filters, type PageProps } from "./EntityPages";
 import { buildCauses } from "../model/causes";
 import { DataNeeds } from "../components/DataNeeds";
@@ -44,7 +44,6 @@ const STATUS_CHIPS = [
   { key: "Not monitored", label: "Not monitored", tone: TONE.neutral },
 ];
 const matches = (v: Verdict, status: string | null) => !status || (status === "issues" ? isBad(v) : v === status);
-const shortDevice = (name: string) => name.replace(/^BR-[A-Z]{2}-[A-Z0-9]+-/, "");
 const count = <X,>(xs: X[], f: (x: X) => boolean) => xs.reduce((a, x) => a + (f(x) ? 1 : 0), 0);
 
 
@@ -85,6 +84,13 @@ export function SitesVisual(p: VisualProps) {
           detail="Sites come from the primary tags on the SNMP monitoring configurations. Once the devices carry a site tag, they group here by region and carrier." />
       ) : p.view === "table" ? <div className="vz-table"><SitesPage {...p} /></div> : (
         <div className="vz-body">
+          {/* Intelligence sits at the top of every page, not at the foot. It was the last
+              thing on Sites, on WAN links and on Devices, so the one control that answers a
+              question about the page was the one you had to scroll past the page to reach. */}
+          <Tile className="vz-assist-row">
+            <AssistPanel subject={`sites|${filters.status}|${filters.carrier}|${kind}`} questions={sitesQuestions()} object="sites"
+              context={() => ({ ...networkContext(model, infos, buildCauses(model, infos)), filter: { status: filters.status, carrier: filters.carrier, type: kind } })} />
+          </Tile>
           <div className="vz-k4">
             <KpiTile tone={TONE.bad} label="Critical sites" value={fmtInt(n("Critical"))} caption={`${fmtInt(offline)} dark`} active={filters.status === "Critical"} onClick={() => setStatus("Critical")} />
             <KpiTile tone={TONE.warn} label="Warning" value={fmtInt(n("Warning"))} caption={topCause && topCause.sites.length > 1 ? `${fmtInt(topCause.sites.length)} behind ${topCause.title}` : "sites degraded"} active={filters.status === "Warning"} onClick={() => setStatus("Warning")} />
@@ -126,10 +132,6 @@ export function SitesVisual(p: VisualProps) {
               );
             })}
           </div>
-          <Tile tone={TONE.violet} className="vz-assist-row">
-            <AssistPanel subject={`sites|${filters.status}|${filters.carrier}|${kind}`} questions={sitesQuestions()} object="sites"
-              context={() => ({ ...networkContext(model, infos, buildCauses(model, infos)), filter: { status: filters.status, carrier: filters.carrier, type: kind } })} />
-          </Tile>
         </div>
       )}
     </div>
@@ -138,41 +140,14 @@ export function SitesVisual(p: VisualProps) {
 
 // ------------------------------------------------------------------ Devices
 
-function sitesBehind(infos: SiteInfo[], d: Device, model: NetworkModel) {
-  return model.sites[d.site]?.dc ? count(infos, (i) => i.site.hub === d.site) : 1;
-}
 const behindCounts = (infos: SiteInfo[]) => { const m = new Map<string, number>(); infos.forEach((i) => { if (i.site.hub) m.set(i.site.hub, (m.get(i.site.hub) ?? 0) + 1); }); return m; };
 const sitesBehindIn = (behind: Map<string, number>, d: Device, model: NetworkModel) => (model.sites[d.site]?.dc ? behind.get(d.site) ?? 0 : 1);
 
-function DeviceInstrument({ model, infos, device, onDetails }: { model: NetworkModel; infos: SiteInfo[]; device: Device; onDetails: () => void }) {
-  const upIfs = count(device.interfaces, (i) => i.oper.startsWith("up"));
-  const behind = sitesBehind(infos, device, model);
-  const behindUnknown = !!model.sites[device.site]?.dc && behind === 0;
-  const cpuSeries = device.cpu.length > 1 ? device.cpu : [];
-  return (
-    <Tile tone={verdictTone(device.verdict)} title={<><StatusShape verdict={device.verdict} /> {shortDevice(device.name)}</>} right={ROLE_LABEL[device.role] ?? device.role} className="vz-instrument">
-      <div className="vz-inst-top">
-        <Gauge value={device.cpuNow} label="CPU" />
-        {/* A data center nothing points at does not mean nothing depends on it: it means no site says
-            which data center its WAN terminates on. Printing a bare 0 stated the first. */}
-        <div><div className="vz-big" title={behindUnknown ? "Sites say which data center they depend on through the circuit tags on their ICMP monitor, or a site hub. None of them does yet in this environment." : undefined}>{behindUnknown ? "—" : fmtInt(behind)}</div>
-          <div className="vz-cap">{behindUnknown ? "no site points here yet" : behind === 1 ? "site depends on it" : "sites depend on it"}</div>
-          <div className="vz-cap vz-mono">{model.sites[device.site]?.name ?? device.site} · {device.ip || "—"}</div></div>
-      </div>
-      <LimitLine values={cpuSeries} label="CPU" />
-      <div className="vz-chipline">
-        <span className="vz-stat"><b>{upIfs}/{device.interfaces.length}</b>interfaces up</span>
-        <span className="vz-stat"><b>{device.availPct != null ? `${fmtNum(device.availPct, 1)}%` : "—"}</b>availability</span>
-        <span className="vz-stat"><b>{fmtInt(device.syslog.ERROR)}</b>syslog errors · 6 h</span>
-        <span className="vz-stat"><b>{fmtInt(device.traps)}</b>traps</span>
-      </div>
-      <NativeDrill devices={[device]} focus={device} since={device.unreachableSince} demo={model.demo}
-        before={<button type="button" className="lm-btn" onClick={onDetails}><b>Details</b><small>in this app</small></button>} />
-      <AssistPanel subject={`device|${device.name}`} questions={deviceQuestions(device.name, device.verdict === "Healthy")} object="device"
-        context={() => deviceContext(model, device, behind)} />
-    </Tile>
-  );
-}
+/* `DeviceInstrument` stood here: a second panel describing the same device, from the same
+   model, beside the one the whole app already uses. It held six readings against a dozen,
+   and it carried bugs `EntityDetails` had already fixed — a bare "0 syslog errors" with no
+   denominator among them — because a correction only ever reached one of the two. Picking a
+   bubble now selects the device, and the platform's details region draws it. */
 
 const ROLE_ORDER = ["edge", "core", "firewall", "lb", "switch", "wlc", "ap", "compute", "endpoint", "other"];
 
@@ -253,6 +228,16 @@ export function DevicesVisual(p: VisualProps) {
           detail="Devices come from the SNMP extensions. Each router, switch, firewall and access point they monitor appears here with its interfaces, CPU and events." />
       ) : p.view === "table" ? <div className="vz-table"><DevicesPage {...p} /></div> : (
         <div className="vz-body">
+          {/* The three readings this page leads with, as three questions: which alerted
+              device matters most, which devices are discovered and never polled, and what
+              the syslog says changed. The last one was once a panel here and a tab beside
+              the map; thirteen thousand link transitions a day is something to ask about
+              rather than to read, and its counts are still the context it is answered from. */}
+          <Tile className="vz-assist-row">
+            <AssistPanel subject={`devices|${filters.status}|${filters.region ?? "all"}`}
+              questions={devicesQuestions()} object="devices"
+              context={() => ({ ...devicesContext(model, filters.region), changes: changeContext(model) })} />
+          </Tile>
           <div className="vz-k4">
             <KpiTile tone={TONE.bad} label="Critical devices" value={fmtInt(n("Critical"))}
               /* "0 not responding" under a 70 was read as seventy not responding. When none of them is
@@ -269,7 +254,8 @@ export function DevicesVisual(p: VisualProps) {
             <div className="vz-named" aria-label={`${filters.status} devices`}>
               <span className="vz-named__lead">{fmtInt(listed.length)} {filters.status.toLowerCase()}</span>
               {listed.slice(0, 14).map((d) => (
-                <button key={d.name} type="button" className="vz-named__one" onClick={() => setPicked(d.name)}
+                <button key={d.name} type="button" className="vz-named__one"
+                  onClick={() => { setPicked(d.name); onSelect(`device:${d.name}`); }}
                   title={`${d.name} · ${ROLE_LABEL[d.role] ?? d.role} · ${d.ip} · ${model.sites[d.site]?.name ?? d.site}${d.reasons[0] ? ` · ${d.reasons[0].text}` : ""}`}>
                   {d.name}<i>{model.sites[d.site]?.name ?? d.site} · {d.ip}</i>
                 </button>
@@ -279,14 +265,14 @@ export function DevicesVisual(p: VisualProps) {
             </div>
           )}
           {regions.length > 0 && <div className="vz-filters"><Chips label="Region" options={regions.map((r) => ({ key: r, label: r }))} value={filters.region} onChange={(region) => onFilters({ region })} /></div>}
-          <div className="vz-split">
+          <div>
             <Tile title={`${fmtInt(model.devices.length)} devices by role`} right="size = devices">
               <div className="vz-fluid" ref={bubbleRef}>
-                <DeviceBubbles groups={layout.placed} width={W} height={layout.h} visible={visible} selected={device?.name ?? null} onPick={setPicked}
+                <DeviceBubbles groups={layout.placed} width={W} height={layout.h} visible={visible} selected={device?.name ?? null}
+                  onPick={(name) => { setPicked(name); onSelect(`device:${name}`); }}
                   status={filters.status} onStatus={(v) => setStatus(v)} />
               </div>
             </Tile>
-            {device && <DeviceInstrument model={model} infos={infos} device={device} onDetails={() => onSelect(`device:${device.name}`)} />}
           </div>
         </div>
       )}
@@ -372,6 +358,10 @@ export function LinksVisual(p: VisualProps) {
           detail="Circuits come from ICMP network availability monitors tagged with site, circuit_id, circuit_role, carrier, circuit_tech and sla_ms. This page shows their latency against the SLA." />
       ) : p.view === "table" ? <div className="vz-table"><LinksPage {...p} /></div> : (
         <div className="vz-body">
+          <Tile className="vz-assist-row">
+            <AssistPanel subject={`carrier|${focusCarrier ?? "all"}`} questions={carrierQuestions(focusCarrier)} object="carriers"
+              context={() => carrierContext(model, focusCarrier, circuits.filter((c) => !focusCarrier || c.carrier === focusCarrier))} />
+          </Tile>
           <div className="vz-k4">
             {carriers.map((c) => (
               <KpiTile key={c.name} tone={c.down ? TONE.bad : c.over ? TONE.warn : c.backupActive ? TONE.cyan : TONE.accent}
@@ -469,10 +459,6 @@ export function LinksVisual(p: VisualProps) {
               <NativeDrill demo={model.demo}
                 circuits={circuits.filter((c) => c.status === "down" && (!focusCarrier || c.carrier === focusCarrier))}
                 devices={circuits.filter((c) => c.status === "down" && (!focusCarrier || c.carrier === focusCarrier)).map((c) => devicesAt(model, c.site).find((d) => d.role === "edge")).filter((d): d is Device => !!d).slice(0, 40)} />
-            </Tile>
-            <Tile tone={TONE.violet}>
-              <AssistPanel subject={`carrier|${focusCarrier ?? "all"}`} questions={carrierQuestions(focusCarrier)} object="carriers"
-                context={() => carrierContext(model, focusCarrier, circuits.filter((c) => !focusCarrier || c.carrier === focusCarrier))} />
             </Tile>
           </div>
         </div>

@@ -2,7 +2,7 @@
   "environmentUrl": "https://eob14444.apps.dynatrace.com",
   "app": {
     "name": "NetO11y",
-    "version": "0.1.68",
+    "version": "0.1.69",
     "description": "Sites, devices and WAN links on one map, with the alerts open on them",
     "icon": "./assets/icon.svg",
     "id": "my.net.o11y",
@@ -46,6 +46,18 @@
       {
         "name": "state:app-states:write",
         "comment": "Saving the site hierarchy for every user of the app"
+      },
+      {
+        "name": "davis:analyzers:read",
+        "comment": "Run dt.statistics.forecast, whose seasonal decomposition sees what a straight line through a month cannot"
+      },
+      {
+        "name": "davis:analyzers:execute",
+        "comment": "Reading the analyzer catalogue is a separate grant from running one; the forecast needs both"
+      },
+      {
+        "name": "settings:objects:read",
+        "comment": "builtin:geo-settings, which the platform's MapView reads to know whether this tenant shows the world map. Without it the call answers 403 on every load and the component falls back to enabled, so a tenant that turned the map off would be ignored"
       }
     ]
   }

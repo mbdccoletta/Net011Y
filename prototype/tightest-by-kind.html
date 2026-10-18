@@ -1,0 +1,162 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Closest to a limit · three readings, three lists</title>
+<!--
+  A prototype for the one card on the Ahead page that is not working.
+
+  Measured on the live page before writing this: all fifty rows of "Closest to a limit · port
+  traffic, CPU, memory" were memory, every one of them, and three of the fifty were visible at
+  a row height of a hundred pixels. The cause is not layout. A switch's memory sits at 84–89%
+  because that is what memory does; a port at 85% of its line rate would be an emergency. Sorted
+  together by "per cent of its own limit", memory wins every place and the ports — the subject of
+  a network capacity page — never appear.
+
+  So: three lists, each ranked inside its own kind, each saying what its per cent is of. One line
+  per subject instead of four. The bar is gone because the number beside it said the same thing;
+  the sparkline stays because it is the only mark here that shows a shape.
+
+  Every value below was read from eob14444 today.
+-->
+<style>
+  :root{
+    --bg:#141419; --surface:#19192c;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.16);
+    --ink:#fff; --ink-2:#e2e8f0; --ink-3:#9aa0b4;
+    --obs:#95c0ff;        /* categorical 11 — the measured series */
+    --fc:#9f81ff;         /* categorical 08 — carried forward */
+    --cap:#cd0c2c;        /* the ceiling */
+    --cap-ink:#ff918d;    /* critical, as text */
+    --warn:#e0c800;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+    --text:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px;background:var(--bg);color:var(--ink-2);font:400 13px/1.5 var(--mono)}
+  .card{border:1px solid var(--line);border-radius:12px;padding:16px;max-width:1180px}
+  .head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:14px}
+  .title{font-size:12px;letter-spacing:.02em;color:var(--obs)}
+  .unit{font-size:12px;color:var(--ink-3);font-family:var(--text)}
+
+  .group{margin-bottom:16px}
+  .group-h{display:flex;align-items:baseline;gap:10px;padding:6px 2px 4px;border-bottom:1px solid var(--line-2)}
+  .group-h b{font-size:12px;color:var(--ink);letter-spacing:.02em}
+  .group-h span{font-size:11px;color:var(--ink-3);font-family:var(--text)}
+  .group-h em{margin-left:auto;font-style:normal;font-size:11px;color:var(--ink-3);font-family:var(--text)}
+  .all{background:none;border:0;padding:0;margin-left:14px;font:inherit;font-size:11px;font-family:var(--text);
+       color:var(--obs);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+  table{width:100%;border-collapse:collapse;table-layout:fixed}
+  col.c-sub{width:auto} col.c-own{width:22%} col.c-n{width:11%} col.c-rec{width:104px} col.c-go{width:18px}
+  th{font-weight:400;font-size:11px;color:var(--ink-3);text-align:left;padding:4px 10px 4px 0;font-family:var(--text)}
+  th.n,td.n{text-align:right}
+  td{padding:5px 10px 5px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;
+     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  tr:hover td{background:rgba(255,255,255,.035);cursor:pointer}
+  tr.is-on td{background:rgba(255,255,255,.05);box-shadow:inset 2px 0 0 var(--obs)}
+  .name{color:var(--ink)}
+  .sub{color:var(--ink-3)}
+  .note-row{white-space:normal;color:var(--cap-ink);font-size:12px}
+  .pct{color:var(--ink)}
+  .room{color:var(--ink-2)}
+  .room.tight{color:var(--cap-ink)}
+  .move{color:var(--ink-3)}
+  .move.firm{color:var(--ink-2)}
+  .go{color:var(--ink-3);text-align:right;width:14px}
+  svg.spark{width:92px;height:20px;display:block}
+  .foot{color:var(--ink-3);font-size:12px;margin-top:10px;font-family:var(--text)}
+</style>
+
+<div class="card">
+  <div class="head">
+    <span class="title">Closest to a limit</span>
+    <span class="unit">each kind against its own limit, at its busy hour · 13 days of record</span>
+  </div>
+
+  <div class="group" id="g-port"></div>
+  <div class="group" id="g-cpu"></div>
+  <div class="group" id="g-mem"></div>
+
+  <div class="foot">
+    Ranked inside each kind, because the three are not comparable: memory at 85% is its normal,
+    a port at 85% is not. A ~ marks a move narrower than the analyzer's own band.
+    Pick a row for its full record; the chevron opens its device.
+  </div>
+</div>
+
+<script>
+// Values read from eob14444 today. The series are the shape each subject actually showed —
+// a port that spikes, a processor that sits flat, memory that creeps.
+const GROUPS = [
+  { id: "g-port", name: "Port traffic", unit: "per cent of its line rate", own: "Device", all: 126,
+    rows: [
+      { n: "Ethernet1/31 · 10 Gb/s", s: "BR-SP-DCT1-LEF-005", busy: 67.4, room: 32.6, move: +0.4, firm: false, shape: "spiky" },
+      { n: "Ethernet1/29 · 10 Gb/s", s: "BR-SP-DCT1-LEF-011", busy: 50.7, room: 49.3, move: -0.1, firm: false, shape: "spiky" },
+      { n: "Te4/1/1 · 1 Gb/s",       s: "BR-BA-LEM1-SWA-006", busy: 20.1, room: 79.9, move: +1.1, firm: true,  shape: "steps" },
+      { n: "Te1/1/1 · 1 Gb/s",       s: "BR-BA-LEM1-SWA-012", busy: 19.4, room: 80.6, move: +0.3, firm: false, shape: "steps" },
+      { n: "Te1/1/1 · 1 Gb/s",       s: "BR-MT-RON1-SWA-002", busy: 3.2,  room: 96.8, move: +0.9, firm: false, shape: "spiky",
+        note: "drops packets at 2.5% · 25 Mb/s — a fault, not its capacity" },
+    ] },
+  { id: "g-cpu", name: "CPU", unit: "per cent of the processor", own: "Site", all: 169,
+    rows: [
+      { n: "BR-BA-LEM1-SWA-022", s: "luis-eduardo-magalhaes", busy: 27.5, room: 72.5, move: +0.4, firm: false, shape: "flat" },
+      { n: "BR-BA-LEM1-SWA-005", s: "luis-eduardo-magalhaes", busy: 26.9, room: 73.1, move: +0.6, firm: false, shape: "flat" },
+      { n: "BR-BA-LEM1-SWA-021", s: "luis-eduardo-magalhaes", busy: 26.0, room: 74.0, move: +0.9, firm: true,  shape: "flat" },
+      { n: "FWC-001",            s: "transamerica-dc",        busy: 18.0, room: 82.0, move: 0,    firm: false, shape: "flat" },
+    ] },
+  { id: "g-mem", name: "Memory", unit: "per cent of all it has", own: "Site", all: 135,
+    rows: [
+      { n: "BR-BA-LEM1-SWI-001",  s: "luis-eduardo-magalhaes", busy: 89.0, room: 11.0, move: +4.6, firm: true,  shape: "creep" },
+      { n: "BR-RS-RGR1-SWI-008",  s: "rio-grande",             busy: 84.2, room: 15.8, move: +2.8, firm: true,  shape: "creep" },
+      { n: "BR-RS-RGR-SWI-001",   s: "rio-grande",             busy: 84.0, room: 16.0, move: +1.2, firm: false, shape: "creep" },
+      { n: "BR-RS-RGR-SWI-014",   s: "rio-grande",             busy: 83.9, room: 16.1, move: +0.2, firm: false, shape: "creep" },
+      { n: "HBBLBIGIP002",        s: "transamerica-dc",        busy: 38.3, room: 61.7, move: -0.1, firm: false, shape: "flat" },
+    ] },
+];
+
+/** a shape the subject actually has, drawn small: measured solid, ahead dashed, ceiling hairline */
+function spark(shape, busy, move) {
+  const W = 92, H = 20, N = 40, F = 14;
+  const base = busy;
+  const rnd = (i) => Math.sin(i * 12.9898) * 43758.5453 % 1;
+  const hist = Array.from({ length: N }, (_, i) => {
+    if (shape === "spiky") return Math.abs(rnd(i)) > 0.78 ? base : base * 0.12 + Math.abs(rnd(i * 3)) * base * 0.1;
+    if (shape === "steps") return i < N * 0.45 ? base * 0.72 : base * (0.95 + Math.abs(rnd(i)) * 0.05);
+    if (shape === "creep") return base - (N - i) * 0.06 + rnd(i) * 0.3;
+    return base * (0.96 + Math.abs(rnd(i)) * 0.07);
+  });
+  const fwd = Array.from({ length: F }, (_, k) => hist[N - 1] + (move * (k + 1)) / F);
+  const top = Math.max(100, ...hist, ...fwd) * 1.05;
+  const x = (i) => (i / (N + F - 1)) * W;
+  const y = (v) => H - (Math.max(0, v) / top) * H;
+  const path = (vals, from) => vals.map((v, k) => `${k ? "L" : "M"}${x(from + k).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <line x1="0" x2="${W}" y1="${y(100).toFixed(1)}" y2="${y(100).toFixed(1)}" stroke="var(--cap)" stroke-width="1" stroke-dasharray="2 3" opacity=".7"/>
+    <path d="${path(hist, 0)}" fill="none" stroke="var(--obs)" stroke-width="1.2"/>
+    <path d="${path([hist[N - 1], ...fwd], N - 1)}" fill="none" stroke="var(--fc)" stroke-width="1.2" stroke-dasharray="3 2"/>
+  </svg>`;
+}
+
+for (const g of GROUPS) {
+  const el = document.getElementById(g.id);
+  el.innerHTML = `
+    <div class="group-h"><b>${g.name}</b><span>${g.unit}</span><em>${g.rows.length} tightest of ${g.all} measured</em>
+    <button type="button" class="all">see all ${g.all}</button></div>
+    <table>
+      <colgroup><col class="c-sub"><col class="c-own"><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-rec"><col class="c-go"></colgroup>
+      <thead><tr>
+        <th>Subject</th><th>${g.own}</th><th class="n">Busy hour</th><th class="n">Room left</th>
+        <th class="n">In 7 days</th><th>Its record</th><th></th>
+      </tr></thead>
+      <tbody>${g.rows.map((r, i) => `
+        <tr class="${i === 0 && g.id === "g-mem" ? "is-on" : ""}">
+          <td class="name" style="${r.note ? "white-space:normal" : ""}">${r.n}${r.note ? `<div class="note-row">${r.note}</div>` : ""}</td>
+          <td class="sub">${r.s}</td>
+          <td class="n pct">${r.busy}%</td>
+          <td class="n room ${r.room < 20 ? "tight" : ""}">${r.room} pts</td>
+          <td class="n move ${r.firm ? "firm" : ""}">${r.move === 0 ? "flat" : (r.move > 0 ? "+" : "−") + Math.abs(r.move)}${r.firm || r.move === 0 ? "" : " ~"}</td>
+          <td>${spark(r.shape, r.busy, r.move)}</td>
+          <td class="go">›</td>
+        </tr>`).join("")}</tbody>
+    </table>`;
+}
+</script>

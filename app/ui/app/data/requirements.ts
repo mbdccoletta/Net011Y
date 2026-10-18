@@ -26,7 +26,7 @@ const CATALOG: Record<NeedKey, { label: string; how: string; queries?: string[] 
   traffic: { label: "Interface traffic and errors", how: "Interface counters (octets, errors, discards, CRC) from any Dynatrace network extension: the common network_device set, Generic Cisco, generic SNMP, Juniper, Palo Alto or F5", queries: familyKeys("ifTraffic", "ifErrors") },
   cpu: { label: "Device CPU and memory", how: "CPU and memory as each network extension reports them (network_device, Cisco CPM, Juniper routing engine, Palo Alto management plane, F5 host)", queries: familyKeys("cpu", "memory") },
   availability: { label: "Device availability", how: "sysUpTime polled by the network extension every minute (any family)", queries: familyKeys("uptime") },
-  icmp: { label: "Reachability and latency", how: "Synthetic network availability monitors (ICMP) targeting device and WAN circuit IPs", queries: ["icmp", "icmpNow"] },
+  icmp: { label: "Reachability and latency", how: "Synthetic network availability monitors (ICMP) targeting device and WAN circuit IPs", queries: ["icmp", "icmpNow", "icmpReach"] },
   syslog: { label: "Syslog", how: "Syslog extension, ActiveGate syslog ingest or a OneAgent from each device (openpipeline.source = extension:syslog)", queries: ["deviceLogs", "deviceLogsRecent"] },
   traps: { label: "SNMP traps", how: "SNMP traps extension receiving traps from the devices (log.source = snmptraps)", queries: ["deviceLogs", "deviceLogsRecent"] },
   lldp: { label: "Topology neighbours", how: "Neighbor discovery (CDP and LLDP) in SNMP autodiscovery, or the LLDP metric group of the SNMP extension. The map draws a route between two sites only where a cable between them is reported", queries: ["netEdges", "neighbors", "lldp"] },
@@ -42,6 +42,8 @@ const CATALOG: Record<NeedKey, { label: string; how: string; queries?: string[] 
 };
 
 export const VIEW_NEEDS: Record<string, NeedKey[]> = {
+  // Ahead reads a month of daily buckets per uplink and per processor: the devices have to be there
+  ahead: ["devices"],
   // the map draws the routes between sites from NetFlow, so it owes the reader the state of it: an
   // environment whose flows arrive but whose addresses no site claims draws nothing, and the reason
   // belongs on the view that came up empty rather than only on Traffic

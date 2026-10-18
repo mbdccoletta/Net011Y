@@ -1,0 +1,269 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Where the estate sits</title>
+<!--
+  The third try at this card, and the first that can be read at a glance.
+
+  The first drew fifty rows and they were all memory. The second drew every subject as a dot,
+  which was honest and showed the shape, but four hundred and twelve marks in three bands is a
+  tangle — and the third, which added a tail per subject for where it could get to, was worse:
+  eight hundred marks.
+
+  The mistake was treating "show the whole estate" as "draw the whole estate". The bulk of four
+  hundred subjects is not information a reader needs mark by mark; what they need is where the
+  bulk is, and which few are outside it. So the bulk became a bar — the middle half of the
+  population, with its median — and only the subjects past the ninety-fifth percentile are
+  still drawn one by one, because those are the ones a capacity reader would name.
+
+  Two bars per kind: what each subject reaches at its busy hour today, and how high Dynatrace
+  says it could get by the horizon. Reading the shift is reading two short bars, not four
+  hundred arrows.
+
+  No threshold in here is the app's: quartiles are computed from the population, not chosen.
+  Nothing is coloured by a verdict. The only red is the limit itself.
+
+  Measured on the live environment: 13 days of hourly record, horizon +156 h. Busy hour is the
+  95th percentile of the measured series; "could reach" is the peak of the analyzer's upper
+  band, not of its point forecast — the point forecast is a de-spiked cycle and reading it as a
+  peak invented a sixty-point collapse on a port that is not falling at all.
+-->
+<script>window.ROOM = {"port": [["Ethernet1/31 · 10 Gb/s", "BR-SP-DCT1-LEF-006", 75.6, 17.4, 78.5], ["Ethernet1/31 · 10 Gb/s", "BR-SP-DCT1-LEF-005", 63.6, 11.4, 51.5], ["Te1/1/2 · 1 Gb/s", "10.172.13.1", 47.5, null, null], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-018", 47.3, 0.4, 0.6], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-019", 47.3, 1, 1.4], ["Ethernet1/29 · 10 Gb/s", "BR-SP-DCT1-LEF-011", 45, 11.9, 100], ["Te1/1/2 · 1 Gb/s", "BR-BA-LEM1-SWA-008", 43.6, 0, 0], ["Te2/1/2 · 1 Gb/s", "BR-BA-LEM1-SWC-001", 23.6, 17.5, 22], ["Ethernet1/53 · 10 Gb/s", "BR-SP-DCT1-IPN-001", 22.5, 17.9, 24.4], ["Ethernet1/53 · 10 Gb/s", "BR-SP-DCT1-IPN-002", 21.7, 13, 24.2], ["Te1/1/2 · 1 Gb/s", "BR-BA-LEM1-SWA-011", 20, 15.3, 18.6], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-012", 19.9, 15.1, 21.1], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-006", 19.9, 12.6, 19.9], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-010", 17, 15, 18.2], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-007", 17, 15.1, 18.2], ["Te1/1/3 · 1 Gb/s", "BR-RS-RGR-SWA-011", 14.1, 0, 0], ["Te3/1/1 · 1 Gb/s", "BR-RS-RGR-SWA-001", 14.1, 0, 0], ["Te1/1/2 · 10 Gb/s", "BR-RS-RGR-SWA-009", 13.8, 0.2, 0.4], ["eth1-02 · 10 Gb/s", "10.175.5.62", 9.5, 3.8, 14.2], ["Te1/1/4 · 1 Gb/s", "BR-MT-RON1-SWC-001", 8.4, 5.1, 7], ["Ethernet1/8 · 10 Gb/s", "BR-SP-DCT1-LEF-010", 8, 3.7, 10.5], ["Te1/1/2 · 1 Gb/s", "10.172.85.1", 7.7, null, null], ["Te1/1/2 · 1 Gb/s", "BR-MT-RON1-SWA-012", 7.3, 5.3, 7.6], ["Te1/1/3 · 1 Gb/s", "BR-MT-RON1-SWA-013", 7.3, 8.1, 9.8], ["Te1/1/1 · 1 Gb/s", "BR-MT-RON1-SWA-011", 7, 8, 13.7], ["Te1/1/2 · 1 Gb/s", "BR-MT-RON1-SWA-014", 7, 8.2, 10.7], ["Te1/1/1 · 1 Gb/s", "BR-MT-RON1-SWA-006", 7, 5, 7.5], ["Te1/1/1 · 1 Gb/s", "BR-MT-RON1-SWA-008", 7, 0, 36.9], ["Te1/1/2 · 1 Gb/s", "BR-MT-RON1-SWA-009", 7, 4.4, 6.8], ["Te1/1/1 · 1 Gb/s", "BR-MT-RON1-SWA-015", 6.9, 1, 10.4], ["Te1/1/1 · 1 Gb/s", "BR-MT-RON1-SWA-002", 6.9, 1.8, 7.7], ["Te1/1/1 · 1 Gb/s", "BR-MT-RON1-SWA-030", 6.7, 4.9, 7.4], ["Ethernet1/5 · 100 Gb/s", "BR-SP-DCT1-SPN-001", 4.5, 1.5, 3.7], ["Te1/1/2 · 1 Gb/s", "BR-PI-URU1-SWC-001", 4.3, 4.2, 6.2], ["Te1/1/1 · 1 Gb/s", "BR-PI-URU1-SWA-023", 4.3, 1.6, 4.9], ["Te1/1/1 · 1 Gb/s", "BR-PI-URU1-SWA-013", 3.8, 3.1, 3.6], ["Ethernet1/5 · 100 Gb/s", "BR-SP-DCT1-SPN-002", 3.8, 5.1, 20.8], ["Te1/1/2 · 1 Gb/s", "BR-BA-LEM1-SWA-021", 3.6, 4.2, 7.3], ["Te1/1/1 · 1 Gb/s", "BR-PI-URU1-SWA-003", 3.5, 2.5, 4.6], ["Te1/1/1 · 1 Gb/s", "BR-MT-RON1-SWA-023", 3.5, 2.3, 4], ["Te1/1/1 · 1 Gb/s", "BR-MT-RON1-SWA-024", 3.2, 2.3, 4.7], ["Te1/1/1 · 1 Gb/s", "BR-MT-RON1-SWA-025", 3.2, 1.1, 2.4], ["Te1/1/2 · 1 Gb/s", "BR-MT-RON1-SWA-027", 3.2, 2, 4], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-022", 3.1, 2.5, 4.2], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-024", 3.1, 0.6, 2.9], ["Te1/1/2 · 1 Gb/s", "BR-MT-RON1-SWA-021", 3.1, 1.6, 3.6], ["Te1/1/2 · 1 Gb/s", "BR-BA-LEM1-SWA-015", 3, 0.3, 1.2], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-009", 2.5, 0.7, 1.6], ["Te1/1/1 · 1 Gb/s", "BR-PI-URU1-SWA-004", 2.3, 1.2, 2.4], ["Te1/1/1 · 1 Gb/s", "BR-PI-URU1-SWA-005", 2.3, 1.1, 2.8], ["Te2/1/1 · 1 Gb/s", "BR-PI-URU1-SWA-001", 2.1, 0.6, 2], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-026", 2, 0, 0], ["Po1 · 10 Gb/s", "BR-RS-RGR-SWC-001", 2, 0.9, 1.2], ["Te1/1/3 · 1 Gb/s", "10.172.13.12", 1.9, null, null], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-016", 1.8, 1.5, 3.1], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-027", 1.8, 1.4, 2.6], ["Te1/1/1 · 1 Gb/s", "BR-RS-RGR-SWA-023", 1.8, 1.5, 2], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-017", 1.5, 1, 1.6], ["Te1/1/2 · 1 Gb/s", "BR-BA-LEM1-SWA-029", 1.5, 0.4, 3.2], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-013", 1.4, 0.1, 0.9], ["Te1/1/1 · 10 Gb/s", "BR-RS-RGR-SWA-012", 1.4, 0.9, 1.4], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-025", 1.3, 1, 1.8], ["Te1/1/2 · 10 Gb/s", "BR-RS-RGR-SWA-008", 1.2, 1.2, 1.4], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-004", 1.1, 0.4, 1.5], ["Te1/1/1 · 1 Gb/s", "BR-MT-RON1-SWA-020", 1.1, 0.3, 1.1], ["Te2/1/1 · 1 Gb/s", "BR-RS-RGR-SWA-045", 1.1, 0.8, 1.1], ["Vlan18 · 10 Gb/s", "BR-SP-DCT1-LEF-007", 1, 0.8, 1.1], ["Te1/1/1 · 1 Gb/s", "BR-PI-URU-SWA-010", 0.9, 0.5, 1], ["Te1/1/3 · 10 Gb/s", "BR-RS-RGR-SWA-021", 0.8, 0.3, 0.4], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-028", 0.7, 0.2, 0.6], ["eth0 · 10 Gb/s", "10.172.48.97", 0.7, 0.7, 2.4], ["Te1/1/1 · 10 Gb/s", "BR-RS-RGR-SWA-005", 0.7, 0.7, 0.8], ["Te1/1/1 · 1 Gb/s", "BR-BA-LEM1-SWA-031", 0.6, 0.1, 0.4], ["Te1/1/2 · 1 Gb/s", "BR-PI-URU1-SWA-008", 0.6, 0.3, 0.6], ["Te1/1/1 · 1 Gb/s", "BR-PI-URU1-SWA-009", 0.6, 0.3, 0.8], ["Te1/1/1 · 1 Gb/s", "BR-PI-URU1-SWA-014", 0.6, 0.3, 0.6], ["eth0 · 10 Gb/s", "10.172.13.99", 0.5, null, null], ["Te1/1/1 · 1 Gb/s", "BR-PI-URU1-SWA-007", 0.5, 0.3, 0.5], ["Te1/1/1 · 1 Gb/s", "BR-PI-URU1-SWA-011", 0.5, 0.4, 0.6], ["Te1/1 · 1 Gb/s", "BR-RS-RGR-SWI-028", 0.5, 0.5, 0.5], ["Te1/1/1 · 1 Gb/s", "BR-MT-RON1-SWA-016", 0.4, 0.2, 0.6], ["eth0 · 10 Gb/s", "BR-RS-RGR-FWC-001", 0.4, 0.3, 0.5], ["eth0 · 10 Gb/s", "10.174.53.97", 0.4, null, null], ["eth0 · 10 Gb/s", "10.174.53.99", 0.4, null, null], ["port-channel10 · 1 Gb/s", "BR-SP-DCT1-LEF-008", 0.4, 0.5, 0.6], ["eth0 · 10 Gb/s", "10.172.13.97", 0.3, 0.2, 0.4], ["Te1/1/2 · 1 Gb/s", "BR-MT-RON1-SWA-026", 0.2, 0.1, 0.2], ["Te1/1/1 · 1 Gb/s", "BR-MT-RON1-SWA-028", 0.2, 0.1, 0.3], ["Te1/1/2 · 10 Gb/s", "BR-RS-RGR-SWA-032", 0.2, 0.2, 0.2], ["Vlan65 · 10 Gb/s", "BR-SP-DCT1-LEF-001", 0.2, 0, 0], ["Te1/1/1 · 1 Gb/s", "BR-PI-URU-SWA-012", 0.1, 0, 0], ["Te1/1/2 · 1 Gb/s", "BR-MT-RON1-SWA-018", 0.1, 0, 0.1], ["Te1/1/1 · 1 Gb/s", "BR-MT-RON1-SWA-019", 0.1, 0, 0.1], ["eth0 · 10 Gb/s", "BR-MT-RON1-FWC-001", 0.1, 0, 0.1], ["Te1/1/3 · 10 Gb/s", "BR-RS-RGR-SWA-013", 0.1, 0.2, 0.2], ["Te1/1/1 · 10 Gb/s", "BR-RS-RGR-SWA-020", 0.1, 0, 0.1], ["Te1/1/1 · 10 Gb/s", "BR-RS-RGR-SWA-003", 0.1, 0.1, 0.2], ["Te1/1/1 · 1 Gb/s", "BR-RS-RGR-SWA-030", 0.1, 0.1, 0.1], ["Te1/1/1 · 10 Gb/s", "BR-RS-RGR-SWA-043", 0.1, 0.1, 0.1], ["Te1/1/1 · 10 Gb/s", "10.174.53.50", 0.1, null, null], ["Te1/1/2 · 10 Gb/s", "BR-RS-RGR-SWA-006", 0.1, 0, 0.1], ["/DMZ/VLAN_330_DMZ_SERVER · 10 Gb/s", "10.175.25.61", 0.1, 0, 0.1]], "cpu": [["BR-RS-RGR-SWA-021", "RS/RGR", 31.3, 12.8, 13.5], ["BR-RS-RGR-SWA-009", "RS/RGR", 29.7, 11, 12.7], ["BR-BA-LEM1-SWA-022", "BA/LEM", 27.5, 26.4, 27.2], ["BR-BA-LEM1-SWA-005", "BA/LEM", 26.3, 26.4, 30.9], ["BR-BA-LEM1-SWA-021", "BA/LEM", 26, 29.4, 31.1], ["BR-BA-LEM1-SWA-012", "BA/LEM", 25.2, 28.1, 30], ["BR-BA-LEM1-SWA-019", "BA/LEM", 22.1, 17.1, 18.1], ["BR-BA-LEM1-SWA-008", "BA/LEM", 22.1, 14, 15.1], ["BR-BA-LEM1-SWA-015", "BA/LEM", 21.2, 14.1, 15.3], ["BR-BA-LEM1-SWA-018", "BA/LEM", 21.2, 16.4, 17.3], ["BR-BA-LEM1-SWA-006", "BA/LEM", 21.2, 21.4, 25.3], ["BR-RS-RGR-SWA-006", "RS/RGR", 21.2, 11.5, 12.1], ["BR-RS-RGR1-SWA-035", "RS/RGR", 21, 11.3, 12.4], ["BR-BA-LEM1-SWA-027", "BA/LEM", 19.4, 19.6, 20.1], ["BR-BA-LEM1-SWA-029", "BA/LEM", 18.6, 17.4, 19.1], ["10.175.25.61", "—", 18.1, 17.5, 18.1], ["BR-BA-LEM1-SWA-010", "BA/LEM", 17.8, 17.1, 18.1], ["BR-BA-LEM1-SWA-013", "BA/LEM", 17.8, 19.8, 23.5], ["BR-BA-LEM1-SWA-016", "BA/LEM", 17.8, 17, 17.8], ["BR-BA-LEM1-SWA-011", "BA/LEM", 17.4, 16.8, 17.9], ["10.175.25.62", "—", 17.3, 17.1, 17.5], ["BR-BA-LEM1-SWA-007", "BA/LEM", 17.1, 12.7, 13.2], ["10.172.13.12", "—", 17, null, null], ["BR-BA-LEM1-SWA-017", "BA/LEM", 16.4, 21.9, 23.8], ["BR-BA-LEM1-SWA-024", "BA/LEM", 15.7, 15.1, 16.1], ["BR-RS-RGR-SWA-011", "RS/RGR", 15.7, 13.2, 13.9], ["BR-RS-RGR-SWA-012", "RS/RGR", 15, 14.5, 14.8], ["BR-BA-LEM1-SWA-026", "BA/LEM", 14.4, 12.6, 13.5], ["BR-RS-RGR-SWA-047", "RS/RGR", 14.4, 9.7, 11], ["BR-RS-RGR-SWI-001", "RS/RGR", 14.2, 3.7, 4.3], ["BR-RS-RGR-SWA-034", "RS/RGR", 13.8, 9.7, 11.2], ["BR-RS-RGR-SWA-008", "RS/RGR", 13.5, 12.8, 13.6], ["10.175.25.65", "—", 13.4, 13.1, 13.3], ["BR-RS-RGR-SWA-023", "RS/RGR", 13.3, 12.2, 14], ["BR-PI-URU1-SWA-003", "PI/URU", 13.1, 12.1, 12.7], ["BR-PI-URU1-SWA-004", "PI/URU", 12.9, 12.1, 13.2], ["BR-PI-URU-SWA-010", "PI/URU", 12.5, 11.2, 12.7], ["BR-RS-RGR-SWA-005", "RS/RGR", 12.4, 11.5, 13], ["BR-PI-URU1-SWA-007", "PI/URU", 12.3, 11.7, 12.6], ["BR-BA-LEM1-SWA-009", "BA/LEM", 12.1, 11.7, 12.3], ["BR-RS-RGR-SWI-002", "RS/RGR", 12.1, 4.3, 4.9], ["BR-RS-RGR-SWA-013", "RS/RGR", 12, 11.1, 12.5], ["10.175.5.46", "—", 12, 10.1, 14], ["BR-BA-LEM1-SWA-031", "BA/LEM", 11.6, 9.7, 10.8], ["BR-PI-URU1-SWA-005", "PI/URU", 11.6, 10.7, 11.6], ["BR-MT-RON1-SWA-009", "MT/RON", 11.4, 10.3, 11.2], ["BR-SC-GSP1-SWA-051", "SC/GSP", 11, 9.9, 10.7], ["BR-BA-LEM1-SWA-028", "BA/LEM", 10.9, 16.6, 10.6], ["BR-PI-URU1-SWA-008", "PI/URU", 10.8, 10.1, 11.4], ["BR-BA-LEM1-SWA-001", "BA/LEM", 10.6, 9.4, 18.3], ["BR-RS-RGR-SWA-014", "RS/RGR", 10.6, 9.2, 10.9], ["BR-RS-RGR-SWA-030", "RS/RGR", 10.5, 9.6, 10.9], ["BR-RS-RGR-SWA-032", "RS/RGR", 10.3, 9.6, 10.5], ["BR-SP-DCT1-LEF-007", "SP/DCT", 10.3, 11.1, 11.5], ["BR-RS-RGR-SWI-003", "RS/RGR", 10.2, 5.3, 6.8], ["BR-MT-RON1-SWA-012", "MT/RON", 10.1, 9.3, 12.4], ["BR-MT-RON1-SWA-028", "MT/RON", 10, 8.9, 11.4], ["BR-SP-DCT1-LEF-008", "SP/DCT", 10, 11, 11.3], ["BR-RS-RGR-SWA-043", "RS/RGR", 9.9, 8.9, 9.5], ["BR-MT-RON1-SWA-021", "MT/RON", 9.8, 8.8, 9.2], ["BR-BA-LEM1-SWA-004", "BA/LEM", 9.7, 9.1, 9.6], ["BR-MT-RON1-SWA-016", "MT/RON", 9.7, 8.7, 9.7], ["BR-RS-RGR-SWA-003", "RS/RGR", 9.7, 8.8, 9.5], ["BR-MT-RON1-SWA-025", "MT/RON", 9.6, 8.5, 8.9], ["BR-MT-RON1-SWA-006", "MT/RON", 9.6, 8.9, 10], ["BR-PI-URU1-SWA-009", "PI/URU", 9.5, 8.8, 9.4], ["BR-PI-URU1-SWA-013", "PI/URU", 9.5, 9.4, 10], ["BR-MT-RON1-SWA-011", "MT/RON", 9.5, 8.9, 9.2], ["BR-MT-RON1-SWA-013", "MT/RON", 9.5, 8.4, 10.2], ["BR-MT-RON1-SWA-023", "MT/RON", 9.5, 8.4, 10.4], ["BR-MT-RON1-SWA-015", "MT/RON", 9.4, 8.8, 9.2], ["BR-MT-RON1-SWA-026", "MT/RON", 9.4, 8.3, 11.2], ["BR-MT-RON1-SWA-019", "MT/RON", 9.3, 8.1, 9.6], ["BR-MT-RON1-SWA-020", "MT/RON", 9.3, 8, 8.6], ["BR-RS-RGR-SWA-001", "RS/RGR", 9.3, 8.3, 9.7], ["BR-RS-RGR1-SWI-008", "RS/RGR", 9.3, 6.2, 7.4], ["BR-MT-RON1-SWA-018", "MT/RON", 9.2, 8.2, 8.7], ["BR-RS-RGR-SWI-010", "RS/RGR", 9.2, 6.1, 7.4], ["BR-RS-RGR-SWI-011", "RS/RGR", 9.2, 5, 6.1], ["BR-MT-RON1-SWA-031", "MT/RON", 9.1, 7.9, 8.3], ["BR-MT-RON1-SWA-008", "MT/RON", 9, 7.7, 9.9], ["BR-RS-RGR-SWA-020", "RS/RGR", 9, 8, 8.5], ["BR-SP-DCT1-LEF-001", "SP/DCT", 8.9, 9.6, 9.8], ["BR-SP-DCT1-LEF-003", "SP/DCT", 8.9, 9.7, 10], ["BR-SP-DCT1-LEF-004", "SP/DCT", 8.9, 9.7, 9.9], ["BR-SP-DCT1-LEF-009", "SP/DCT", 8.9, 9.7, 10.1], ["BR-SP-DCT1-LEF-002", "SP/DCT", 8.8, 9.4, 9.7], ["BR-MT-RON1-SWA-014", "MT/RON", 8.7, 8, 8.7], ["BR-RS-RGR-SWA-045", "RS/RGR", 8.7, 7.3, 8.7], ["BR-PI-URU1-SWA-011", "PI/URU", 8.6, 8, 8.4], ["BR-BA-PLA1-SWA-003", "BA/PLA", 8.5, 6.3, 7.1], ["BR-PI-URU1-SWA-001", "PI/URU", 8.5, 8.2, 8.7], ["BR-PI-URU1-SWA-014", "PI/URU", 8.5, 7.7, 8.4], ["BR-MT-RON1-SWA-002", "MT/RON", 8.5, 8.2, 8.3], ["BR-MT-RON1-SWA-027", "MT/RON", 8.5, 8.5, 9.4], ["BR-RS-RGR-SWI-009", "RS/RGR", 8.5, 5.1, 6.4], ["BR-BA-LEM1-SWA-025", "BA/LEM", 8.4, 9, 26], ["BR-PI-URU1-SWA-021", "PI/URU", 8.3, 7.8, 8.5], ["10.174.53.50", "—", 8.3, null, null], ["BR-MT-NVM3-SWA-001", "MT/NVM", 8.2, 7.6, 8.5], ["BR-RS-RGR-SWI-012", "RS/RGR", 8.2, 4.9, 5.6], ["BR-PI-URU-SWA-012", "PI/URU", 8.1, 7.9, 8.5], ["BR-MT-RON1-SWA-030", "MT/RON", 8.1, 7.2, 7.7], ["10.172.48.97", "—", 8.1, 3.1, 8.5], ["BR-MT-RON1-SWA-024", "MT/RON", 8, 7.4, 7.8], ["BR-RS-RGR-SWI-018", "RS/RGR", 7.8, 5.4, 6.5], ["BR-SP-DCT1-IPN-001", "SP/DCT", 7.6, 7.5, 7.6], ["BR-SP-DCT1-IPN-002", "SP/DCT", 7.6, 7.5, 7.6], ["BR-MT-NVM3-SWA-002", "MT/NVM", 7.4, 6.9, 7.2], ["BR-BA-LEM1-SWA-040", "BA/LEM", 7.3, 6.8, 7.1], ["BR-RS-RGR-SWI-007", "RS/RGR", 7.2, 4.9, 6.4], ["BR-BA-PLA1-SWA-001", "BA/PLA", 7.1, 6.8, 7.2], ["BR-RS-RGR-SWA-049", "RS/RGR", 7.1, 6.7, 7.1], ["BR-RS-RGR-SWI-006", "RS/RGR", 7.1, 5.1, 6.2], ["10.171.238.134", "—", 7, 6, 6.8], ["BR-MT-RON1-SWA-035", "MT/RON", 7, 6.8, 7.1], ["BR-RS-RGR-SWI-005", "RS/RGR", 6.9, 5.1, 6.8], ["BR-PI-URU1-SWA-023", "PI/URU", 6.8, 6.7, 7.3], ["BR-PI-LRJ1-SWA-001", "PI/LRJ", 6.6, 6.3, 6.6], ["BR-PI-LRJ1-SWA-002", "PI/LRJ", 6.6, 6.5, 6.8], ["10.171.248.133", "—", 6.3, 6.9, 8], ["BR-SP-DCT1-LEF-010", "SP/DCT", 6.3, 6.8, 6.9], ["BR-SP-DCT1-LEF-011", "SP/DCT", 6.2, 7.2, 7.7], ["10.175.5.62", "—", 6.2, 4.1, 6.1], ["BR-MT-RON1-SWA-046", "MT/RON", 5.9, 5.3, 5.7], ["BR-PI-URU1-SWA-024", "PI/URU", 5.8, 5.8, 6.1], ["BR-SP-DCT1-LEF-005", "SP/DCT", 5.4, 5.8, 5.9], ["BR-SP-DCT1-LEF-006", "SP/DCT", 5.4, 5.5, 5.6], ["BR-MT-RON1-FWP-002", "MT/RON", 4.2, 4.5, 4.9], ["10.172.13.97", "—", 3.9, 1.9, 3.3], ["BR-RS-RGR-SWI-016", "RS/RGR", 3.8, 3, 3.5], ["BR-RS-RGR-SWI-013", "RS/RGR", 3.6, 2.9, 3.3], ["BR-RS-RGR-SWI-014", "RS/RGR", 3.6, 2.9, 3.4], ["BR-RS-RGR-SWI-020", "RS/RGR", 3.6, 2.9, 3.3], ["BR-RS-RGR-SWI-028", "RS/RGR", 3.6, 3.2, 3.6], ["BR-RS-RGR-SWI-024", "RS/RGR", 3.4, 2.9, 3.4], ["BR-RS-RGR-FWC-001", "RS/RGR", 3.4, 2.2, 3.2], ["BR-BA-LEM1-SWI-002", "BA/LEM", 3.2, 3, 3.4], ["BR-BA-LEM1-SWI-001", "BA/LEM", 3, 2.6, 2.9], ["BR-MT-RON1-SWI-037", "MT/RON", 2.7, 2.5, 2.6], ["BR-MT-RON1-SWI-038", "MT/RON", 2.6, 2.5, 2.8], ["BR-MT-RON1-SWI-039", "MT/RON", 2.5, 2.3, 2.7], ["BR-MT-RON1-SWI-045", "MT/RON", 2.5, 2.4, 2.7], ["BR-RS-RGR-SWC-001", "RS/RGR", 2.5, 1.5, 1.7], ["BR-SP-DCT1-SPN-001", "SP/DCT", 2.5, 2.6, 2.7], ["BR-RS-RGR-SWI-022", "RS/RGR", 2.4, 2.1, 2.2], ["BR-SP-DCT1-SPN-002", "SP/DCT", 2.4, 2.5, 2.2], ["BR-PI-URU1-FWC-001", "PI/URU", 2.4, 2, 2.6], ["BR-MT-RON1-FWC-001", "MT/RON", 2.4, 1.8, 2.5], ["BR-MT-RON1-SWI-034", "MT/RON", 2.3, 2.3, 3.7], ["BR-MT-RON1-SWI-044", "MT/RON", 2.3, 2.2, 2.6], ["BR-RS-RGR-SWI-015", "RS/RGR", 2.3, 2.1, 2.5], ["BR-BA-LEM1-SWC-001", "BA/LEM", 2.2, 2.3, 2.5], ["BR-MT-RON1-SWI-032", "MT/RON", 2.2, 1.9, 2.2], ["BR-MT-RON1-SWI-035", "MT/RON", 2.2, 2.1, 2.4], ["BR-MT-RON1-SWI-040", "MT/RON", 2.2, 1.9, 2.2], ["BR-MT-RON1-SWI-042", "MT/RON", 2.2, 2.1, 2.4], ["10.172.48.98", "—", 2.2, 2.2, 2.7], ["10.172.13.1", "—", 2.1, null, null], ["BR-PI-URU1-SWC-001", "PI/URU", 2, 1.7, 1.9], ["BR-MT-RON1-SWC-001", "MT/RON", 1.6, 1.5, 1.6], ["10.172.85.1", "—", 1.6, null, null], ["BR-PI-URU1-SWI-001", "PI/URU", 1.2, 1, 1.1], ["BR-MT-RON1-SWI-043", "MT/RON", 1.2, 1, 1], ["BR-RS-RGR-FWP-003", "RS/RGR", 1.2, 1.3, 1.9], ["BR-SC-DCG1-CTR-007", "SC/DCG", 1, 1, 1], ["BR-MT-RON1-FWP-003", "MT/RON", 1, 0.4, 0.8], ["10.175.5.63", "—", 0.5, 0.4, 0.6], ["10.175.5.64", "—", 0.5, 0.4, 0.6], ["BR-SP-DCT1-CTR-005", "SP/DCT", 0.4, 0.2, 0.3], ["BR-BA-LEM1-FWC-002", "BA/LEM", 0.4, 0.3, 0.7], ["BR-RS-RGR-FWC-002", "RS/RGR", 0.2, 0.1, 0.2], ["10.171.193.1", "—", 0.1, 0, 0.1]], "mem": [["BR-BA-LEM1-SWI-001", "BA/LEM", 92.5, 92.4, 92.9], ["BR-RS-RGR-SWI-001", "RS/RGR", 84.8, 84.1, 84.3], ["BR-RS-RGR-SWI-005", "RS/RGR", 84.8, 84, 84.2], ["BR-RS-RGR1-SWI-008", "RS/RGR", 84.8, 85.8, 86.4], ["BR-RS-RGR-SWI-012", "RS/RGR", 84.8, 88.3, 91], ["BR-RS-RGR-SWI-013", "RS/RGR", 84.8, 83.7, 83.9], ["BR-RS-RGR-SWI-014", "RS/RGR", 84.8, 83.9, 84], ["BR-RS-RGR-SWI-016", "RS/RGR", 84.8, 83.6, 83.7], ["BR-RS-RGR-SWI-020", "RS/RGR", 84.8, 83.6, 83.7], ["BR-BA-LEM1-SWI-002", "BA/LEM", 81.2, 82.2, 82.2], ["BR-PI-URU1-SWI-001", "PI/URU", 81.2, 80.9, 81.4], ["BR-MT-RON1-SWI-045", "MT/RON", 81.2, 81.3, 81.4], ["BR-RS-RGR-SWI-002", "RS/RGR", 81.2, 82.6, 82.7], ["BR-RS-RGR-SWI-003", "RS/RGR", 81.2, 82.5, 82.7], ["BR-RS-RGR-SWI-006", "RS/RGR", 81.2, 83.2, 83.6], ["BR-RS-RGR-SWI-007", "RS/RGR", 81.2, 83.4, 83.8], ["BR-RS-RGR-SWI-009", "RS/RGR", 81.2, 90.4, 93.2], ["BR-RS-RGR-SWI-010", "RS/RGR", 81.2, 86.7, 89.1], ["BR-RS-RGR-SWI-011", "RS/RGR", 81.2, 89.4, 92], ["BR-RS-RGR-SWI-015", "RS/RGR", 81.2, 82.9, 83], ["BR-RS-RGR-SWI-018", "RS/RGR", 81.2, 82.1, 82.2], ["BR-RS-RGR-SWI-024", "RS/RGR", 81.2, 82.8, 82.9], ["BR-RS-RGR-SWI-022", "RS/RGR", 71.3, 71.5, 71.7], ["BR-PI-URU1-SWA-008", "PI/URU", 68.3, 71.1, 71.4], ["BR-MT-NVM3-SWA-001", "MT/NVM", 65.4, 70.2, 70.6], ["BR-MT-NVM3-SWA-002", "MT/NVM", 65.4, 69.8, 70.1], ["BR-BA-LEM1-SWA-004", "BA/LEM", 65.4, 69.8, 70.2], ["BR-PI-URU1-SWA-007", "PI/URU", 65.4, 47.8, 50.6], ["BR-PI-URU1-SWA-009", "PI/URU", 65.4, 47.2, 51.4], ["BR-PI-URU1-SWA-014", "PI/URU", 65.4, 69.2, 69.5], ["BR-BA-LEM1-SWA-011", "BA/LEM", 62.6, 67.8, 68.2], ["BR-BA-LEM1-SWA-016", "BA/LEM", 62.6, 67.6, 68.1], ["BR-BA-LEM1-SWA-024", "BA/LEM", 62.6, 67.8, 68.3], ["BR-BA-LEM1-SWA-008", "BA/LEM", 62.6, 67.5, 67.8], ["BR-SC-GSP1-SWA-051", "SC/GSP", 62.6, 67.3, 67.8], ["BR-MT-RON1-SWA-018", "MT/RON", 62.6, 68.1, 68.4], ["BR-MT-RON1-SWA-028", "MT/RON", 62.6, 65.9, 66.4], ["BR-MT-RON1-SWA-031", "MT/RON", 62.6, 66, 66.3], ["BR-MT-RON1-SWI-032", "MT/RON", 62.6, 61.8, 62], ["BR-MT-RON1-SWI-034", "MT/RON", 62.6, 62.2, 62.4], ["BR-MT-RON1-SWI-037", "MT/RON", 62.6, 61.5, 61.6], ["BR-MT-RON1-SWI-038", "MT/RON", 62.6, 62.9, 63], ["BR-MT-RON1-SWI-040", "MT/RON", 62.6, 61.2, 61.3], ["BR-MT-RON1-SWI-042", "MT/RON", 62.6, 62, 62.2], ["BR-BA-LEM1-SWA-001", "BA/LEM", 60, 61.6, 61.8], ["BR-PI-URU1-SWA-001", "PI/URU", 60, 61, 61.2], ["BR-MT-RON1-SWA-013", "MT/RON", 60, 63.3, 63.7], ["BR-MT-RON1-SWA-015", "MT/RON", 60, 63.3, 63.6], ["BR-MT-RON1-SWA-019", "MT/RON", 60, 62.2, 62.6], ["BR-MT-RON1-SWA-046", "MT/RON", 60, 60.5, 60.6], ["BR-MT-RON1-SWA-009", "MT/RON", 60, 63.3, 63.5], ["10.172.13.12", "—", 57.7, null, null], ["BR-BA-LEM1-SWA-009", "BA/LEM", 57.4, 59.7, 59.9], ["BR-BA-LEM1-SWA-010", "BA/LEM", 57.4, 59.8, 60.3], ["BR-BA-LEM1-SWA-012", "BA/LEM", 57.4, 60.8, 61.3], ["BR-BA-LEM1-SWA-013", "BA/LEM", 57.4, 60.1, 60.7], ["BR-BA-LEM1-SWA-017", "BA/LEM", 57.4, 59.2, 59.9], ["BR-BA-LEM1-SWA-018", "BA/LEM", 57.4, 59, 59.9], ["BR-BA-LEM1-SWA-019", "BA/LEM", 57.4, 59.9, 60.7], ["BR-BA-LEM1-SWA-025", "BA/LEM", 57.4, 59.4, 60], ["BR-BA-LEM1-SWA-028", "BA/LEM", 57.4, 59.4, 59.9], ["BR-BA-LEM1-SWA-031", "BA/LEM", 57.4, 59.4, 60.1], ["BR-BA-LEM1-SWA-006", "BA/LEM", 57.4, 59.8, 60.3], ["BR-BA-LEM1-SWA-007", "BA/LEM", 57.4, 60.1, 60.2], ["BR-PI-URU1-SWA-003", "PI/URU", 57.4, 61.2, 61.5], ["BR-PI-URU-SWA-010", "PI/URU", 57.4, 56.2, 56.3], ["BR-PI-URU1-SWA-011", "PI/URU", 57.4, 61.3, 61.6], ["BR-PI-URU-SWA-012", "PI/URU", 57.4, 60.8, 61.1], ["BR-PI-URU1-SWA-021", "PI/URU", 57.4, 60.7, 61], ["BR-MT-RON1-SWA-011", "MT/RON", 57.4, 62, 62.3], ["BR-MT-RON1-SWA-012", "MT/RON", 57.4, 62.3, 62.7], ["BR-MT-RON1-SWA-014", "MT/RON", 57.4, 62.9, 63.3], ["BR-MT-RON1-SWA-016", "MT/RON", 57.4, 61.7, 62.1], ["BR-MT-RON1-SWA-020", "MT/RON", 57.4, 62, 62.4], ["BR-MT-RON1-SWA-026", "MT/RON", 57.4, 61.2, 61.6], ["BR-MT-RON1-SWA-027", "MT/RON", 57.4, 61.8, 62.2], ["BR-BA-LEM1-SWA-027", "BA/LEM", 55, 55.8, 56], ["BR-PI-URU1-SWA-005", "PI/URU", 55, 56.9, 57.1], ["BR-MT-RON1-SWA-023", "MT/RON", 55, 53.8, 54], ["10.171.238.134", "—", 52.7, 52.5, 52.9], ["BR-BA-LEM1-SWA-015", "BA/LEM", 52.7, 53.2, 53.4], ["BR-BA-LEM1-SWA-021", "BA/LEM", 52.7, 52.4, 52.8], ["BR-BA-LEM1-SWA-022", "BA/LEM", 52.7, 53.3, 53.5], ["BR-BA-LEM1-SWA-029", "BA/LEM", 52.7, 52.8, 52.9], ["BR-BA-LEM1-SWA-005", "BA/LEM", 52.7, 53.5, 53.8], ["BR-PI-URU1-SWA-004", "PI/URU", 52.7, 53.1, 53.2], ["BR-PI-URU1-SWA-013", "PI/URU", 52.7, 51.8, 51.9], ["BR-PI-URU1-SWA-023", "PI/URU", 52.7, 53.1, 53.1], ["BR-MT-RON1-SWA-021", "MT/RON", 52.7, 52.9, 52.9], ["BR-MT-RON1-SWA-024", "MT/RON", 52.7, 53.6, 53.7], ["BR-MT-RON1-SWA-025", "MT/RON", 52.7, 53.3, 53.4], ["BR-MT-RON1-SWA-030", "MT/RON", 52.7, 53.2, 53.3], ["BR-MT-RON1-SWA-006", "MT/RON", 52.7, 53.5, 53.6], ["BR-MT-RON1-SWA-008", "MT/RON", 52.7, 52.9, 53], ["BR-RS-RGR-SWA-049", "RS/RGR", 52.7, 53.6, 53.7], ["10.174.53.50", "—", 52.3, null, null], ["BR-BA-LEM1-SWC-001", "BA/LEM", 48.3, 48.1, 48.3], ["BR-RS-RGR-SWC-001", "RS/RGR", 48.3, 49.1, 49.3], ["10.172.13.1", "—", 46.6, null, null], ["BR-MT-RON1-SWC-001", "MT/RON", 46.3, 45.8, 46], ["BR-BA-PLA1-SWA-001", "BA/PLA", 46.3, 48.4, 48.6], ["BR-PI-URU1-SWC-001", "PI/URU", 46.3, 47.5, 47.7], ["BR-MT-RON1-SWA-002", "MT/RON", 46.3, 45.4, 45.4], ["BR-MT-RON1-SWI-043", "MT/RON", 46.3, 47.1, 47.2], ["10.172.85.1", "—", 45.9, null, null], ["10.171.248.133", "—", 44.3, 43.8, 44.1], ["BR-BA-PLA1-SWA-003", "BA/PLA", 44.3, 45.2, 45.5], ["BR-PI-LRJ1-SWA-001", "PI/LRJ", 42.4, 42.8, 42.9], ["BR-PI-LRJ1-SWA-002", "PI/LRJ", 42.4, 42.2, 42.3], ["BR-BA-LEM1-SWA-026", "BA/LEM", 42.4, 41.6, 41.7], ["BR-RS-RGR-SWI-028", "RS/RGR", 40.6, 40.9, 41], ["10.175.25.62", "—", 38.9, 38.4, 38.8], ["BR-MT-RON1-SWI-035", "MT/RON", 37.2, 37.7, 37.8], ["BR-MT-RON1-SWI-039", "MT/RON", 37.2, 37.6, 37.7], ["BR-MT-RON1-SWI-044", "MT/RON", 37.2, 37.6, 37.6], ["10.175.25.61", "—", 37.2, 37.5, 38], ["10.175.25.65", "—", 35.7, 35.2, 35.5], ["BR-RS-RGR-SWA-011", "RS/RGR", 34.2, 35.9, 36.1], ["BR-RS-RGR-SWA-012", "RS/RGR", 34.2, 36.5, 36.6], ["BR-RS-RGR-SWA-013", "RS/RGR", 34.2, 35.5, 35.7], ["BR-RS-RGR-SWA-014", "RS/RGR", 34.2, 35.9, 36.1], ["BR-RS-RGR-SWA-020", "RS/RGR", 34.2, 35.7, 35.8], ["BR-RS-RGR-SWA-021", "RS/RGR", 34.2, 36, 36.2], ["BR-RS-RGR-SWA-023", "RS/RGR", 34.2, 35.8, 36], ["BR-RS-RGR-SWA-030", "RS/RGR", 34.2, 35.8, 36], ["BR-RS-RGR-SWA-032", "RS/RGR", 34.2, 36.8, 36.9], ["BR-RS-RGR-SWA-043", "RS/RGR", 34.2, 35.4, 35.5], ["BR-RS-RGR-SWA-047", "RS/RGR", 34.2, 35.7, 35.9], ["BR-RS-RGR-SWA-005", "RS/RGR", 34.2, 35.5, 35.7], ["BR-RS-RGR-SWA-006", "RS/RGR", 34.2, 35.8, 36], ["BR-RS-RGR-SWA-008", "RS/RGR", 34.2, 36.9, 37.1], ["BR-RS-RGR-SWA-009", "RS/RGR", 33.9, 35.6, 35.8], ["BR-RS-RGR1-SWA-035", "RS/RGR", 32.7, 35.5, 35.7], ["BR-RS-RGR-SWA-003", "RS/RGR", 31.3, 32.9, 33.1], ["BR-RS-RGR-SWA-034", "RS/RGR", 28.7, 28.6, 28.7], ["BR-RS-RGR-SWA-045", "RS/RGR", 28.7, 29.7, 29.8], ["BR-RS-RGR-SWA-001", "RS/RGR", 25.2, 25.5, 25.6], ["BR-SC-DCG1-CTR-007", "SC/DCG", 24.2, 24.3, 24.4], ["BR-SP-DCT1-CTR-005", "SP/DCT", 23.1, 23.2, 23.3]]};</script>
+<style>
+  :root{
+    --bg:#141419; --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.16);
+    --ink:#fff; --ink-2:#e2e8f0; --ink-3:#9aa0b4;
+    --obs:#95c0ff;   /* categorical 11 — measured */
+    --fc:#9f81ff;    /* categorical 08 — the analyzer's reach */
+    --sel:#ff8643;   /* categorical 14 — the one being looked at */
+    --cap:#cd0c2c;   /* the limit, and nothing else */
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+    --text:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink-2);font:400 13px/1.5 var(--mono);
+       display:flex;align-items:flex-start;min-height:100vh}
+  .page{flex:1;min-width:0;padding:24px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .card-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px}
+  .card-title{font-size:12px;letter-spacing:.02em;color:var(--obs)}
+  .card-unit{font-size:12px;color:var(--ink-3);font-family:var(--text)}
+  .key{display:flex;gap:18px;align-items:center;font-size:11px;color:var(--ink-3);
+       font-family:var(--text);padding:8px 0;border-bottom:1px solid var(--line)}
+  .key b{color:var(--ink-2);font-weight:400}
+
+  .kind{border-top:1px solid var(--line);padding:11px 0 4px;cursor:pointer}
+  .kind:first-child{border-top:0}
+  .kind:hover{background:rgba(255,255,255,.025)}
+  .kind.is-on{box-shadow:inset 2px 0 0 var(--sel)}
+  .kind-head{display:flex;align-items:baseline;gap:10px;margin-bottom:2px}
+  .kind-head b{font-size:12px;color:var(--ink);letter-spacing:.02em}
+  .kind-head span{font-size:11px;color:var(--ink-3);font-family:var(--text)}
+  .kind-head em{margin-left:auto;font-style:normal;font-size:11px;color:var(--ink-3);
+                font-family:var(--text);font-variant-numeric:tabular-nums}
+  svg{display:block;width:100%;overflow:visible}
+  .lab{font-size:10px;font-family:var(--text);fill:var(--ink-3)}
+  .axis{font-size:10px;font-family:var(--text);fill:var(--ink-3)}
+
+  .tip{position:fixed;pointer-events:none;z-index:9;background:#19192c;border:1px solid var(--line-2);
+       border-radius:6px;padding:6px 9px;font-size:11.5px;color:var(--ink-2);white-space:nowrap;
+       box-shadow:0 6px 18px rgba(0,0,0,.45);opacity:0;transition:opacity .08s}
+  .tip b{color:var(--ink)} .tip i{font-style:normal;color:var(--ink-3)} .tip u{text-decoration:none;color:var(--fc)}
+
+  .details{width:0;flex:0 0 auto;overflow:hidden;border-left:1px solid var(--line);
+           height:100vh;position:sticky;top:0;transition:width .16s ease}
+  .details.open{width:520px}
+  .det-in{width:520px;height:100%;display:flex;flex-direction:column;padding:18px}
+  .det-head{display:flex;align-items:baseline;gap:10px;padding-bottom:6px}
+  .det-head b{font-size:13px;color:var(--ink)}
+  .det-head span{font-size:11px;color:var(--ink-3);font-family:var(--text)}
+  .det-x{margin-left:auto;background:none;border:0;color:var(--ink-3);cursor:pointer;font:inherit;font-size:16px;line-height:1}
+  .det-x:hover{color:var(--ink)}
+  .sorts{display:flex;gap:6px;padding:2px 0 8px;border-bottom:1px solid var(--line-2)}
+  .sorts button{background:none;border:1px solid var(--line-2);border-radius:999px;padding:2px 10px;
+                color:var(--ink-3);font:inherit;font-size:11px;font-family:var(--text);cursor:pointer}
+  .sorts button.on{color:var(--ink);border-color:var(--ink-3)}
+  .det-body{overflow:auto}
+  table{width:100%;border-collapse:collapse;table-layout:fixed}
+  th{position:sticky;top:0;background:var(--bg);font-weight:400;font-size:11px;color:var(--ink-3);
+     text-align:left;padding:6px 8px 5px 0;font-family:var(--text);border-bottom:1px solid var(--line)}
+  th.n,td.n{text-align:right}
+  td{padding:4px 8px 4px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;
+     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+  tr:hover td{background:rgba(255,255,255,.035);cursor:pointer}
+  tr.is-on td{background:rgba(255,255,255,.06);box-shadow:inset 2px 0 0 var(--sel)}
+  .nm{color:var(--ink)} .sub{color:var(--ink-3)} .fc{color:var(--fc)} .none{color:var(--ink-3)}
+  .note{color:var(--ink-3);font-size:11.5px;font-family:var(--text);margin-top:10px}
+</style>
+
+<div class="page">
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">Where the estate sits, and how high it could get</span>
+      <span class="card-unit">each kind against its own limit · 13 days of record · 6&frac12; days ahead</span>
+    </div>
+    <div class="key">
+      <span><svg width="56" height="11" style="vertical-align:-2px"><line x1="2" x2="54" y1="5.5" y2="5.5" stroke="var(--obs)" stroke-width="1" stroke-opacity=".5"/><rect x="14" y="1" width="28" height="9" rx="2" fill="var(--obs)" fill-opacity=".3"/><line x1="26" x2="26" y1="0" y2="11" stroke="var(--obs)" stroke-width="2"/></svg>
+        the middle half of them, <b>median</b>, and the 5th–95th</span>
+      <span><svg width="12" height="11" style="vertical-align:-2px"><circle cx="6" cy="5.5" r="3.2" fill="none" stroke="var(--obs)" stroke-width="1.3"/></svg> past the 95th, drawn one by one</span>
+      <span style="margin-left:auto"><svg width="12" height="11" style="vertical-align:-2px"><line x1="6" x2="6" y1="0" y2="11" stroke="var(--cap)" stroke-width="1.5"/></svg> its limit</span>
+    </div>
+    <div id="kinds"></div>
+    <svg id="axis" height="16" aria-hidden="true"></svg>
+    <div class="note">Pick a kind, or one of the named outliers, for the table behind it.</div>
+  </div>
+</div>
+
+<div class="details" id="details"><div class="det-in">
+  <div class="det-head"><b id="det-t"></b><span id="det-u"></span>
+    <button type="button" class="det-x" id="det-x" title="Close">&times;</button></div>
+  <div class="sorts">
+    <button type="button" data-sort="now" class="on">Closest to its limit</button>
+    <button type="button" data-sort="move">Could rise most</button>
+  </div>
+  <div class="det-body"><table>
+    <colgroup><col><col style="width:17%"><col style="width:58px"><col style="width:76px"><col style="width:70px"><col style="width:58px"></colgroup>
+    <thead><tr><th>Subject</th><th id="det-own">Site</th><th class="n">Today</th>
+      <th class="n">Could reach</th><th class="n">Expected</th><th class="n">Move</th></tr></thead>
+    <tbody id="det-rows"></tbody>
+  </table></div>
+</div></div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+const KINDS = [
+  { id: "port", name: "Port traffic", unit: "per cent of its line rate", own: "Device", noun: "uplinks" },
+  { id: "cpu",  name: "CPU",          unit: "per cent of the processor", own: "Site",   noun: "processors" },
+  { id: "mem",  name: "Memory",       unit: "per cent of all it has",    own: "Site",   noun: "memories" },
+];
+const PAD = 8, H = 62, DEAD = 0.4;
+const tip = document.getElementById("tip");
+let open = null, openAt = -1, sortBy = "now";
+const reach = (r) => (r[4] ?? null);
+const expect = (r) => (r[3] ?? null);
+const move = (r) => (reach(r) == null ? null : Math.round((reach(r) - r[2]) * 10) / 10);
+
+/** the population's own shape: no bin width and no threshold chosen by this app */
+function spread(values) {
+  const v = values.slice().sort((a, b) => a - b), n = v.length;
+  const q = (p) => v[Math.min(n - 1, Math.round((n - 1) * p))];
+  return { lo: q(0.05), q1: q(0.25), med: q(0.5), q3: q(0.75), hi: q(0.95), max: v[n - 1], n };
+}
+
+function bar(sp, y, color, x) {
+  return `<line x1="${x(sp.lo)}" x2="${x(sp.hi)}" y1="${y}" y2="${y}" stroke="${color}" stroke-width="1" stroke-opacity=".45"/>
+    <line x1="${x(sp.lo)}" x2="${x(sp.lo)}" y1="${y - 3}" y2="${y + 3}" stroke="${color}" stroke-width="1" stroke-opacity=".45"/>
+    <line x1="${x(sp.hi)}" x2="${x(sp.hi)}" y1="${y - 3}" y2="${y + 3}" stroke="${color}" stroke-width="1" stroke-opacity=".45"/>
+    <rect x="${x(sp.q1)}" y="${y - 5.5}" width="${Math.max(1.5, x(sp.q3) - x(sp.q1))}" height="11" rx="2"
+      fill="${color}" fill-opacity=".3"/>
+    <line x1="${x(sp.med)}" x2="${x(sp.med)}" y1="${y - 7}" y2="${y + 7}" stroke="${color}" stroke-width="2"/>`;
+}
+
+function draw() {
+  const host = document.getElementById("kinds");
+  const W = host.clientWidth || 900;
+  const x = (v) => +(PAD + (v / 100) * (W - PAD * 2)).toFixed(1);
+  host.innerHTML = "";
+  for (const k of KINDS) {
+    const rows = window.ROOM[k.id];
+    const today = spread(rows.map((r) => r[2]));
+    const withReach = rows.filter((r) => reach(r) != null);
+    const ahead = spread(withReach.map((r) => reach(r)));
+    /* only the tail is drawn subject by subject: past the ninety-fifth percentile of its own
+       kind, which is where a reader stops thinking "the estate" and starts naming devices */
+    const outToday = rows.map((r, i) => ({ r, i })).filter(({ r }) => r[2] > today.hi);
+    const outAhead = rows.map((r, i) => ({ r, i })).filter(({ r }) => reach(r) != null && reach(r) > ahead.hi);
+    const top = withReach.slice().sort((a, b) => (move(b) ?? -99) - (move(a) ?? -99))[0];
+    const yA = 16, yB = 44;
+    const dots = (list, y, col) => list.map(({ r, i }) => {
+      const on = open === k.id && openAt === i;
+      return `<circle cx="${x(y === yA ? r[2] : reach(r))}" cy="${y}" r="${on ? 4 : 3.2}"
+        fill="${on ? "var(--sel)" : "none"}" stroke="${on ? "var(--bg)" : col}" stroke-width="1.3"
+        data-i="${i}" style="cursor:pointer"/>`;
+    }).join("");
+    const el = document.createElement("div");
+    el.className = "kind" + (open === k.id ? " is-on" : "");
+    el.innerHTML = `
+      <div class="kind-head"><b>${k.name}</b><span>${k.unit}</span>
+        <em>${rows.length} ${k.noun} · ${withReach.length} answered${top && move(top) >= DEAD
+          ? ` · could rise most: <b style="color:var(--ink-2)">+${move(top)} pts</b> on ${top[0]}` : ""}</em></div>
+      <svg viewBox="0 0 ${W} ${H}" height="${H}">
+        <line x1="${W - PAD}" x2="${W - PAD}" y1="4" y2="${H - 10}" stroke="var(--cap)" stroke-width="1.5"/>
+        <text class="lab" x="0" y="${yA - 11}">today</text>
+        ${bar(today, yA, "var(--obs)", x)}${dots(outToday, yA, "var(--obs)")}
+        <text class="lab" x="0" y="${yB - 11}">could reach</text>
+        ${bar(ahead, yB, "var(--fc)", x)}${dots(outAhead, yB, "var(--fc)")}
+      </svg>`;
+    el.addEventListener("click", (e) => {
+      const t = e.target.closest("[data-i]");
+      show(k.id, t ? Number(t.dataset.i) : 0);
+    });
+    el.addEventListener("mousemove", (e) => {
+      const t = e.target.closest("[data-i]");
+      if (!t) { tip.style.opacity = 0; return; }
+      const r = rows[Number(t.dataset.i)], m = move(r);
+      tip.innerHTML = `<b>${r[0]}</b> <i>${r[1]}</i><br>${r[2]}% <i>busy hour today</i>`
+        + (reach(r) == null ? `<br><i>no curve from the analyzer</i>`
+          : `<br><u>${reach(r)}%</u> <i>could reach</i> · <u>${expect(r)}%</u> <i>expected</i>`);
+      tip.style.opacity = 1;
+      tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 12) + "px";
+      tip.style.top = (e.clientY - 56) + "px";
+    });
+    el.addEventListener("mouseleave", () => { tip.style.opacity = 0; });
+    host.appendChild(el);
+  }
+  const ax = document.getElementById("axis");
+  ax.setAttribute("viewBox", `0 0 ${W} 16`);
+  ax.innerHTML = [0, 25, 50, 75, 100].map((v) => {
+    const px = x(v);
+    const anchor = v === 0 ? "start" : v === 100 ? "end" : "middle";
+    return `<text class="axis" x="${px}" y="10" text-anchor="${anchor}"
+      ${v === 100 ? 'fill="var(--cap)"' : ""}>${v === 100 ? "100%" : v + "%"}</text>`;
+  }).join("");
+}
+
+function show(kindId, index) {
+  open = kindId; openAt = index;
+  const k = KINDS.find((x) => x.id === kindId);
+  const rows = window.ROOM[kindId];
+  const subject = rows[index];
+  const order = rows.map((r, i) => ({ r, i })).sort((a, b) => sortBy === "move"
+    ? (move(b.r) ?? -99) - (move(a.r) ?? -99) || b.r[2] - a.r[2]
+    : b.r[2] - a.r[2]);
+  document.getElementById("det-t").textContent = k.name;
+  document.getElementById("det-u").textContent = `${k.unit} · ${rows.length} measured`;
+  document.getElementById("det-own").textContent = k.own;
+  document.getElementById("det-rows").innerHTML = order.map(({ r, i }) => {
+    const m = move(r);
+    return `<tr class="${r === subject ? "is-on" : ""}" data-i="${i}">
+      <td class="nm">${r[0]}</td><td class="sub">${r[1]}</td>
+      <td class="n">${r[2]}%</td>
+      <td class="n ${reach(r) == null ? "none" : "fc"}">${reach(r) == null ? "not analysed" : reach(r) + "%"}</td>
+      <td class="n ${expect(r) == null ? "none" : "fc"}">${expect(r) == null ? "\u2014" : expect(r) + "%"}</td>
+      <td class="n ${m == null || Math.abs(m) < DEAD ? "none" : "fc"}">${m == null ? "\u2014"
+        : Math.abs(m) < DEAD ? "flat" : (m > 0 ? "+" : "\u2212") + Math.abs(m)}</td></tr>`;
+  }).join("");
+  document.getElementById("details").classList.add("open");
+  document.getElementById("det-rows").onclick = (e) => {
+    const tr = e.target.closest("tr");
+    if (tr) show(kindId, Number(tr.dataset.i));
+  };
+  requestAnimationFrame(() => {
+    document.querySelector("#det-rows tr.is-on")?.scrollIntoView({ block: "center" });
+    draw();
+  });
+}
+
+document.querySelectorAll(".sorts button").forEach((b) => b.addEventListener("click", () => {
+  sortBy = b.dataset.sort;
+  document.querySelectorAll(".sorts button").forEach((x) => x.classList.toggle("on", x === b));
+  if (open) show(open, openAt);
+}));
+document.getElementById("det-x").addEventListener("click", () => {
+  open = null; openAt = -1;
+  document.getElementById("details").classList.remove("open");
+  draw();
+});
+addEventListener("resize", draw);
+draw();
+</script>

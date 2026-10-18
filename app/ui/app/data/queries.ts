@@ -122,7 +122,19 @@ export const QUERIES: Record<string, NetQuery> = {
   devices: { complete: true, query: "smartscapeNodes EXT_NETWORK_DEVICE", maxResultRecords: 50000 },
   // the extension families this environment sends: only their queries run (formats.ts)
   families: { query: familiesQuery(), maxResultRecords: 100 },
-  interfaces: { complete: true, query: "smartscapeNodes EXT_NETWORK_INTERFACE", maxResultRecords: 150000, detail: true },
+  /**
+   * Only the seven fields the model reads off a port node.
+   *
+   * `smartscapeNodes EXT_NETWORK_INTERFACE` hands back the whole node, and on this estate
+   * that is 10 752 records and 12.2 MB over the wire for the seven fields below — measured,
+   * with the projection at 2.0 MB and the same record count, 1337 ms down to 316. The map
+   * reads a port's name, its speed, whether it is up, what kind it is, and the chassis that
+   * owns it; everything else on the node is carried and discarded.
+   */
+  interfaces: {
+    complete: true, maxResultRecords: 150000, detail: true,
+    query: "smartscapeNodes EXT_NETWORK_INTERFACE | fields id, name, speed, operational_status, admin_status, interface_type, `device.chassis_mac`",
+  },
   // Every metric family of the Dynatrace network extensions, from one catalog (formats.ts): one query per
   // family and measure, named "<measure>:<family>", so they run side by side. A family the environment does
   // not send answers at once with nothing.
@@ -131,11 +143,67 @@ export const QUERIES: Record<string, NetQuery> = {
     ["ifErrors", { complete: true, detail: true, maxResultRecords: 60000 }],
     ["ifSummary", { complete: true, maxResultRecords: 50000 }],
     ["errSummary", { complete: true, maxResultRecords: 50000 }],
-    ["cpu", { complete: true, maxResultRecords: 50000 }],
-    ["memory", { complete: true, maxResultRecords: 50000 }],
-    ["uptime", { complete: true, maxResultRecords: 50000 }],
+    /* Every view but Traffic. A processor, a memory and an uptime are read by the device
+       panel, the device and site lists, the WAN view and Ahead; the flow page draws none of
+       them and was waiting fifteen queries for them anyway. Listing the views that use it is
+       the only way to say "not this one" — the catalogue has no deny list. */
+    ["cpu", { complete: true, maxResultRecords: 50000, views: ["map", "sites", "devices", "wan", "ahead", "device", "site"] }],
+    ["memory", { complete: true, maxResultRecords: 50000, views: ["map", "sites", "devices", "wan", "ahead", "device", "site"] }],
+    ["uptime", { complete: true, maxResultRecords: 50000, views: ["map", "sites", "devices", "wan", "ahead", "device", "site"] }],
     ["reboots", { maxResultRecords: 5000 }],
+    // A fortnight of hourly buckets per port and per processor: the heaviest interface read the app
+    // makes, so it runs on the page that draws it and nowhere else.
+    //
+    // Deliberately not marked complete. These two reads *are* the forecast's record and a cap
+    // reached here would remove ports from the count without saying which — but `complete` is
+    // read by the shared requirements panel, and no source lists these queries, so the flag would
+    // change a readout on every other page to report nothing at all. A cut belongs on the page
+    // that made the read. The ceilings below match these caps so neither side trims the other.
+    /* The uplinks are what Ahead draws, so they come with the page; every port follows in the
+       last wave, for the device a reader opens in the panel. */
+    ["ifHourlyUp", { detail: true, views: ["ahead"], maxResultRecords: 60000 }],
+    /* Every port's fortnight, which is the heaviest read this app makes: measured on this
+       estate it answers 75.6 MB. Only Ahead and the panel of an opened device draw it, and
+       it carries the view that says so — see `viewWants`, which holds a read this size back
+       until Ahead is open. Nothing else reads a port's fortnight: the device panel's own
+       busy hours come from the processor and memory records, which are not gated. */
+    ["ifHourly", { detail: true, views: ["ahead"], maxResultRecords: 60000 }],
+    ["cpuHourly", { views: ["ahead"], maxResultRecords: 50000 }],
+    ["memHourly", { views: ["ahead"], maxResultRecords: 50000 }],
   ] as const).flatMap(([m, opts]) => familyQueries(m).map(([name, query]) => [name, { ...opts, query }]))),
+  /**
+   * What the devices themselves say changed, counted rather than listed.
+   *
+   * There was a Changes panel that read only what Dynatrace raised: measured on this
+   * environment, 86 "changes" in twenty-four hours of which 85 were alerts and 24 of the
+   * first 25 were the same monitoring outage repeated once per device. The devices were
+   * reporting their own and nothing read them: in six hours, 14,169 line-protocol
+   * transitions, 1,155 link up/downs and 15 configuration writes — and one port,
+   * GigabitEthernet1/0/26 on 10.172.229.6, flapping 2,195 times, six times a minute, for
+   * the whole window.
+   *
+   * The panel is gone — thirteen thousand transitions a day is something to ask a question
+   * about, not to read — and these counts are now the context behind "What changed" on the
+   * devices Assist.
+   *
+   * It is counted in Grail, not fetched. Two hundred thousand syslog lines are not a list a
+   * reader can use, and shipping them to the browser to group there would be the same read at
+   * twenty times the transfer. What comes back is one row per facility, mnemonic, device and
+   * port, with how many and when it last happened.
+   */
+  netChanges: {
+    query: `fetch logs, from:now()-6h | filter ${SYSLOG_SOURCE}
+      | parse content, "LD '%' UPPER:fac '-' INT:sev '-' UPPER:mnem ':' LD:rest EOS"
+      | filter isNotNull(mnem) and (mnem == "UPDOWN" or mnem == "CONFIG_I" or mnem == "RESTART"
+          or contains(mnem, "ERR_DISABLE") or contains(mnem, "PSECURE") or contains(mnem, "ADJCHG")
+          or contains(mnem, "RELOAD"))
+      | parse rest, "LD 'Interface ' LD:iface (',' | ' ')"
+      | fieldsAdd ip = ${SOURCE_IP}
+      | summarize events = count(), last = max(timestamp), by:{fac, mnem, ip, iface}
+      | sort events desc | limit 300`,
+    maxResultRecords: 300,
+    views: ["devices"],
+  },
   vlans: { query: vlanQuery(), maxResultRecords: 20000 },
   // Inventory arrives as primary Grail tags: site tags on the SNMP monitoring configurations,
   // circuit tags (carrier, role, SLA) on the ICMP network availability monitor of each WAN circuit.
@@ -155,6 +223,24 @@ export const QUERIES: Record<string, NetQuery> = {
   icmpNow: {
     complete: true,
     query: `timeseries {rtt=avg(dt.synthetic.multi_protocol.icmp.round_trip_time), sent=sum(dt.synthetic.multi_protocol.icmp.packets_sent), recv=sum(dt.synthetic.multi_protocol.icmp.packets_received)}, by:{request.target_address, monitor.name, dt.entity.multiprotocol_monitor, dt.entity.synthetic_location, ${CIRCUIT_TAGS}}, from:now()-2h, interval:5m`,
+    maxResultRecords: 40000,
+  },
+  /**
+   * Whether each ping target answers, with no round trip asked for.
+   *
+   * `icmpNow` above asks for the round trip alongside the counters, and a target that
+   * answers nothing has no round trip at all — so Grail returns no series for it and the
+   * target disappears from the result. Measured on this environment: the query above comes
+   * back with 569 rows and the one below with 667, and the ninety-eight it is missing are
+   * exactly the addresses with packets sent and nothing received. Three of CTR-007's four
+   * addresses are among them. Everything the app says about what stopped answering was
+   * being read from the one source that cannot see it.
+   *
+   * Metric queries carry no query charge, so this is a second read and not a second bill.
+   */
+  icmpReach: {
+    complete: true,
+    query: "timeseries {sent=sum(dt.synthetic.multi_protocol.icmp.packets_sent), recv=sum(dt.synthetic.multi_protocol.icmp.packets_received)}, by:{request.target_address, monitor.name, dt.entity.multiprotocol_monitor}, from:now()-2h, interval:5m",
     maxResultRecords: 40000,
   },
   // What the devices say about themselves: syslog and SNMP traps read once over the last DEVICE_LOG_HOURS,

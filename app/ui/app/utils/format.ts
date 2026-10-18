@@ -15,13 +15,16 @@ export function fmtBytes(b?: number | null) {
 
 export function fmtBps(b?: number | null) {
   if (b == null) return "—";
-  const u = ["bps", "kbps", "Mbps", "Gbps", "Tbps"];
+  /* One notation for bits per second, everywhere. The app printed "962 Mbps" on Traffic and
+     "20.52 Gb/s" on Ahead for the same quantity; the slashed form is the one the charts and
+     the ports already use, so it is the one that stays. */
+  const u = ["b/s", "kb/s", "Mb/s", "Gb/s", "Tb/s"];
   let i = 0;
   while (b >= 1000 && i < u.length - 1) { b /= 1000; i++; }
   return `${b >= 100 ? b.toFixed(0) : b.toFixed(1)} ${u[i]}`;
 }
 
-export const speedLabel = (s?: number | null) => (!s ? "—" : s >= 1000 ? `${+(s / 1000).toFixed(1)} Gbps` : `${s} Mbps`);
+export const speedLabel = (s?: number | null) => (!s ? "—" : s >= 1000 ? `${+(s / 1000).toFixed(1)} Gb/s` : `${s} Mb/s`);
 
 export const hhmm = (iso?: string | null) => (iso ? `${iso.slice(11, 16)} UTC` : "—");
 
@@ -43,6 +46,21 @@ export function onActivate(fn: () => void) {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); }
   };
 }
+
+/**
+ * Per cent, written one way.
+ *
+ * Measured across the app before this existed: 5.50%, 22.69%, 21.2%, 29%, 0.4% and 27,5 — five
+ * precisions and one decimal comma, each decided inside the component that printed it. One
+ * decimal is enough for a reading of a limit, trailing zeros carry no information, and the
+ * separator is the one the rest of the app's numbers use.
+ */
+export const pct = (v?: number | null, digits = 1) =>
+  v == null || !Number.isFinite(v) ? "—" : `${Number(v.toFixed(digits))}%`;
+
+/** Points of a limit: the same rule, so a masthead and the row it names cannot disagree. */
+export const pts = (v?: number | null, digits = 1) =>
+  v == null || !Number.isFinite(v) ? "—" : String(Number(v.toFixed(digits)));
 
 /** A percent sign hugs its number, a word unit is spaced from it; either way the unit is always drawn,
  * because a bare "0.4" on the path was read as seconds where it meant milliseconds. */

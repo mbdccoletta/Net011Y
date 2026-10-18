@@ -1,9 +1,9 @@
 // Feeds the generated Grail results through the app's own model code and reports what every view gets.
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES } from "./out/queries.mjs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, deviceVerdict, portCounts, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, deviceVerdict, portCounts, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -21,6 +21,13 @@ if (scenarioAge() > 30 * 60e3) {
   // its own report goes nowhere: this script's stdout is the JSON the tooling reads
   execFileSync(process.execPath, [new URL("generate.mjs", import.meta.url).pathname], { stdio: ["ignore", "ignore", "inherit"], cwd: new URL(".", import.meta.url).pathname });
 }
+
+// The report goes first, before anything can throw.
+//
+// A syntax error in this file left the previous run's out/validation.json in place, and reading
+// it afterwards showed a green suite that had not run at all. A stale pass is worse than a
+// crash, because a crash is visible.
+try { rmSync("out/validation.json"); } catch { /* nothing to clear */ }
 
 const R = JSON.parse(readFileSync("out/results.json", "utf8"));
 const report = { schema: {}, needs: {}, views: {}, checks: [] };
@@ -59,6 +66,7 @@ report.views = {
 
 // 3) Does the injected scenario come through, with the app judging nothing by itself?
 const check = (name, ok, detail) => report.checks.push({ ok: !!ok, name, detail });
+const silenceReason = (r) => (!r.fit ? "too little record" : !r.fit.rising ? r.fit.why : "beyond what the record can see");
 const openOf = (x) => (x?.problems ?? []).filter((p) => !p.muted);
 const sc = scenario.alerts;
 
@@ -646,6 +654,201 @@ const badHooks = hooksAfterReturn();
 check("No component calls a hook after an early return",
   badHooks.length === 0,
   badHooks.map((b) => `${b.file}:${b.line} ${b.fn} · ${b.hook}`).join(" · ") || "none");
+
+// ── Ahead: the refusals, which are the whole point of the module ──────────────────────────────
+// Each of these locks in something a live measurement caught the earlier version getting wrong.
+const ramp = (n, a, b) => Array.from({ length: n }, (_, i) => a + ((b - a) * i) / (n - 1));
+const wobble = (n, mid, amp) => Array.from({ length: n }, (_, i) => mid + amp * Math.sin(i * 2.4));
+
+// Measured on two environments: of 21 series whose rise passed the noise test, 19 held a step and
+// 13 were flat after it. A host that jumped 27 → 46 and held would have been called saturating in
+// 39 days. The fit has to run on the regime after the change, which here has no slope at all.
+//
+// These series are hourly, because that is what the app reads: a fortnight of hours per port, not
+// a month of days. The detector needs two days of record and twelve hours either side of a split
+// before it will name a step, so a thirty-point fixture tests nothing — it is below the floor and
+// passes by never being asked. Three days at one level and three at the next is the smallest
+// honest version of the same shape.
+const stepped = [...wobble(72, 27, 1.5), ...wobble(72, 46, 1.5)];
+const sr = read(stepped);
+check("A series that steps and then holds is a change, not a forecast",
+  sr.state === "changed" && sr.fit && sr.fit.mid === null,
+  `${sr.state} · step ${sr.step ? `${sr.step.from.toFixed(0)}→${sr.step.to.toFixed(0)}` : "none"} · date ${sr.fit?.mid ?? "none"}`);
+
+check("The step is found where it happened",
+  sr.step && Math.abs(sr.step.at - 72) <= 1, `at ${sr.step?.at}`);
+
+// A rise smaller than the noise it sits in is not a rise. The earlier gate only asked slope > 0.
+const noisy = Array.from({ length: 30 }, (_, i) => 50 + i * 0.08 + (i % 2 ? 8 : -8));
+const nr = read(noisy);
+check("A rise inside the noise produces no date",
+  nr.fit && !nr.fit.rising && nr.fit.why === "the rise is inside the noise" && nr.fit.mid === null,
+  nr.fit?.why ?? "no fit");
+
+// 180 days from 30 is a six-fold extrapolation whose band assumes the line still holds out there.
+const slow = ramp(30, 40, 44);
+const sl = fitLine(slow);
+check("The horizon never runs past twice the record", sl && sl.far === 60, `far ${sl?.far}`);
+check("A crossing beyond that horizon is not reported as a date",
+  sl && sl.rising && sl.mid === null, `rising ${sl?.rising} · date ${sl?.mid ?? "none"}`);
+
+// A climb the record can carry still has to produce one.
+const fast = ramp(144, 60, 92);
+const fr = read(fast);
+check("A climb that does reach the limit inside the horizon keeps its date",
+  fr.state === "climbing" && fr.fit?.mid != null && fr.fit.mid <= fr.fit.far,
+  `${fr.state} · ${fr.fit?.mid ?? "none"}h of ${fr.fit?.far}`);
+
+// The mirror of the step test, and the reason it has to be long enough to reach the detector: a
+// smooth ramp splits into two well-separated halves and was called a change, which cost every
+// real trend its forecast. The guard is that a split must beat a straight line, not just a
+// constant — a check that only means something on a series the detector will look at.
+check("A smooth ramp is a trend, not a step", findStep(fast) === null, `${findStep(fast) ? "step found" : "no step"}`);
+
+// "Close" is the subject's own largest rise, never a number the app chose.
+const edgy = [...wobble(72, 55, 1), ...wobble(72, 78, 1)];
+check("One jump from the limit measures the jump the subject has already made",
+  Math.abs(jumpOf(edgy, findStep(edgy)) - 23) < 2 && read(edgy).jump > 20,
+  `jump ${jumpOf(edgy, findStep(edgy)).toFixed(1)} pts`);
+
+// 40% of interfaces on one environment carry a discard counter that has been non-zero for months.
+const steady = wobble(30, 30, 2);
+check("A discard counter that is not rising does not make a subject urgent",
+  read(steady, 0).state !== "dropping" && read(steady, 5000).state === "dropping",
+  `${read(steady, 0).state} / ${read(steady, 5000).state}`);
+
+// Nothing reported disappears: a subject with no claim still says why.
+const hushed = read(wobble(30, 20, 1));
+check("A subject with nothing to say still carries a reason",
+  hushed.state === "quiet" && !!silenceReason(hushed), silenceReason(hushed));
+
+// "Changed" is a finished event. One that stepped and is still climbing has a live date, and
+// hiding it under the label of the past event is the first mistake in reverse.
+const steppedThenClimbs = [...wobble(14, 40, 1.2), ...ramp(16, 56, 80)];
+const liveStep = read(steppedThenClimbs);
+// The invariant the change actually guarantees: a live date is never filed away as a finished
+// event. ("Stepped and still climbing" is usually caught by "one jump from a limit" first, because
+// a step large enough to detect is usually large enough to arrive on its own — which is a fair
+// verdict and a more urgent one.)
+check("A subject with a live date is never filed as a finished change",
+  liveStep.fit?.mid != null && liveStep.state !== "changed"
+  && read([...ramp(30, 60, 92)]).state !== "changed",
+  `${liveStep.state} · date ${liveStep.fit?.mid ?? "none"}`);
+// "Settles" is the harder half: the regime after the step need not be perfectly flat, it only has
+// to be going nowhere that matters. This one drifts a point and a half over its three days — a
+// real slope, fitted honestly, arriving at the limit long past the horizon the record allows. It
+// is still the change that happened, not a forecast.
+const settled = [...wobble(72, 27, 1.5), ...ramp(72, 46, 47.5)];
+const sd = read(settled);
+check("A step that settles stays a change",
+  sd.state === "changed" && sd.fit?.mid === null, `${sd.state} · date ${sd.fit?.mid ?? "none"}`);
+
+// ── Ahead: busy-hour headroom, and the ceilings it refuses to invent ─────────────────────────
+// Measured on a live environment: the busy hour sits 2.93× above the mean, and 85% of the hours
+// in which a port discarded were below half its line rate. These lock in what the reading may
+// and may not conclude from that.
+const flatWithPeaks = Array.from({ length: 24 * 10 }, (_, i) => (i % 24 === 18 ? 60 : 20));
+check("The busy hour is the busy hour, not the average",
+  busyHour(flatWithPeaks) === 60 && Math.abs(quantile(flatWithPeaks, 0.5) - 20) < 0.01,
+  `busy ${busyHour(flatWithPeaks)} · median ${quantile(flatWithPeaks, 0.5)}`);
+
+// A port that discards in nearly every hour is not telling you a level; it is telling you it is
+// broken. Measured: the median discarding port drops in 62% of its hours, and none in under 5%.
+const always = Array.from({ length: 240 }, () => 30);
+check("A port that discards in almost every hour demonstrates no ceiling",
+  shownCeiling(always, always.map(() => 1)) === null, "null");
+
+// One that separates does: clean below, discarding above.
+const split = Array.from({ length: 240 }, (_, i) => (i % 4 === 0 ? 55 : 20));
+const splitD = split.map((u) => (u > 50 ? 3 : 0));
+const shown = shownCeiling(split, splitD);
+check("A port that discards only when loaded shows where its trouble starts",
+  shown !== null && shown >= 50 && shown <= 60, `${shown}`);
+
+// And the headroom falls back to the stated limit rather than inventing one.
+const idleRun = Array.from({ length: 240 }, () => 12);
+const hq = headroomOf(idleRun, undefined);
+check("With no discard evidence the ceiling is the one its owner stated",
+  hq !== null && hq.source === "stated" && hq.ceiling === 100 && Math.abs(hq.pts - 88) < 1,
+  `${hq?.source} · ${hq?.pts.toFixed(0)} pts`);
+
+const hs = headroomOf(split, splitD);
+check("A demonstrated ceiling leaves less room than the line rate would",
+  hs !== null && hs.source === "shown" && hs.pts < (100 - hs.busy),
+  hs ? `${hs.source} · ${hs.pts.toFixed(0)} pts against ${(100 - hs.busy).toFixed(0)} by the line rate` : "none");
+
+// The whole point: a reading that exists where a crossing date does not.
+const nothingHappening = Array.from({ length: 240 }, (_, i) => 9 + Math.sin(i / 3) * 0.4);
+check("An estate with no crossing still has a headroom for every subject",
+  fitLine(nothingHappening)?.mid == null && headroomOf(nothingHappening) !== null,
+  `date ${fitLine(nothingHappening)?.mid ?? "none"} · room ${headroomOf(nothingHappening)?.pts.toFixed(0)} pts`);
+
+// An SNMP counter that wraps, or a poll gap that makes one delta cover several intervals,
+// arrives as a single enormous hour. Measured: 172 of 397 interfaces with a line rate report at
+// least one hour above 100% of it. The busy hour is the median of the daily maxima, so exactly
+// one such hour per day is enough to make every daily maximum fiction.
+const withArtefact = Array.from({ length: 24 * 8 }, (_, i) => (i % 24 === 5 ? NaN : 20));
+check("One impossible hour a day does not become the busy hour",
+  busyHour(withArtefact) === 20, `${busyHour(withArtefact)}`);
+
+const roomA = headroomOf(withArtefact);
+check("Headroom is measured from the hours that happened",
+  roomA !== null && Math.abs(roomA.pts - 80) < 1, `${roomA?.pts.toFixed(0)} pts`);
+
+// ── Ahead: the record half of the runway, and the tag sequence ───────────────────────────────
+// The left of the chart is not a forecast, so every point on it has to be a day the series was
+// actually over the line. A subject that touched the limit once and fell back has not arrived.
+check("A touch of the limit that does not hold is not a crossing",
+  crossedAgo([...wobble(20, 60, 3), 104, ...wobble(9, 62, 3)]) === null, "no crossing");
+check("A crossing that holds is dated from the record",
+  crossedAgo([...wobble(14, 80, 2), ...wobble(16, 107, 2)]) === 15,
+  String(crossedAgo([...wobble(14, 80, 2), ...wobble(16, 107, 2)])));
+
+// A probability carries what a date hides: at one day out the answer is nearly yes or no, at
+// thirty it is a genuine maybe, and it must never run backwards as the horizon widens.
+const climb = fitLine(ramp(30, 60, 92));
+check("The chance of crossing only grows with the horizon",
+  [1, 5, 10, 20, 30].every((d, i, a) => i === 0 || chanceBy(climb, d) >= chanceBy(climb, a[i - 1])),
+  [1, 10, 30].map((d) => `${d}d ${(chanceBy(climb, d) * 100).toFixed(0)}%`).join(" · "));
+
+// The backtest has to be able to fail, or it is decoration. A series that turns after the cut
+// is one the earlier record could not have predicted, and the test must say so.
+//
+// It cuts at two thirds and fits what is behind the cut, so the series has to be long enough that
+// the earlier part clears the fit's own floor of twenty-four points. At thirty the cut left
+// twenty, no fit was possible, and the test reported "no backtest" — which is not a pass.
+const turns = [...ramp(80, 30, 70), ...ramp(40, 70, 20)];
+const bt = backtest(turns);
+check("A backtest can fail, and does when the series turns", bt && bt.grade === "poor",
+  bt ? `${bt.grade} · ${bt.inBand}/${bt.of}` : "no backtest");
+
+// Changes cluster: measured, sixteen fell on seven days with six on one. A change on its own is
+// a single, not an estate-wide event.
+//
+// `ago` is in hours, like every other age in the module, and this fixture used to feed it bare
+// numbers that had been written when the window was daily — so the window could silently shrink
+// from a day to an hour and the suite stayed green while one estate-wide change split into a
+// dozen singles on screen. The hours are explicit now, and the check asserts both sides: what
+// belongs to the event, and what is far enough away to be left out of it.
+const subjAt = (ago, site) => ({ site, name: `p${ago}${site}`, reading: { now: 50, hist: [], step: { ago, from: 30, to: 50, t: 9 }, state: "changed" } });
+const cl = clusterChanges([subjAt(20, "a"), subjAt(26, "b"), subjAt(38, "c"), subjAt(70, "d"), subjAt(200, "e")]);
+check("Changes within a day are one event, and one days later is not",
+  cl.events.length === 1 && cl.events[0].members.length === 3 && cl.singles.length === 2,
+  `${cl.events.length} event of ${cl.events[0]?.members.length} · ${cl.singles.length} singles`);
+
+// The tag sequence narrows without changing what is counted.
+const where = { a1: { c: "br", u: "sp" }, a2: { c: "br", u: "rs" }, a3: { c: "us", u: "ga" } };
+const mk = (site) => ({ site, name: site, reading: { now: 40, hist: [], step: null, state: "quiet", fit: null } });
+const all = [mk("a1"), mk("a2"), mk("a3")];
+const resolve = (site, key) => where[site]?.[key === "country" ? "c" : "u"];
+check("A tag path narrows the set and nothing else",
+  narrow(all, ["country", "uf"], [], resolve).length === 3
+  && narrow(all, ["country", "uf"], ["br"], resolve).length === 2
+  && narrow(all, ["country", "uf"], ["br", "sp"], resolve).length === 1,
+  "3 / 2 / 1");
+check("A site with no value for a level is counted, not dropped",
+  branchesAt(all.concat(mk("zz")), ["country"], [], resolve).some((b) => b.value === "Not tagged"),
+  branchesAt(all.concat(mk("zz")), ["country"], [], resolve).map((b) => b.value).join(" "));
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 

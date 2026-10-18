@@ -58,9 +58,15 @@ export const problemReason = (p: DeviceProblem): Reason => ({
   // statement as the device stopped answering — and when the device really has stopped, SNMP says so
   // on its own. One monitoring configuration covering forty-nine switches, every one of them polling
   // happily, used to paint the lot red; the network team read the screen and said the day was normal.
+  //
+  // The sentence used to open "Reachability is not being measured … the monitor that pings this device
+  // is out". Measured against the record it was false: the monitor of P-26103695 sent twenty-four
+  // packets to each of its hundred and sixty-two targets in the last interval and got answers from a
+  // hundred and thirty-nine of them. Nothing was out. What the alert says is that some address in that
+  // monitoring configuration stopped answering, which is a statement about the configuration.
   level: p.viaMonitor ? "Not monitored" : problemLevel(p),
   text: p.viaMonitor
-    ? `Reachability is not being measured: ${p.name}${p.displayId ? ` (${p.displayId})` : ""}${p.start ? ` · since ${hhmm(p.start)} UTC` : ""}. The monitor that pings this device is out, so what follows comes from what still answers.`
+    ? `${p.name}${p.displayId ? ` (${p.displayId})` : ""}${p.start ? ` · since ${hhmm(p.start)} UTC` : ""}. The alert is on the monitoring configuration that pings this device, not on the device: what follows is what the device itself reports.`
     : `${p.name}${p.on ? ` · ${p.on}` : ""}${p.displayId ? ` (${p.displayId})` : ""}${p.start ? ` · open since ${hhmm(p.start)} UTC` : ""}`,
 });
 

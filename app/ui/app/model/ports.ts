@@ -18,7 +18,8 @@ export interface PortCounts {
   known: boolean;
 }
 
-const isUp = (i: Iface) => i.oper.startsWith("up");
+/** the one definition of "this port is up": the value arrives as `up(1)`, not as `up` */
+export const isUp = (i: Pick<Iface, "oper">) => i.oper.startsWith("up");
 const isUnused = (i: Iface) => i.admin.startsWith("down") || i.oper.startsWith("notPresent");
 
 export function portCounts(d: Device): PortCounts {

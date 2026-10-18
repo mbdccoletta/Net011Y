@@ -11,7 +11,10 @@
 :root{
   --bg:#0e0e14; --panel:#15151f; --metal:#1d1f2b; --metal-2:#262937;
   --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.16);
-  --ink-hi:#fff; --ink:#e4e9f2; --ink-3:#a8b0c0; --muted:#757d91;
+  /* --ink-2 sits between the body ink and the subdued one: it is what the case text, the KPI
+     captions and the claim rows ask for, and without it `color: var(--ink-2)` is invalid and
+     computes to black on a near-black stage. Seven places went unreadable on one missing line. */
+  --ink-hi:#fff; --ink:#e4e9f2; --ink-2:#cdd4e1; --ink-3:#a8b0c0; --muted:#757d91;
   --good:#00bb7b; --warn:#f0b429; --bad:#e0384f; --cyan:#22d3ee; --violet:#8b5cf6;
   --sans:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
@@ -21,6 +24,32 @@ html{color-scheme:dark}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 14px/1.5 var(--sans)}
 .wrap{max-width:1340px;margin:0 auto;padding:22px 20px 80px}
 
+/* ---------------------------------------------------------------- verdicts */
+.vindex{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:0 0 18px}
+.vindex a{display:block;text-decoration:none;border:1px solid var(--line);border-left:3px solid var(--vc);
+  border-radius:9px;padding:11px 13px;color:inherit}
+.vindex a:hover{border-color:var(--vc)}
+.vindex b{display:block;font:700 22px var(--mono);color:var(--vc);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.vindex span{display:block;margin-top:2px;font:500 11px var(--mono);letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted)}
+.vs{margin:0 0 26px;scroll-margin-top:14px}
+.vh{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 0 11px;
+  font:700 16px var(--sans);color:var(--ink-hi);letter-spacing:-.01em}
+.vh i{width:9px;height:9px;border-radius:3px;background:var(--vc);align-self:center}
+.vh b{font:700 15px var(--mono);color:var(--vc);font-variant-numeric:tabular-nums}
+.vh span{flex:1 1 320px;font:400 12px var(--sans);color:var(--muted)}
+.why{list-style:none;margin:0;padding:0;display:grid;gap:1px;background:var(--line-2);
+  border:1px solid var(--line-2);border-radius:9px;overflow:hidden}
+.why li{display:grid;grid-template-columns:92px 1fr 48px;gap:12px;align-items:baseline;
+  background:var(--panel);padding:10px 13px}
+.why b{font:700 15px var(--mono);color:var(--ink);font-variant-numeric:tabular-nums;text-align:right}
+.why span{font-size:13px;color:var(--ink-3)}
+.why i{font:600 11px var(--mono);color:var(--muted);font-style:normal;text-align:right}
+@media (max-width:720px){
+  .vindex{grid-template-columns:1fr 1fr}
+  .why li{grid-template-columns:70px 1fr}
+  .why i{display:none}
+}
 /* ---------------------------------------------------------------- chrome */
 .crumbs{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font:500 12px var(--mono);margin-bottom:14px}
 .crumbs button{background:none;border:0;padding:0;font:inherit;color:var(--cyan);cursor:pointer}
@@ -44,17 +73,89 @@ h1 small{display:block;font:500 10.5px var(--mono);letter-spacing:.1em;text-tran
 .legend{display:flex;flex-wrap:wrap;gap:4px 20px;margin-top:9px;font:500 11px var(--mono);color:var(--muted)}
 .legend span{white-space:nowrap}
 .legend span:last-child{white-space:normal;flex:1 1 100%;font:400 11.5px/1.55 var(--sans);color:var(--muted)}
-.scroll{overflow-x:auto}
-.scroll table{min-width:520px}
+.hero .herob{display:grid;grid-template-columns:1fr 400px;gap:24px;align-items:center}
+.lead1{margin:0 0 7px;font-size:15px}
+.lead1 b{font-size:16px;letter-spacing:-.01em}
+.lead2{margin:0 0 11px;font-size:13.5px;line-height:1.6;color:var(--ink-2);max-width:46ch}
+.lead2 .late{color:var(--bad)}
+.lead3{display:flex;align-items:center;gap:9px;margin:0 0 15px;font-size:11.5px;color:var(--muted)}
+.open{background:none;border:1px solid var(--line);color:var(--ink);font:600 12.5px var(--sans);
+  padding:8px 15px;border-radius:7px;cursor:pointer}
+.open:hover{border-color:var(--cyan);color:var(--cyan)}
+.heroc svg{display:block;width:400px;height:186px}
+.strip .bars{display:flex;align-items:flex-end;gap:8px}
+.bar{flex:1;background:none;border:0;padding:0;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;gap:5px;color:var(--muted);font:600 10px var(--mono)}
+.bar i{display:block;width:100%;border-radius:3px 3px 0 0;opacity:.62;transition:opacity .12s}
+.bar .n{font:700 12px var(--mono);color:var(--ink-2);font-variant-numeric:tabular-nums;min-height:15px}
+.bar .l{letter-spacing:.07em;text-transform:uppercase}
+.bar:hover i{opacity:.9}
+.bar.on i{opacity:1}
+.bar.on .l,.bar.on .n{color:var(--ink)}
+.bar.on{border-bottom:2px solid var(--ink-3);margin-bottom:-2px}
+.bar.empty{cursor:default;opacity:.4}
+@media (max-width:720px){
+  .hero .herob{grid-template-columns:1fr}
+  .heroc svg{width:100%;height:auto}
+}
+.work,.head{list-style:none;margin:0;padding:0}
+.work.lines{padding:2px 0 8px 16px;border-left:2px solid var(--line-2);margin-left:2px}
+.ln2{border-bottom:1px solid var(--line-2)}.ln2:last-child{border-bottom:0}
+.ln2 .grow{padding:10px 2px}
+.ln2.open>.grow{background:rgba(255,255,255,.028)}
+.restw{padding:0 0 12px 16px;border-left:2px solid var(--line-2);margin-left:2px}
+.rest{display:flex;flex-wrap:wrap;gap:6px;max-height:252px;overflow-y:auto;padding:2px 2px 2px 0}
+.rc{display:flex;align-items:baseline;gap:7px;background:none;border:1px solid var(--line);border-radius:6px;
+  padding:5px 9px;font:500 11.5px var(--sans);color:var(--ink-2);cursor:pointer;white-space:nowrap}
+.rc:hover{border-color:var(--cyan);color:var(--cyan)}
+.rc b{font:700 11px var(--mono);color:var(--warn);font-variant-numeric:tabular-nums}
+.rc b.bad{color:var(--bad)}
+.g{border-bottom:1px solid var(--line-2)}
+.g:last-child{border-bottom:0}
+.grow{display:grid;grid-template-columns:1.6fr .9fr 174px 74px 74px 40px;gap:12px;align-items:center;
+  padding:12px 2px;cursor:pointer;width:100%;box-sizing:border-box}
+.grow:hover{background:rgba(255,255,255,.035)}
+.g.open>.grow{background:rgba(255,255,255,.028)}
+.chev{font:400 17px var(--mono);color:var(--muted);line-height:1}
+.g.open .chev{color:var(--ink-2)}
+.sp{display:block;width:164px;height:42px}
+.sep2{padding:16px 2px 7px;border-bottom:1px solid var(--line-2)}
+.sep2 span{font:600 10px var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.work li.sep2:first-child{padding-top:4px}
+.work.inner{padding:2px 0 10px 16px;border-left:2px solid var(--line-2);margin-left:2px}
+.work.inner .w{padding:9px 2px}
+@media (max-width:720px){
+  .grow{grid-template-columns:1fr 1fr;gap:8px 14px}
+  .grow .evw{grid-column:1/-1}
+  .work.inner{padding-left:9px}
+}
+.w,.head li{display:grid;grid-template-columns:1.6fr .9fr 174px 74px 74px 40px;gap:12px;align-items:center;width:100%;box-sizing:border-box}
+.head li{padding:0 2px 7px;border-bottom:1px solid var(--line-2)}
+.head span{font:600 10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.w{padding:11px 2px;border-bottom:1px solid var(--line-2)}
+.w:last-child{border-bottom:0}
+.w:hover{background:rgba(255,255,255,.035)}
+.w .what b{font-size:13px;display:block;letter-spacing:-.01em}
+.w .where{font-size:12.5px;line-height:1.35}
+.w .where>.ln{text-align:left;display:inline}
+.ln{background:none;border:0;padding:0;font:inherit;color:var(--ink-2);cursor:pointer;border-bottom:1px solid transparent}
+.ln:hover{color:var(--cyan);border-bottom-color:var(--cyan)}
+.sep{color:var(--muted)}
+.ev{display:block;width:164px;height:42px}
+.num{text-align:right}
+.num .sub2{text-align:right}
+.rec{display:flex;justify-content:flex-end}
+.card.urgent{border-color:color-mix(in srgb,var(--bad) 42%,var(--line))}
+h2.bad{color:var(--bad)}
+@media (max-width:720px){
+  .head{display:none}
+  .w{grid-template-columns:1fr 1fr;gap:8px 14px}
+  .w .evw{grid-column:1/-1}
+  .num{text-align:left}.num .sub2{text-align:left}.rec{justify-content:flex-start}
+}
 .after{font-size:11.5px;color:var(--muted);margin:12px 0 0;line-height:1.55}
 svg{display:block;width:100%;height:auto;overflow:visible}
 .ax{font:500 10px var(--mono);fill:var(--muted)}
-.axb{font:600 10.5px var(--mono);fill:var(--ink-3)}
-.tag{font:600 10.5px var(--mono)}
-.spk{display:block;width:96px;height:34px}
-.trail{transition:opacity .12s;cursor:pointer}
-svg:hover .trail{opacity:.2!important}svg .trail:hover{opacity:1!important}
-svg.lit .trail{opacity:.12!important}svg.lit .trail.on{opacity:1!important}
 .pick{cursor:pointer}.pick:hover{opacity:.84}
 
 /* ---------------------------------------------------------------- rows */
@@ -109,12 +210,76 @@ tr.pick:hover td{background:rgba(255,255,255,.035)}
 .foot p{margin:0}
 code{font:500 12px var(--mono);color:var(--ink)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* every target says where it is; the ring is the same on a row, a chip and a port */
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;border-radius:4px}
+#title:focus{outline:none}
+.w:focus-visible,.grow:focus-visible{outline-offset:-2px}
+g.pick:focus-visible{outline-offset:1px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ---------------------------------------------------------------- the three bands */
+.rw{display:block;width:100%;height:auto}
+.scope{margin-bottom:14px}
+.crumbs2{margin:0 0 9px;display:flex;align-items:center;gap:10px;font:500 11.5px var(--mono)}
+.crumbs2 b{color:var(--ink-hi);font-weight:600}
+.crumbs2 i{font-style:normal;font:500 10px var(--mono);letter-spacing:.04em;text-transform:uppercase;
+  color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:2px 7px}
+.scope ul{list-style:none;margin:0;padding:0;display:grid;gap:1px}
+.scope button{width:100%;display:grid;grid-template-columns:minmax(80px,1.1fr) minmax(0,2fr) 60px 98px;gap:12px;
+  align-items:center;background:none;border:0;border-radius:6px;padding:6px 8px;cursor:pointer;text-align:left;
+  font:inherit;color:var(--ink-2)}
+.scope button:hover{background:rgba(255,255,255,.035)}
+.sn{font-size:12.5px;overflow-wrap:anywhere}
+.sb{display:block;height:7px;border-radius:4px;background:var(--line);overflow:hidden}
+.sb i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--bad),var(--warn))}
+.snum{text-align:right;display:flex;justify-content:flex-end;gap:7px;font:700 12px var(--mono);
+  font-variant-numeric:tabular-nums;color:var(--warn)}
+.snum .pst{color:var(--bad)}.snum .non{color:var(--muted);font-weight:500}
+.swhen{text-align:right;font:500 10.5px var(--mono);color:var(--muted)}
+.after .pst{color:var(--bad)}.after .amb{color:var(--warn)}
+
+.case-top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 18px;align-items:center;padding:0 0 13px;
+  border-bottom:1px solid var(--line)}
+.case-chip{grid-column:1/-1;margin:0 0 7px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  font:600 11px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--ink-hi)}
+.case-chip i{width:7px;height:7px;border-radius:50%;background:var(--warn)}
+.case-chip em{font-style:normal;font-weight:500;letter-spacing:.03em;color:var(--muted)}
+.case-top h3{margin:0;font:700 19px var(--mono);letter-spacing:-.01em;color:var(--ink-hi)}
+.case-top p{margin:3px 0 0;font-size:12px;color:var(--muted)}
+.kpi{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  border-bottom:1px solid var(--line)}
+.kpi li{padding:10px 16px 11px;border-right:1px solid var(--line)}
+.kpi li:first-child{padding-left:0}.kpi li:last-child{border-right:0}
+.kpi span{display:block;font:600 10px var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.kpi strong{display:block;margin:4px 0 2px;font:700 20px var(--mono);letter-spacing:-.02em;color:var(--warn);
+  font-variant-numeric:tabular-nums}
+.kpi small{display:block;font-size:11px;line-height:1.45;color:var(--muted)}
+.case-fig{margin:0;padding:12px 0 0}
+.case-fig svg{display:block;width:100%;height:auto}
+.case-fig figcaption{margin:11px 0 0;font-size:11.5px;line-height:1.6;color:var(--muted);max-width:96ch}
+
+.claims{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.claim{border:1px solid var(--line);border-left:3px solid var(--claim);border-radius:10px}
+.claim-head{display:grid;grid-template-columns:84px minmax(0,1fr) 30px;gap:14px;align-items:center;
+  padding:11px 15px;cursor:pointer}
+.claim-head:hover{background:rgba(255,255,255,.035)}
+.claim-n{font:700 21px var(--mono);color:var(--claim);font-variant-numeric:tabular-nums;letter-spacing:-.02em;text-align:right}
+.claim-t strong{display:block;color:var(--ink-hi);font-size:14px;font-weight:600}
+.claim-t small{display:block;margin-top:3px;font-size:12px;color:var(--muted)}
+.claim-c{text-align:center;font:400 19px var(--mono);color:var(--muted);line-height:1}
+.claim-body{padding:2px 15px 15px;border-top:1px solid var(--line)}
+@media (max-width:720px){
+  .kpi{grid-template-columns:1fr 1fr}
+  .scope button{grid-template-columns:minmax(70px,1fr) 54px}
+  .sb,.swhen{display:none}
+}
 </style>
 </head>
 <body>
 <div class="wrap">
   <nav class="crumbs" id="crumbs"></nav>
-  <h1><small id="kicker">Prototype · Ahead</small><span id="title"></span></h1>
+  <h1><small id="kicker">Prototype · Ahead</small><span id="title" tabindex="-1"></span></h1>
   <p class="lede" id="lede"></p>
   <div id="body"></div>
   <div class="foot">
@@ -132,12 +297,90 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 const HZ = 180, MONTHS = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr"];
 const monthOf = (d) => Math.min(5, Math.max(0, Math.floor(d / 30)));
 const rnd = (seed) => () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
-const series = (from, to, n, noise, r) => Array.from({ length: n }, (_, i) => {
-  const t = i / (n - 1), week = (i % 7 === 5 || i % 7 === 6) ? -noise * 1.6 : 0;
-  return Math.max(0, +(from + (to - from) * t + (r() - 0.5) * noise * 2 + week).toFixed(1));
-});
-function fit(hist) {
+// How spiky a day is next to its neighbours, relative to a month of drift. Clean ramps made the
+// confidence gate idle — every slope sat far outside its own noise, so 27% of subjects produced a
+// date where two live environments yield 3 to 6. Traffic is not a ramp; it is a weekly rhythm with
+// bursts on top, and the drift hides inside that.
+const SPIKE = 2.2;
+
+// How fast a thing that is growing actually grows, in points of its limit per month. The first
+// generator moved a circuit four to thirty points in a month, which would be an extraordinary
+// year in one month, and it put 27% of subjects on course to cross inside six months. Measured on
+// two live environments the real yield is 3 to 6: most things do not move, and most of what moves
+// crosses in six hundred days or forty thousand, not in sixty.
+const GROWTH = 0.1;
+// How often a series steps instead of drifting. Measured, a level shift is at least as common as
+// a trend and far easier to see in a month of record — and most of what looked like a trend was a
+// step being misread as one.
+const STEPPY = 0.34;
+
+const series = (from, to, n, noise, r, noStep = false) => {
+  const jump = !noStep && r() < STEPPY
+    ? { at: 6 + Math.floor(r() * (n - 12)), by: (0.6 + r() * 2.4) * (r() < 0.78 ? 1 : -1) * (3 + to * 0.35) } : null;
+  return Array.from({ length: n }, (_, i) => {
+    const t = i / (n - 1), week = (i % 7 === 5 || i % 7 === 6) ? -noise * 1.6 : 0;
+    const burst = r() < 0.12 ? (r() - 0.25) * noise * 5 : 0;
+    const lvl = jump && i >= jump.at ? jump.by : 0;
+    return Math.max(0, +(from + (to - from) * t + lvl + (r() - 0.5) * noise * 2 * SPIKE + week + burst).toFixed(1));
+  });
+};
+
+/**
+ * Where a series stopped being one thing and became another.
+ *
+ * Every split of the record is tried and the most separated one kept, judged by how far the two
+ * means lie apart relative to the scatter inside each. The bar is high because many splits were
+ * tried, and the best of many looks significant by luck alone.
+ *
+ * This matters more than the trend. Measured across two live environments, of twenty-one series
+ * whose rise was confident enough to pass the noise test, nineteen contained a step and thirteen
+ * were flat after it: the slope described an event that had already finished, and the date it
+ * produced was an artifact. One host that jumped from 27% to 46% in a day and held there would
+ * have been announced as saturating in thirty-nine days.
+ */
+function step(hist) {
+  // The real position of every sample is kept: on one live environment 46% of interfaces have
+  // gaps inside their own span, and counting samples would tell a reader something changed
+  // twenty-one days ago when the calendar says thirty.
   const pts = hist.map((v, i) => [i, v]).filter(([, v]) => v != null);
+  const y = pts.map(([, v]) => v), n = y.length;
+  if (n < 12) return null;
+  const last = pts[n - 1][0];
+  let best = null, bestRss = Infinity;
+  for (let k = 5; k <= n - 5; k++) {
+    const a = y.slice(0, k), b = y.slice(k);
+    const ma = a.reduce((p, c) => p + c, 0) / a.length, mb = b.reduce((p, c) => p + c, 0) / b.length;
+    const ss = a.reduce((p, c) => p + (c - ma) ** 2, 0) + b.reduce((p, c) => p + (c - mb) ** 2, 0);
+    const sd = Math.sqrt(ss / (n - 2)) || 1e-9;
+    const t = Math.abs(mb - ma) / (sd * Math.sqrt(1 / a.length + 1 / b.length));
+    if (!best || t > best.t) { best = { t, at: k, ago: last - pts[k][0], from: ma, to: mb }; bestRss = ss; }
+  }
+  if (!best || best.t <= 4) return null;
+  // A smooth ramp splits into two well-separated halves and looks exactly like a step, which would
+  // turn every genuine trend into "something changed" and cost it its forecast. So the step has to
+  // beat a straight line, not merely a flat one.
+  const sx = y.reduce((a, _, i) => a + i, 0), sy = y.reduce((a, v) => a + v, 0);
+  const sxx = y.reduce((a, _, i) => a + i * i, 0), sxy = y.reduce((a, v, i) => a + i * v, 0);
+  const den = n * sxx - sx * sx;
+  if (den) {
+    const m = (n * sxy - sx * sy) / den, c = (sy - m * sx) / n;
+    if (bestRss > y.reduce((a, v, i) => a + (v - (c + m * i)) ** 2, 0) * 0.75) return null;
+  }
+  return best;
+}
+
+
+/** the largest rise the series has actually shown — its own unit of surprise, not ours */
+function jumpOf(hist, st) {
+  if (st && st.to > st.from) return st.to - st.from;
+  const y = hist.filter((v) => v != null);
+  let m = 0;
+  for (let i = 1; i < y.length; i++) m = Math.max(m, y[i] - y[i - 1]);
+  return m;
+}
+
+function fit(hist, from = 0) {
+  const pts = hist.map((v, i) => [i, v]).filter(([, v]) => v != null).slice(from);
   if (pts.length < 8) return null;
   const n = pts.length, sx = pts.reduce((a, [x]) => a + x, 0), sy = pts.reduce((a, [, y]) => a + y, 0);
   const sxx = pts.reduce((a, [x]) => a + x * x, 0), sxy = pts.reduce((a, [x, y]) => a + x * y, 0);
@@ -147,10 +390,20 @@ function fit(hist) {
   const se = Math.sqrt(resid / Math.max(1, n - 2)) / Math.sqrt(sxx - (sx * sx) / n);
   const last = pts[pts.length - 1][0];
   const at = (d) => intercept + slope * (last + d), band = (d) => 1.96 * se * d;
+  // The slope has to be positive *with confidence*, not merely positive. Measured on two live
+  // environments, this one test turned twenty confident dates back into "no signal" — every one of
+  // them a rise smaller than the noise it sat in. Without it a forecast invents dates out of spiky
+  // traffic, which is the normal shape of traffic.
+  const rising = slope - 1.96 * se > 0;
   const cross = (s) => (s <= 0 ? null : (100 - at(0)) / s);
-  const ok = (v) => (v != null && Number.isFinite(v) && v > 0 && v <= HZ ? Math.round(v) : null);
-  return { slope, se, at, band, days: n, now: at(0), mid: ok(cross(slope)),
-    lo: ok(cross(slope + 1.96 * se)) ?? 0, hi: ok(cross(slope - 1.96 * se)) ?? HZ };
+  // twice the record, measured as the days it covers rather than the samples it holds
+  const span = pts[pts.length - 1][0] - pts[0][0] + 1;
+  const far = Math.min(HZ, span * 2);
+  const ok = (v) => (v != null && Number.isFinite(v) && v > 0 && v <= far ? Math.round(v) : null);
+  return { slope, se, at, band, days: n, now: at(0), rising,
+    why: rising ? null : (slope <= 0 ? "flat or falling" : "the rise is inside the noise"),
+    mid: rising ? ok(cross(slope)) : null,
+    far, lo: ok(cross(slope + 1.96 * se)) ?? 0, hi: ok(cross(slope - 1.96 * se)) ?? far };
 }
 
 // ---------------------------------------------------------------- the network
@@ -168,28 +421,69 @@ const LINK_DEFS = [
   ["LEM", "Claro", "primary", "50 Mb/s", 60, 45, 52.8, 64, 44, 48],
   ["Gaspar", "Oi", "primary", "20 Mb/s", 60, 50, 48.6, 59, 41, 43],
 ];
+/**
+ * A port's thirty days of record is built when something asks for it.
+ *
+ * Only the uplinks reach the first screen; the other forty-eight exist to be drawn on the front
+ * panel, which is one device at a time. Building all of them up front costs half a million series
+ * on an estate of ten thousand devices, for data nobody has asked to see — and it is the wrong
+ * shape anyway: in the real app the faceplate is its own query, run when the device is opened.
+ * The draw parameters are decided eagerly, so the random sequence stays deterministic and a port
+ * built later is the port that would have been built now.
+ */
+/**
+ * A series is not a number, it is a small history: where it is now, whether it changed, how big a
+ * change it is capable of, and whether it is already losing packets. Everything the page says is
+ * one of those four, and only the last of them is a forecast.
+ */
+function read(hist, dropSeed) {
+  const st = step(hist);
+  const y = hist.filter((v) => v != null);
+  const now = y.slice(-3).reduce((a, b) => a + b, 0) / Math.min(3, y.length);
+  const r = rnd(dropSeed);
+  // A discard counter that has been non-zero for months is a configuration artifact — policing, a
+  // duplex mismatch, a QoS drop — and on one live environment forty percent of interfaces carry
+  // one. Reporting those as "already hurting" would bury the few that matter. What counts is a
+  // discard rate that has *started* rising, which is the same gate everything else on this page
+  // has to pass, and it goes with load: measured, interfaces that drop sit around ten percent
+  // utilisation while those that do not sit at zero.
+  const drops = r() < Math.max(0, (now - 62) / 260) ? Math.round(120 + r() * 9e4) : 0;
+  return { hist, st, now, drops, jump: jumpOf(hist, st), f: fit(hist, st ? st.at : 0) };
+}
+
+function fillPort(p) {
+  if (p.hist || !p.draw) return p;
+  p.hist = series(p.draw.from, p.draw.to, 30, p.draw.noise, rnd(p.draw.seed));
+  Object.assign(p, read(p.hist, p.draw.seed + 7));
+  return p;
+}
+
 function makeDevice(id, name, site, model, seed, hot, tune) {
   const r = rnd(seed), ports = [];
   for (let i = 1; i <= 52; i++) {
     const up = i <= 4 ? true : r() < 0.42, shut = !up && r() < 0.62;
-    let hist = null;
+    let draw = null;
     if (up) {
       const to = 8 + r() * 46, from = Math.max(1, to - (r() < 0.3 ? 4 + r() * 22 : r() * 5));
-      hist = series(from, to, 30, 1.4 + r() * 2.4, rnd(seed + i * 13));
+      draw = { from, to, noise: 1.4 + r() * 2.4, seed: seed + i * 13 };
     }
-    ports.push({ n: i, name: i > 48 ? `Te1/1/${i - 48}` : `Gi1/0/${i}`, speed: i > 48 ? 10000 : 1000,
-      up, shut, hist, f: hist ? fit(hist) : null, uplink: i > 48 });
+    const port = { n: i, name: i > 48 ? `Te1/1/${i - 48}` : `Gi1/0/${i}`, speed: i > 48 ? 10000 : 1000,
+      up, shut, draw, hist: null, f: null, uplink: i > 48 };
+    if (draw && port.uplink) fillPort(port);
+    ports.push(port);
   }
   const star = ports.find((p) => p.n === hot);
   if (star) {
-    star.up = true; star.shut = false;
-    star.hist = series(tune ? tune.pFrom : 54, tune ? tune.pTo : 81, 30, 2.1, rnd(seed + 999));
-    star.f = fit(star.hist);
+    star.up = true; star.shut = false; star.draw = null;
+    // a port that genuinely climbs is not also given a level change: with both, the fit runs on
+    // the shortened regime after the step and the state is "changed", so the forecast never shows
+    star.hist = series(tune ? tune.pFrom : 54, tune ? tune.pTo : 81, 30, 2.1, rnd(seed + 999), !!tune?.fast);
+    Object.assign(star, read(star.hist, seed + 998));
   }
   const cpu = tune ? series(tune.cFrom, tune.cTo, 30, 2.2, rnd(seed + 5))
                    : series(44 + r() * 10, 58 + r() * 14, 30, 2.2, rnd(seed + 5));
   const mem = series(38 + r() * 8, 46 + r() * 10, 30, 1.6, rnd(seed + 6));
-  return { id, name, site, model, ports, cpu: { hist: cpu, f: fit(cpu) }, mem: { hist: mem, f: fit(mem) } };
+  return { id, name, site, model, ports, cpu: read(cpu, seed + 11), mem: read(mem, seed + 12) };
 }
 const DEVICES = [
   makeDevice(0, "BR-RS-RGR-SWA-013", "Rio Grande", "Catalyst 9300 · 48T-4X", 11, 17),
@@ -231,65 +525,275 @@ const MODEL = ["Catalyst 9200 · 48P-4G", "Catalyst 9300 · 48T-4X", "Catalyst 9
 // A branch network has several sites per town, numbered. Six sites proved nothing; forty-eight
 // proved the picture composes; this is the size at which individual marks stop separating, which
 // is the only size worth designing against.
-const PER_TOWN = 6;
+const PER_TOWN = 200;
 for (let b = 0; b < PER_TOWN; b++) UF_CITY.forEach(([uf, city, code], j) => {
   const k = b * UF_CITY.length + j, seed = 131 + k * 7, r = rnd(seed);
   const name = b === 0 ? city : `${city} ${b + 1}`;
   SITE_DEFS.push([name, uf, seed]);
   const [plan, lead] = PLAN[Math.floor(r() * 4)], sla = [40, 45, 50, 60, 80][Math.floor(r() * 5)];
-  const mood = r(), bwNow = 34 + r() * 44, climb = mood < 0.42 ? 4 + r() * 26 : (mood < 0.78 ? r() * 3 : -(2 + r() * 9));
-  const rtNow = 40 + r() * 34, rtClimb = r() < 0.28 ? 5 + r() * 22 : (r() - 0.6) * 6;
+  const mood = r(), bwNow = 34 + r() * 44, climb = (mood < 0.42 ? 4 + r() * 26 : (mood < 0.78 ? r() * 3 : -(2 + r() * 9))) * GROWTH;
+  const rtNow = 40 + r() * 34, rtClimb = (r() < 0.28 ? 5 + r() * 22 : (r() - 0.6) * 6) * GROWTH;
   LINK_DEFS.push([name, CARRIER[Math.floor(r() * 4)], "primary", plan, lead, sla,
     +(bwNow - climb).toFixed(1), +bwNow.toFixed(1), +(rtNow - rtClimb).toFixed(1), +rtNow.toFixed(1)]);
   // A processor that climbs is the exception, and an uplink that reaches its line rate inside six
   // months is rarer still. Anything that only wobbles has no date, which is the normal state.
-  const cm = r(), cNow = 28 + r() * 40, cUp = cm < 0.2 ? 6 + r() * 30 : (cm < 0.7 ? r() * 2.5 : -(1 + r() * 7));
-  const pm = r(), pNow = 24 + r() * 52, pUp = pm < 0.26 ? 5 + r() * 34 : (pm < 0.74 ? r() * 3 : -(2 + r() * 8));
+  const cm = r(), cNow = 28 + r() * 40, cUp = (cm < 0.2 ? 6 + r() * 30 : (cm < 0.7 ? r() * 2.5 : -(1 + r() * 7))) * GROWTH;
+  // A small minority really does climb fast enough to reach a limit inside what a month of record
+  // can carry. Without them the honest calibration leaves the forecast section empty, which is the
+  // right answer for the estate and a useless one for a prototype nobody can read.
+  const pm = r(), pNow = 24 + r() * 52;
+  const fast = pm < 0.12;
+  const pUp = fast ? (8 + r() * 26)
+    : (pm < 0.34 ? 5 + r() * 34 : (pm < 0.74 ? r() * 3 : -(2 + r() * 8))) * GROWTH;
   DEVICES.push(makeDevice(DEVICES.length, `BR-${uf}-${code}${b ? b + 1 : ""}-SWA-0${10 + (k % 80)}`, name,
     MODEL[Math.floor(r() * 3)], seed * 3 + 1, 49 + Math.floor(r() * 4),
-    { cFrom: +(cNow - cUp).toFixed(1), cTo: +cNow.toFixed(1), pFrom: +(pNow - pUp).toFixed(1), pTo: +pNow.toFixed(1) }));
+    { cFrom: +(cNow - cUp).toFixed(1), cTo: +cNow.toFixed(1), pFrom: +(pNow - pUp).toFixed(1), pTo: +pNow.toFixed(1), fast }));
 });
 const UF_OF = new Map(SITE_DEFS.map(([n, u]) => [n, u]));
 
 const LINKS = LINK_DEFS.map(([site, carrier, role, contracted, lead, sla, bwFrom, bwTo, rtFrom, rtTo], i) => {
   const bw = series(bwFrom, bwTo, 30, 2.1, rnd(i * 17 + 3));
   const rt = series(rtFrom, rtTo, 30, 3.4, rnd(i * 23 + 9));
-  return { id: i, site, carrier, role, contracted, lead, sla,
-    bw: { hist: bw, f: fit(bw) }, rtt: { hist: rt, f: fit(rt) } };
+  return { id: i, site, carrier, role, contracted, lead, sla, bw: read(bw, i * 31 + 5), rtt: read(rt, i * 31 + 6) };
 });
 
-// the first of a link's two ways out
-const linkFirst = (l) => {
-  const a = l.bw.f && l.bw.f.mid, b = l.rtt.f && l.rtt.f.mid;
-  if (a != null && (b == null || a <= b)) return { kind: "bandwidth", days: a, o: l.bw };
-  if (b != null) return { kind: "latency", days: b, o: l.rtt };
-  return null;
-};
-const devUplink = (d) => d.ports.filter((p) => p.uplink && p.f && p.f.mid != null).sort((a, b) => a.f.mid - b.f.mid)[0] ?? null;
+/**
+ * What the page is allowed to say about a series, ordered by how much the record supports it.
+ *
+ *   dropping   it is discarding packets. Observed, not modelled, and no stated limit needed.
+ *   changed    it stepped to a new level and stayed. An event with a date in the past.
+ *   one jump   its headroom is smaller than a rise it has already shown. Arithmetic on observed
+ *              behaviour, with no threshold of ours: the subject sets its own unit of surprise.
+ *   climbing   a trend that survives after the step, reaching the limit inside twice the record.
+ *
+ * Only the last is a forecast, and measured live it is the smallest of the four. The page used to
+ * be nothing but that one, which is why it had to invent so much to fill itself.
+ */
+/** Φ, by Abramowitz–Stegun 7.1.26: enough for a percentage a human reads */
+function phi(z) {
+  const sg = z < 0 ? -1 : 1, x = Math.abs(z) / Math.SQRT2, t = 1 / (1 + 0.3275911 * x);
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return 0.5 * (1 + sg * y);
+}
 
-/** everything on the network that has a date, as one list */
+/**
+ * The chance this is past its limit by day `d`, rather than the day it gets there.
+ *
+ * A date hides how sure the line is; a probability carries it. At one day out the spread is almost
+ * nothing and the answer is nearly yes or no; at thirty it is a genuine maybe, which is the honest
+ * reading and the one a date never gives.
+ */
+const chanceBy = (f, d) => d <= 0 ? (f.at(0) >= 100 ? 1 : 0)
+  : Math.min(1, Math.max(0, 1 - phi((100 - f.at(d)) / Math.max(1e-6, f.se * d))));
+const likelyDay = (f) => { for (let d = 1; d <= f.far; d++) if (chanceBy(f, d) >= 0.5) return d; return null; };
+
+/**
+ * Does this method work on this series? Asked of the series itself, before it is trusted.
+ *
+ * The record is cut two thirds through, a line is fitted to the earlier part alone, and the days it
+ * never saw are scored against it. Nothing is stored and nothing is waited for — it runs on the
+ * month already in hand — and it answers the only question that matters about a forecast before
+ * its date arrives: when this method last predicted this thing, how often was it right?
+ */
+function backtest(hist, from = 0) {
+  const y = hist.filter((v) => v != null).slice(from);
+  if (y.length < 14) return null;
+  const cut = Math.floor(y.length * 0.67), f = fit(y.slice(0, cut));
+  if (!f) return null;
+  const held = y.slice(cut), errs = [];
+  let inBand = 0;
+  held.forEach((actual, i) => {
+    const d = i + 1;
+    if (Math.abs(actual - f.at(d)) <= Math.max(1, f.band(d))) inBand++;
+    errs.push(Math.abs(actual - f.at(d)));
+  });
+  errs.sort((a, b) => a - b);
+  const share = inBand / held.length, error = errs[errs.length >> 1];
+  return { inBand, of: held.length, error, grade: share >= 0.8 && error < 8 ? "good" : share >= 0.5 ? "fair" : "poor" };
+}
+
+/**
+ * How many days ago this first reached its limit, from the record rather than from a model.
+ *
+ * The left half of the runway is not a forecast and must not be drawn like one: every point on it
+ * is a day the series was actually at or over the line. A subject that touched the limit once and
+ * fell back has not arrived, so the crossing only counts when the rest of the record stays there.
+ */
+function crossedAgo(hist) {
+  const pts = hist.map((v, i) => [i, v]).filter(([, v]) => v != null);
+  if (!pts.length) return null;
+  const last = pts[pts.length - 1][0];
+  for (let i = 0; i < pts.length; i++) {
+    if (pts[i][1] < 100) continue;
+    const after = pts.slice(i);
+    if (after.filter(([, v]) => v >= 100).length >= after.length * 0.6) return last - pts[i][0];
+  }
+  return null;
+}
+
+const STATES = ["dropping", "changed", "onejump", "climbing", "quiet"];
+function stateOf(o) {
+  if (!o || !o.hist) return "quiet";
+  // "Changed" means something happened and settled. A subject that stepped and is still climbing
+  // toward a limit has a live forecast, and burying its date under the label of a finished event
+  // is the original mistake in reverse.
+  const climbing = !!(o.f && o.f.rising && o.f.mid != null);
+  if (o.drops > 0) return "dropping";
+  if (o.st && o.st.to > o.st.from && !climbing) return "changed";
+  if (o.jump > 0 && o.now + o.jump >= 100) return "onejump";
+  if (climbing) return "climbing";
+  return "quiet";
+}
+const rankOf = (o) => STATES.indexOf(stateOf(o));
+
+/** a circuit runs out two ways; this is whichever one the record has more to say about */
+const linkFirst = (l) => {
+  const a = { kind: "bandwidth", o: l.bw, days: l.bw.f?.mid ?? null };
+  const b = { kind: "latency", o: l.rtt, days: l.rtt.f?.mid ?? null };
+  return rankOf(l.bw) <= rankOf(l.rtt) ? a : b;
+};
+const devUplink = (d) => d.ports.filter((p) => p.uplink && p.hist)
+  .sort((a, b) => rankOf(a) - rankOf(b) || b.now - a.now)[0] ?? null;
+
+/** everything measured against a limit, in one list, whatever the record turned out to support */
 function subjects() {
   const out = [];
-  LINKS.forEach((l) => { const f = linkFirst(l); if (f) out.push({ kind: "link", ref: l, site: l.site, name: `WAN · ${l.carrier} ${l.contracted}`, sub: `${l.role} · ${f.kind}`, days: f.days, o: f.o, lead: l.lead }); });
-  DEVICES.forEach((d) => {
-    const u = devUplink(d);
-    if (u) out.push({ kind: "port", ref: d, port: u, site: d.site, name: `${u.name} · uplink`, sub: d.name, days: u.f.mid, o: u, lead: 21 });
-    if (d.cpu.f && d.cpu.f.mid != null) out.push({ kind: "device", ref: d, site: d.site, name: `CPU · ${d.name}`, sub: d.model, days: d.cpu.f.mid, o: d.cpu, lead: 45 });
+  LINKS.forEach((l) => {
+    out.push({ kind: "link", ref: l, site: l.site, name: `${l.carrier} · ${l.contracted}`, sub: `${l.role} circuit`,
+      o: l.bw, lead: l.lead, limit: "the rate it is contracted for" });
+    out.push({ kind: "link", ref: l, site: l.site, name: `${l.carrier} · ${l.sla} ms`, sub: `${l.role} circuit`,
+      o: l.rtt, lead: l.lead, limit: `the ${l.sla} ms in its SLA` });
   });
-  return out.sort((a, b) => a.days - b.days);
+  DEVICES.forEach((d) => {
+    out.push({ kind: "device", ref: d, site: d.site, name: d.name, sub: d.model,
+      o: d.cpu, lead: 45, limit: "saturation on its processor" });
+    const ups = d.ports.filter((p) => p.uplink && p.hist)
+      .sort((a, b) => rankOf(a) - rankOf(b) || b.now - a.now);
+    if (ups[0]) out.push({ kind: "port", ref: d, port: ups[0], site: d.site,
+      name: `${ups[0].name} · ${ups[0].speed / 1000} Gb/s`, sub: d.name, o: ups[0], lead: 21,
+      limit: "the line rate of the port" });
+  });
+  out.forEach((s) => { s.state = stateOf(s.o); s.days = s.o.f?.mid ?? null; });
+  return out.sort((a, b) => STATES.indexOf(a.state) - STATES.indexOf(b.state) || b.o.now - a.o.now);
 }
+
 const KINDC = { link: "var(--warn)", port: "var(--cyan)", device: "var(--violet)" };
 const orderBy = (s) => s.days - s.lead;
 
-let view = { at: "network", uf: null, site: null, link: null, dev: null, port: null };
 
 // ---------------------------------------------------------------- drawing
-function cone(o, W, H, limitLabel) {
+/**
+ * `to` is how far forward the chart runs. It defaults to the whole horizon, but a subject that
+ * crosses in a month spends five of its six months drawing a line that has already passed the
+ * limit — which pushes the crossing into a corner and wastes the width that should be showing
+ * how the record got there.
+ */
+/**
+ * The treatment the forecast charts share: a bloom on the traces, gradient fills under the cones,
+ * a faint grid behind the plot. The bloom is a blur of the shape itself rather than a coloured
+ * halo, so every line keeps the colour it was given and the glow around it is that same colour
+ * spread out.
+ */
+const FX = { trace: "var(--cyan)", proj: "var(--warn)", limit: "var(--bad)", grid: "var(--line)", axis: "var(--line-2)", ink: "var(--muted)" };
+const chartFx = (id) => `<defs>
+  <filter id="${id}-glow" x="-60%" y="-60%" width="220%" height="220%">
+    <feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="${id}-soft" x="-60%" y="-60%" width="220%" height="220%">
+    <feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <linearGradient id="${id}-cone" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0%" stop-color="${FX.proj}" stop-opacity=".10"/><stop offset="55%" stop-color="${FX.proj}" stop-opacity=".26"/>
+    <stop offset="100%" stop-color="${FX.limit}" stop-opacity=".40"/></linearGradient>
+  <linearGradient id="${id}-area" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="${FX.trace}" stop-opacity=".34"/><stop offset="100%" stop-color="${FX.trace}" stop-opacity="0"/></linearGradient>
+  <linearGradient id="${id}-rise" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="${FX.limit}" stop-opacity=".46"/><stop offset="100%" stop-color="${FX.proj}" stop-opacity=".04"/></linearGradient>
+  <pattern id="${id}-grid" width="26" height="26" patternUnits="userSpaceOnUse">
+    <path d="M26 0H0V26" fill="none" stroke="${FX.grid}" stroke-width=".6" opacity=".55"/></pattern>
+</defs>`;
+
+/**
+ * How many things are at or past a limit — the last month observed, the next two forecast, on one
+ * axis through now.
+ *
+ * One quantity holds both halves, which is the only reason they may share a chart: the count of
+ * subjects at or over the line their owner stated. To the left every point is a day the record
+ * actually shows them there; to the right it is where the fitted lines arrive, with the span each
+ * record allows as a band. The ticks under the past are the days a crowd stepped at once, drawn as
+ * context for the shape of the line above and never added into the count.
+ */
+function runway(all, forecasts) {
+  const W = 880, H = 290, L = 50, B = 48, T = 20, past = 30;
+  const spans = forecasts.map((x) => x.o.f).filter(Boolean);
+  if (!spans.length) return "";
+  const far = Math.max(14, ...spans.map((f) => f.hi));
+  const arrived = all.map((x) => crossedAgo(x.o.hist)).filter((d) => d != null);
+  const already = arrived.length, total = already + spans.length;
+  const mid = L + (W - L - 16) * (past / (past + far));
+  const P = (ago) => L + ((past - ago) / past) * (mid - L);
+  const F = (d) => mid + (d / far) * (W - 16 - mid);
+  const Y = (n) => (H - B) - (n / Math.max(1, total)) * (H - B - T);
+  const over = (d) => arrived.filter((a) => a >= d).length;
+  const observed = Array.from({ length: past + 1 }, (_, i) => past - i)
+    .map((ago) => `${P(ago).toFixed(1)},${Y(over(ago)).toFixed(1)}`).join(" ");
+  const fwd = Array.from({ length: 61 }, (_, i) => (i / 60) * far);
+  const countBy = (pick, d) => already + spans.filter((f) => pick(f) <= d).length;
+  const path = (pick) => fwd.map((d) => `${F(d).toFixed(1)},${Y(countBy(pick, d)).toFixed(1)}`).join(" ");
+  const band = fwd.map((d) => `${F(d).toFixed(1)},${Y(countBy((f) => f.lo, d)).toFixed(1)}`)
+    .concat(fwd.slice().reverse().map((d) => `${F(d).toFixed(1)},${Y(countBy((f) => f.hi, d)).toFixed(1)}`)).join(" ");
+  const first = Math.min(...spans.map((f) => f.lo));
+  const marks = changeEvents(all).filter((e) => e.ago <= past).slice(0, 6);
+  const biggest = Math.max(1, ...marks.map((e) => e.n));
+  return `<svg class="rw" viewBox="0 0 ${W} ${H}" role="img"
+      aria-label="${already} past a limit today, up to ${total} within ${far} days">
+    ${chartFx("rw")}
+    <rect x="${L}" y="${T - 8}" width="${W - L - 16}" height="${H - B - T + 8}" fill="url(#rw-grid)"/>
+    ${[0.25, 0.5, 0.75, 1].map((n) => `<line x1="${L}" y1="${Y(total * n).toFixed(1)}" x2="${W - 16}" y2="${Y(total * n).toFixed(1)}" stroke="${FX.grid}"/>
+      <text class="ax" x="${L - 8}" y="${(Y(total * n) + 3.5).toFixed(1)}" text-anchor="end">${Math.round(total * n)}</text>`).join("")}
+    <polygon points="${band}" fill="url(#rw-rise)"/>
+    <polygon points="${P(past).toFixed(1)},${Y(0).toFixed(1)} ${observed} ${mid.toFixed(1)},${Y(0).toFixed(1)}" fill="url(#rw-area)" opacity=".6"/>
+    <polyline points="${path((f) => f.hi)}" fill="none" stroke="${FX.proj}" stroke-width="1.3" stroke-dasharray="4 4" opacity=".75"/>
+    <polyline points="${path((f) => f.lo)}" fill="none" stroke="${FX.proj}" stroke-width="1.3" stroke-dasharray="4 4" opacity=".75"/>
+    <polyline points="${observed}" fill="none" stroke="${FX.trace}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" filter="url(#rw-glow)"/>
+    <polyline points="${path((f) => f.mid ?? f.hi)}" fill="none" stroke="${FX.limit}" stroke-width="3" stroke-dasharray="9 5" stroke-linecap="round" filter="url(#rw-glow)"/>
+    <line x1="${L}" y1="${H - B}" x2="${W - 16}" y2="${H - B}" stroke="${FX.axis}"/>
+    ${[30, 21, 14, 7].map((d) => `<text class="ax" x="${P(d).toFixed(1)}" y="${H - B + 16}" text-anchor="middle">−${d}d</text>`).join("")}
+    ${[7, 14, 21, 28, 35, 42, 49, 56, 63].filter((d) => d <= far).map((d) => `<text class="ax" x="${F(d).toFixed(1)}" y="${H - B + 16}" text-anchor="middle">+${d}d</text>`).join("")}
+    ${marks.map((e) => `<rect x="${(P(e.ago) - 2.5).toFixed(1)}" y="${H - B + 23}" width="5" height="${Math.max(3, (e.n / biggest) * 13).toFixed(1)}" rx="1.5" fill="${FX.proj}" opacity=".75"><title>${e.n} stepped ${e.ago} days ago</title></rect>`).join("")}
+    ${marks.length ? `<text class="ax" x="${L - 8}" y="${H - B + 33}" text-anchor="end">changed</text>` : ""}
+    <line x1="${mid.toFixed(1)}" y1="${T - 8}" x2="${mid.toFixed(1)}" y2="${H - B + 38}" stroke="${FX.axis}"/>
+    <text class="tag" x="${mid.toFixed(1)}" y="${T - 1}" text-anchor="middle">now</text>
+    <circle cx="${mid.toFixed(1)}" cy="${Y(already).toFixed(1)}" r="4.6" fill="${FX.trace}" filter="url(#rw-soft)"/>
+    <text class="tag" x="${(mid - 10).toFixed(1)}" y="${(Y(already) - 9).toFixed(1)}" text-anchor="end" fill="${FX.trace}">${already} past a limit</text>
+    <line x1="${F(first).toFixed(1)}" y1="${T - 8}" x2="${F(first).toFixed(1)}" y2="${H - B}" stroke="${FX.axis}" stroke-dasharray="2 4"/>
+    <text class="tag" x="${(F(first) + 7).toFixed(1)}" y="${T + 10}" fill="${FX.limit}">next in ${first}d</text>
+  </svg>
+  <p class="after">One count on both sides: subjects at or over the limit their owner stated. The solid line left of
+    now is the record — every point a day they were actually there. The dashed line right of it is where the fitted
+    lines arrive, and the band is the span each record allows. The bars under the past are the days a crowd stepped
+    at once, which is usually what bent the line above them. It stops at ${far} days because no forecast is drawn
+    further than twice the record behind it: ${already} today, ${countBy((f) => f.mid ?? f.hi, far)} by then.</p>`;
+}
+
+/** the days a crowd stepped at once: detection can be a sample out, so neighbours are one event */
+function changeEvents(all) {
+  const withStep = all.filter((x) => x.o.st && x.o.st.to > x.o.st.from).sort((a, b) => a.o.st.ago - b.o.st.ago);
+  const groups = [];
+  withStep.forEach((x) => {
+    const last = groups[groups.length - 1];
+    if (last && Math.abs(x.o.st.ago - last[0].o.st.ago) <= 1) last.push(x); else groups.push([x]);
+  });
+  return groups.filter((g) => g.length > 1)
+    .map((g) => ({ ago: Math.min(...g.map((x) => x.o.st.ago)), n: g.length, sites: new Set(g.map((x) => x.site)).size }))
+    .sort((a, b) => b.n - a.n);
+}
+
+function cone(o, W, H, limitLabel, to) {
   const L = 30, B = 20, HP = 0.3;
   const vals = o.hist.filter((v) => v != null), f = o.f;
-  const peak = Math.max(115, ...vals, f ? f.at(HZ) + f.band(HZ) : 0);
+  const far = Math.min(HZ, Math.max(45, to ?? HZ));
+  const peak = Math.max(115, ...vals, f ? f.at(far) + f.band(far) : 0);
   const todayX = L + HP * (W - L - 12);
-  const X = (dd) => dd <= 0 ? L + ((dd + 30) / 30) * (todayX - L) : todayX + Math.min(1, dd / HZ) * (W - 12 - todayX);
+  const X = (dd) => dd <= 0 ? L + ((dd + 30) / 30) * (todayX - L) : todayX + Math.min(1, dd / far) * (W - 12 - todayX);
   const Y = (v) => (H - B) - (Math.min(Math.max(v, 0), peak) / peak) * (H - B - 13);
   let d = "", open = false;
   o.hist.forEach((v, k) => {
@@ -298,7 +802,7 @@ function cone(o, W, H, limitLabel) {
   });
   let cn = "", ln = "", hit = "";
   if (f) {
-    const steps = Array.from({ length: 21 }, (_, i) => (i / 20) * HZ);
+    const steps = Array.from({ length: 21 }, (_, i) => (i / 20) * far);
     const up = steps.map((t) => `${X(t).toFixed(1)},${Y(f.at(t) + f.band(t)).toFixed(1)}`);
     const dn = steps.map((t) => `${X(t).toFixed(1)},${Y(Math.max(0, f.at(t) - f.band(t))).toFixed(1)}`).reverse();
     cn = `<polygon points="${up.concat(dn).join(" ")}" fill="var(--warn)" opacity=".15"/>`;
@@ -311,265 +815,480 @@ function cone(o, W, H, limitLabel) {
     <line x1="${L}" y1="${H - B}" x2="${W - 12}" y2="${H - B}" stroke="var(--line-2)"/>
     <line x1="${todayX.toFixed(1)}" y1="6" x2="${todayX.toFixed(1)}" y2="${H - B}" stroke="var(--line-2)"/>
     <text class="ax" x="${todayX.toFixed(1)}" y="${H - 6}" text-anchor="middle">TODAY</text>
-    <text class="ax" x="${W - 12}" y="${H - 6}" text-anchor="end">+180d</text>
+    <text class="ax" x="${W - 12}" y="${H - 6}" text-anchor="end">+${Math.round(far)}d</text>
     ${cn}${ln}${hit}
     <path d="${d}" fill="none" stroke="var(--cyan)" stroke-width="2.2" stroke-linejoin="round"/></svg>`;
 }
 const confBars = (days) => `<span class="conf" title="${days} days of record">${[7, 14, 21, 30].map((t) => `<i class="${days >= t ? "on" : ""}"></i>`).join("")}</span>`;
 
 // ---------------------------------------------------------------- level 1
-/** history and projection with no axis and no words, for a table cell */
-function spark(o, w, h) {
-  const f = o.f, lo = Math.min(...o.hist) * 0.9, peak = 112, hp = 0.34;
-  const tx = hp * w, X = (d) => (d <= 0 ? ((d + 30) / 30) * tx : tx + Math.min(1, d / HZ) * (w - tx));
-  const Y = (v) => (h - 2) - ((Math.min(Math.max(v, lo), peak) - lo) / (peak - lo)) * (h - 5);
+/**
+ * The forecast, in a row.
+ *
+ * The first screen used to be a picture of every forecast at once — one pair of axes, every
+ * subject normalised against its own limit. It was defensible and it needed a paragraph to teach
+ * someone how to read it, which is the same as saying it did not work. What a person operating
+ * this network wants from the first screen is not the method; it is the work: what has to be
+ * ordered, for where, by when.
+ *
+ * So the list is the screen, and the forecast rides inside each row as the evidence for its date
+ * — thirty days of record, the line through them, the span that line allows, and the limit it
+ * walks into. A date with no curve beside it is a number the reader has to take on faith, which
+ * was the fault of the version before the picture. A curve with no date beside it is an exercise.
+ * Each row carries both.
+ */
+function evidence(o, w, h) {
+  const f = o.f ?? { mid: null, at: () => o.now, band: () => 0, days: 0 };
+  const cross = f.mid ?? 60, span = Math.max(40, cross * 1.3);
+  const floor = Math.min(...o.hist, f.at(0)) * 0.92, ceil = 112;
+  const hw = w * 0.36;
+  const X = (d) => (d <= 0 ? ((d + 30) / 30) * hw : hw + (d / span) * (w - hw - 2));
+  const Y = (v) => (h - 1.5) - ((Math.min(Math.max(v, floor), ceil) - floor) / (ceil - floor)) * (h - 3);
   const hist = o.hist.map((v, k) => `${X(-30 + (k / (o.hist.length - 1)) * 30).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
-  const to = f && f.mid != null ? f.mid : HZ;
-  const proj = f ? Array.from({ length: 9 }, (_, i) => { const t = (i / 8) * to; return `${X(t).toFixed(1)},${Y(f.at(t)).toFixed(1)}`; }).join(" ") : "";
-  return `<svg class="spk" viewBox="0 0 ${w} ${h}" aria-hidden="true">
-    <line x1="0" y1="${Y(100).toFixed(1)}" x2="${w}" y2="${Y(100).toFixed(1)}" stroke="var(--bad)" stroke-dasharray="2 3" opacity=".6"/>
-    ${proj ? `<polyline points="${proj}" fill="none" stroke="var(--warn)" stroke-width="1.6" stroke-dasharray="4 3"/>` : ""}
-    <polyline points="${hist}" fill="none" stroke="var(--cyan)" stroke-width="1.6"/></svg>`;
+  // the claim is often the step itself, so the drawing has to show where it happened
+  const mark = o.st ? `<line x1="${X(-30 + (o.st.at / (o.hist.length - 1)) * 30).toFixed(1)}" y1="1"
+    x2="${X(-30 + (o.st.at / (o.hist.length - 1)) * 30).toFixed(1)}" y2="${h - 1}"
+    stroke="var(--warn)" stroke-width="1" stroke-dasharray="2 2" opacity=".8"/>` : "";
+  const step = (k) => (k / 12) * cross;
+  const proj = Array.from({ length: 13 }, (_, k) => `${X(step(k)).toFixed(1)},${Y(f.at(step(k))).toFixed(1)}`).join(" ");
+  const band = Array.from({ length: 13 }, (_, k) => `${X(step(k)).toFixed(1)},${Y(f.at(step(k)) + f.band(step(k))).toFixed(1)}`)
+    .concat(Array.from({ length: 13 }, (_, k) => `${X(step(12 - k)).toFixed(1)},${Y(Math.max(0, f.at(step(12 - k)) - f.band(step(12 - k)))).toFixed(1)}`)).join(" ");
+  return `<svg class="ev" viewBox="0 0 ${w} ${h}" role="img" aria-label="thirty days of record and the line through them, reaching the limit in ${f.mid} days">
+    <line x1="0" y1="${Y(100).toFixed(1)}" x2="${w}" y2="${Y(100).toFixed(1)}" stroke="var(--bad)" stroke-dasharray="2 3" opacity=".75"/>
+    <line x1="${hw.toFixed(1)}" y1="1" x2="${hw.toFixed(1)}" y2="${h - 1}" stroke="var(--line-2)"/>
+    <polygon points="${band}" fill="var(--warn)" opacity=".16"/>
+    <polyline points="${proj}" fill="none" stroke="var(--warn)" stroke-width="1.6" stroke-dasharray="4 3"/>
+    <polyline points="${hist}" fill="none" stroke="var(--cyan)" stroke-width="1.7" stroke-linejoin="round"/>
+    ${mark}<circle cx="${X(cross).toFixed(1)}" cy="${Y(100).toFixed(1)}" r="3.2" fill="var(--bad)" stroke="var(--bg)" stroke-width="1"
+      opacity="${f.mid == null ? 0 : 1}"/></svg>`;
+}
+
+const KINDW = { link: "WAN circuit", port: "Uplink", device: "Device" };
+const goAttr = (s) => s.kind === "link" ? `data-link="${s.ref.id}"` : `data-dev="${s.ref.id}"`;
+
+const listHead = () => `<ol class="head"><li><span>What runs out</span><span>Where</span>
+  <span>The record, and what it did</span><span class="num">What we see</span>
+  <span class="num">Where it sits</span><span class="num">Record</span></li></ol>`;
+
+/**
+ * The four things the page may say, with the words it says them in.
+ *
+ * They are ordered by how much the record supports the claim, not by how much the claim impresses.
+ * Dropping is observed. Changed is an observed event. One jump is arithmetic on observed
+ * behaviour. Climbing is the only extrapolation, and measured live it is the smallest of the four.
+ */
+const VERDICT = {
+  dropping: { title: "Already dropping packets", colour: "var(--bad)",
+    note: "the discard rate has started rising — observed, not forecast, and no stated limit was needed to see it" },
+  changed: { title: "Something changed", colour: "var(--warn)",
+    note: "it stepped to a new level and stayed there; the question is what happened, not when it fills" },
+  onejump: { title: "One jump from the limit", colour: "var(--violet)",
+    note: "its headroom is smaller than a rise it has already shown, so one more of those arrives" },
+  climbing: { title: "Still climbing", colour: "var(--cyan)",
+    note: "a trend that survives after the step, reaching the limit inside twice the record it rests on" },
+};
+
+function workRow(s, withUf) {
+  const uf = UF_OF.get(s.site), c = VERDICT[s.state]?.colour ?? "var(--muted)", o = s.o;
+  const claim = s.state === "dropping"
+      ? [`${o.drops.toLocaleString("en")}`, "more discards than before"]
+    : s.state === "changed"
+      ? [`+${(o.st.to - o.st.from).toFixed(0)} pts`, `${o.st.ago} days ago`]
+    : s.state === "onejump"
+      ? [`${(100 - o.now).toFixed(0)} pts left`, `a jump of ${o.jump.toFixed(0)} has happened`]
+    : s.state === "climbing"
+      ? [`${o.f.lo}–${o.f.hi}d`, "the span the record allows"]
+      : ["—", "nothing to say"];
+  return `<li class="w pick" role="button" tabindex="0"
+    aria-label="${esc(s.name)} at ${esc(s.site)}, ${esc(VERDICT[s.state]?.title ?? "quiet")}"
+    ${goAttr(s)}>
+    <div class="what"><b class="mono">${esc(s.name)}</b>
+      <span class="sub2"><i class="kind" style="background:${c}"></i>${KINDW[s.kind]} · against ${esc(s.limit)}</span></div>
+    <div class="where"><button class="ln" data-site="${esc(s.site)}">${esc(s.site)}</button>
+      <span class="sub2">${withUf && uf ? `<button class="ln" data-uf="${esc(uf)}">${esc(uf)}</button> <span class="sep">·</span> ` : ""}${esc(s.sub)}</span></div>
+    <div class="evw">${evidence(o, 164, 42)}</div>
+    <div class="num"><span class="days" style="color:${c}">${claim[0]}</span><span class="sub2">${claim[1]}</span></div>
+    <div class="num"><span class="days">${o.now.toFixed(0)}%</span><span class="sub2">of its limit now</span></div>
+    <div class="num rec">${confBars(o.f ? o.f.days : o.hist.filter((v) => v != null).length)}</div></li>`;
 }
 
 /**
- * The top level IS the forecast, and it has to survive a network of any size.
+ * The group is the counterparty, not the fault.
  *
- * Four rules do the work, and none of them is a drawing trick.
+ * Keying on carrier and contracted rate together turned eighty-five subjects into twenty-one
+ * groups, which is barely a list at all — because the key multiplied: four carriers by four plans,
+ * then the same again for latency. But nobody places an order per plan. They open one case with a
+ * carrier covering every circuit under it, and one conversation with a vendor covering every box
+ * of a model. So the key is who you talk to, and the row breaks down what you are talking about.
  *
- *   1. A thing with no date is not a line. Most series do not trend — traffic is spiky, a
- *      processor sits where it sits — so the line through them never reaches the limit. Here
- *      that is 340 subjects out of 1,228. The rest are a sentence, counted in the open, because
- *      a thing the screen stops reporting is a thing the reader will take for fine.
- *
- *   2. One line per unit, never per subject, and the unit is whatever the next level down is.
- *      A unit's line is the first thing to give inside it.
- *
- *   3. The unit changes with the size of the network. Up to two dozen, a unit is a site. Past
- *      that, it is the federative unit — the tier the customer already tags, Country ›
- *      federativeunit › site — which caps the top screen at twenty-seven lines no matter whether
- *      there are three hundred sites or three thousand, and the sites reappear one level down.
- *
- *   4. Past the first six, units stop being individuals and become an envelope: the span every
- *      remaining trajectory lies inside, narrowing as each drops out at its own crossing.
- *
- * Two things are drawn per-mark until the marks stop separating, then per-count: the crossings on
- * the limit line, and the order lane beneath the axis. A smear of four hundred ticks says less
- * than a bar that says forty. The lane in particular is better as a count — "how much work falls
- * in this fortnight" is the question a planner actually has.
+ * Counterparties do not multiply with sites. Three hundred sites and three thousand produce the
+ * same handful of carriers and models, which is why this bounds the page and a date-based cap
+ * never could.
  */
-const GROUP_AT = 24, NAMED = 6;
+function orderKey(s) {
+  return s.kind === "link" ? s.ref.carrier : s.ref.model.split(" · ")[0];
+}
+const REASONW = {
+  rate: (n) => `${n} at the rate they are contracted for`,
+  sla: (n) => `${n} at the latency in their SLA`,
+  port: (n) => `${n} uplink${n > 1 ? "s" : ""} at the line rate of the port`,
+  cpu: (n) => `${n} at saturation on the processor`,
+};
+const reasonOf = (s) => s.kind === "link" ? (/ms/.test(s.limit) ? "sla" : "rate") : s.kind === "port" ? "port" : "cpu";
 
 /**
- * Grouping by "the soonest thing inside" stops discriminating as groups grow: the minimum of
- * eleven sites is always early, so every federative unit lands inside two months and the screen
- * says everything is urgent everywhere, which is the same as saying nothing. At the site tier the
- * date is the whole story; at the tier above it the question is where the work piles up. So a unit
- * still draws the trajectory of its soonest subject — that is a real curve belonging to a real
- * thing — but the units are ranked by how many orders are late and how many land inside sixty
- * days, and only the date breaks the tie.
+ * Where a group's dates fall: a tick each while ticks still separate, a count per column once they
+ * do not. Five hundred ticks across one hundred and sixty pixels is a solid block that says only
+ * "many", and it says it in the same red as an emergency.
  */
-function unitsFor(dated, mode) {
-  const key = mode === "uf" ? (s) => UF_OF.get(s.site) ?? "—" : (s) => s.site;
-  const by = new Map();
-  dated.forEach((s) => {
-    const k = key(s), u = by.get(k);
-    if (!u) by.set(k, { key: k, first: s, count: 1, late: 0, soon: 0, sites: new Set([s.site]) });
-    const v = by.get(k);
-    if (u) { v.count++; v.sites.add(s.site); if (s.days < v.first.days) v.first = s; }
-    if (orderBy(s) <= 0) v.late++;
-    if (s.days <= 60) v.soon++;
-  });
-  const units = [...by.values()].map((u) => ({ ...u, sites: u.sites.size, days: u.first.days,
-    kind: u.first.kind, o: u.first.o, lead: u.first.lead }));
-  return mode === "uf"
-    ? units.sort((a, b) => b.late - a.late || b.soon - a.soon || a.days - b.days)
-    : units.sort((a, b) => a.days - b.days);
+function spread(items, w, h) {
+  const far = Math.max(60, ...items.map((s) => s.days)), base = h - 4;
+  const svg = (inner) => `<svg class="sp" viewBox="0 0 ${w} ${h}" role="img" aria-label="where this group's dates fall">
+    <line x1="0" y1="${base}" x2="${w}" y2="${base}" stroke="var(--line-2)"/>${inner}</svg>`;
+  if (items.length <= 60) return svg(items.map((s) => {
+    const x = (s.days / far) * (w - 2) + 1;
+    return `<line x1="${x.toFixed(1)}" y1="3" x2="${x.toFixed(1)}" y2="${base}"
+      stroke="${orderBy(s) <= 0 ? "var(--bad)" : "var(--warn)"}" stroke-width="1.5" opacity=".55"/>`; }).join(""));
+  const N = 24, bins = Array.from({ length: N }, () => 0);
+  items.forEach((s) => bins[Math.min(N - 1, Math.floor((s.days / far) * N))]++);
+  const top = Math.max(...bins), bw = w / N;
+  return svg(bins.map((c, i) => c ? `<rect x="${(i * bw + 0.5).toFixed(1)}" y="${(base - (c / top) * (base - 3)).toFixed(1)}"
+    width="${(bw - 1).toFixed(1)}" height="${((c / top) * (base - 3)).toFixed(1)}" fill="var(--warn)" opacity=".55"
+    ><title>${c} around day ${Math.round((i + 0.5) / N * far)}</title></rect>` : "").join(""));
 }
 
-/** the whole picture for one tier of units, at any count */
-function tierChart(units, dated, measured, quiet, scopeWord) {
-  const W = 780, H = 372, L = 42, AX = 292, TOP = 14;
-  const tx = L + (30 / 210) * (W - L - 14);
-  const X = (d) => { const c = Math.min(HZ, Math.max(-30, d)); return c <= 0 ? L + ((c + 30) / 30) * (tx - L) : tx + (c / HZ) * (W - 14 - tx); };
-  const peak = 128, Y = (v) => AX - (Math.min(Math.max(v, 0), peak) / peak) * (AX - TOP);
-  const lead = units.slice(0, NAMED), rest = units.slice(NAMED);
-  const late = dated.filter((s) => orderBy(s) <= 0).length;
-
-  const months = MONTHS.map((mo, m) => `<g>
-      <line x1="${X(m * 30).toFixed(1)}" y1="${AX}" x2="${X(m * 30).toFixed(1)}" y2="${AX + 4}" stroke="var(--line-2)"/>
-      <text class="ax" x="${X(m * 30 + 15).toFixed(1)}" y="${AX + 15}" text-anchor="middle">${mo}</text></g>`).join("");
-
-  let envelope = "";
-  if (rest.length) {
-    const far = Math.max(...rest.map((u) => u.days)), top = [], bot = [];
-    for (let k = 0; k <= 32; k++) {
-      const t = (k / 32) * far, live = rest.filter((u) => u.days >= t);
-      if (!live.length) break;
-      const vs = live.map((u) => u.o.f.at(t));
-      top.push(`${X(t).toFixed(1)},${Y(Math.max(...vs)).toFixed(1)}`);
-      bot.push(`${X(t).toFixed(1)},${Y(Math.min(...vs)).toFixed(1)}`);
-    }
-    envelope = `<polygon points="${top.concat([...bot].reverse()).join(" ")}" fill="var(--ink-3)" opacity=".055"/>
-      <polyline points="${top.join(" ")}" fill="none" stroke="var(--ink-3)" stroke-width="1" opacity=".3" stroke-dasharray="2 3"/>
-      <polyline points="${bot.join(" ")}" fill="none" stroke="var(--ink-3)" stroke-width="1" opacity=".3" stroke-dasharray="2 3"/>`;
+/** every subject in a late band is late, so the column says how far past due the worst is */
+function overdueCell(g) {
+  if (g.late === g.items.length) {
+    const worst = Math.max(...g.items.map((s) => -orderBy(s)));
+    return `<div class="num"><span class="days bad">${worst}d</span><span class="sub2">worst overdue</span></div>`;
   }
-
-  const trails = lead.map((u, i) => {
-    const f = u.o.f, c = KINDC[u.kind], first = i === 0;
-    const hist = u.o.hist.map((v, k) => `${X(-30 + (k / (u.o.hist.length - 1)) * 30).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
-    const proj = Array.from({ length: 13 }, (_, k) => { const t = (k / 12) * u.days; return `${X(t).toFixed(1)},${Y(f.at(t)).toFixed(1)}`; }).join(" ");
-    const band = first ? `<polygon opacity=".14" fill="${c}" points="${
-      Array.from({ length: 13 }, (_, k) => { const t = (k / 12) * u.days; return `${X(t).toFixed(1)},${Y(f.at(t) + f.band(t)).toFixed(1)}`; })
-        .concat(Array.from({ length: 13 }, (_, k) => { const t = ((12 - k) / 12) * u.days; return `${X(t).toFixed(1)},${Y(Math.max(0, f.at(t) - f.band(t))).toFixed(1)}`; })).join(" ")}"/>` : "";
-    return `${band}<g class="trail" data-unit="${esc(u.key)}" opacity="${first ? 1 : 0.62}">
-      <polyline points="${proj}" fill="none" stroke="transparent" stroke-width="11"/>
-      <polyline points="${hist}" fill="none" stroke="transparent" stroke-width="11"/>
-      <polyline points="${hist}" fill="none" stroke="${c}" stroke-width="${first ? 2.4 : 1.6}" stroke-linejoin="round"/>
-      <polyline points="${proj}" fill="none" stroke="${c}" stroke-width="${first ? 2.4 : 1.6}" stroke-dasharray="5 4"/>
-      <line x1="${X(f.lo).toFixed(1)}" y1="${Y(100).toFixed(1)}" x2="${X(f.hi).toFixed(1)}" y2="${Y(100).toFixed(1)}"
-        stroke="${c}" stroke-width="3.5" stroke-linecap="round" opacity=".3"/>
-      <title>${esc(u.key)} — ${esc(u.first.name)} at ${esc(u.first.site)} reaches its limit in ${u.days} days, between ${f.lo} and ${f.hi}</title></g>`;
-  }).join("");
-
-  // crossings: a dot each while dots still separate, a count per fortnight once they do not
-  const DOTS_UNTIL = 40;
-  const crossings = units.length <= DOTS_UNTIL
-    ? units.map((u, i) => `<circle class="dot" data-unit="${esc(u.key)}"
-        cx="${X(u.days).toFixed(1)}" cy="${Y(100).toFixed(1)}" r="${i === 0 ? 4.6 : i < NAMED ? 3.6 : 2.6}"
-        fill="${KINDC[u.kind]}" stroke="var(--bg)" stroke-width="1" opacity="${i < NAMED ? 1 : 0.75}"
-        ><title>${esc(u.key)} in ${u.days} days</title></circle>`).join("")
-    : histo(units, (u) => u.days, X, Y(100), -1, 26, (n) => `${n} ${scopeWord} reach a limit here`);
-
-  const head = units[0], hx = X(head.days), hFlip = hx > W - 190;
-  const tags = `<line x1="${hx.toFixed(1)}" y1="${(Y(100) - 7).toFixed(1)}" x2="${hx.toFixed(1)}" y2="${(Y(100) - 20).toFixed(1)}"
-      stroke="${KINDC[head.kind]}" stroke-width="1" opacity=".55"/>
-    <text class="tag" x="${(hFlip ? hx - 6 : hx + 6).toFixed(1)}" y="${(Y(100) - 24).toFixed(1)}"
-      text-anchor="${hFlip ? "end" : "start"}" fill="${KINDC[head.kind]}">${esc(head.key)} · ${head.days}d</text>
-    <text class="ax" x="${(hFlip ? hx - 6 : hx + 6).toFixed(1)}" y="${(Y(100) - 12).toFixed(1)}"
-      text-anchor="${hFlip ? "end" : "start"}">${esc(head.first.name)}</text>`;
-
-  const LB = 352;
-  const onTime = dated.filter((s) => orderBy(s) > 0);
-  const orders = dated.length <= DOTS_UNTIL
-    ? dated.map((s) => { const ob = orderBy(s), x = X(ob);
-        return `<line x1="${x.toFixed(1)}" y1="${LB - 7}" x2="${x.toFixed(1)}" y2="${LB + 7}"
-          stroke="${ob <= 0 ? "var(--bad)" : KINDC[s.kind]}" stroke-width="1.8" opacity="${ob <= 0 ? 0.9 : 0.5}"
-          ><title>${esc(s.site)} · ${esc(s.name)} — ${ob <= 0 ? "the order is already late" : `order by ${MONTHS[monthOf(ob)]}`}</title></line>`; }).join("")
-    : histo(onTime, orderBy, X, LB, -1, 26, (n) => `${n} orders have to leave in this fortnight`);
-  const lateBar = dated.length > DOTS_UNTIL && late
-    ? `<rect x="${(L + 1).toFixed(1)}" y="${(LB - 26).toFixed(1)}" width="${(tx - L - 4).toFixed(1)}" height="26" rx="2"
-        fill="var(--bad)" opacity=".2"/>
-       <text class="axb" x="${((L + tx) / 2).toFixed(1)}" y="${(LB - 9).toFixed(1)}" text-anchor="middle" fill="var(--bad)">${late} late</text>` : "";
-
-  return `<svg id="all" viewBox="0 0 ${W} ${H}" role="img" aria-label="one forecast per ${scopeWord.replace(/s$/, "")}, against each subject's own limit">
-      <line x1="${L}" y1="${Y(100).toFixed(1)}" x2="${W - 14}" y2="${Y(100).toFixed(1)}" stroke="var(--bad)" stroke-dasharray="3 4" opacity=".8"/>
-      <text class="ax" x="${L - 6}" y="${(Y(100) + 4).toFixed(1)}" text-anchor="end" fill="var(--bad)">LIMIT</text>
-      <text class="ax" x="${L - 6}" y="${(Y(50) + 4).toFixed(1)}" text-anchor="end">50%</text>
-      <line x1="${L}" y1="${AX}" x2="${W - 14}" y2="${AX}" stroke="var(--line-2)"/>
-      <line x1="${tx.toFixed(1)}" y1="${TOP - 6}" x2="${tx.toFixed(1)}" y2="${LB + 7}" stroke="var(--line-2)"/>
-      <text class="ax" x="${(tx - 5).toFixed(1)}" y="${TOP - 2}" text-anchor="end">TODAY</text>
-      ${months}${envelope}${trails}${crossings}${tags}
-      <text class="ax" x="${L - 6}" y="${LB + 4}" text-anchor="end">ORDER</text>
-      <line x1="${L}" y1="${LB}" x2="${W - 14}" y2="${LB}" stroke="var(--line-2)" opacity=".7"/>${lateBar}${orders}
-    </svg>`;
+  return `<div class="num"><span class="days${g.late ? " bad" : " none"}">${g.late || "—"}</span><span class="sub2">already late</span></div>`;
 }
 
-/** counts per fortnight, as bars rising from a baseline */
-function histo(items, dayOf, X, base, dir, maxH, tip) {
-  const BK = 15, n = Math.ceil(HZ / BK), bins = Array.from({ length: n }, () => []);
-  items.forEach((it) => { const d = dayOf(it); if (d > 0 && d <= HZ) bins[Math.min(n - 1, Math.floor(d / BK))].push(it); });
-  const top = Math.max(1, ...bins.map((b) => b.length)), w = X(BK) - X(0);
-  return bins.map((b, i) => {
-    if (!b.length) return "";
-    const h = (b.length / top) * maxH, x = X(i * BK) + 1, y = dir < 0 ? base - h : base;
-    const warm = b.filter((it) => (dayOf(it)) <= 60).length / b.length;
-    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(2, w - 2).toFixed(1)}" height="${h.toFixed(1)}"
-      rx="1.5" fill="${warm > 0.5 ? "var(--warn)" : "var(--cyan)"}" opacity=".62"><title>${tip(b.length)}</title></rect>`;
-  }).join("");
+/**
+ * A counterparty is a purchase order; a line item is a line on it. Nobody quotes five hundred
+ * circuits as one item — they quote four hundred at one contracted rate and the rest at another.
+ * The sites under a line are where a long list is legitimate, because that list is the attachment
+ * to the order rather than something anyone reads top to bottom.
+ */
+function lineKey(s) {
+  if (s.kind === "link") return /ms/.test(s.limit) ? `latency against the SLA` : `${s.ref.contracted} contracted`;
+  if (s.kind === "port") return `${s.port.speed / 1000} Gb/s uplinks`;
+  return "processor";
 }
 
-function unitTable(units, mode, ROWS) {
-  const kindWord = { link: "the WAN contract", port: "an uplink", device: "a processor" };
-  const shown = units.slice(0, ROWS), hidden = units.slice(ROWS);
-  const go = mode === "uf" ? "data-uf" : "data-site";
-  return `<div class="scroll"><table><thead><tr><th>${mode === "uf" ? "Federative unit" : "Site"}</th>
-      ${mode === "uf" ? `<th class="n">Late</th>` : ""}<th>What gives first</th><th>Shape of it</th><th class="n">Reaches it</th><th class="n">Order by</th><th class="n">Record</th></tr></thead><tbody>
-    ${shown.map((u) => {
-      const ob = orderBy(u.first), behind = u.count - 1;
-      return `<tr class="pick" data-unit="${esc(u.key)}" ${go}="${esc(u.key)}">
-        <td><span class="mono">${esc(u.key)}</span><span class="sub2">${mode === "uf"
-          ? `${u.sites} sites · ${u.count} with a date`
-          : behind ? `and ${behind} more behind it` : "one thing on course"}</span></td>
-        ${mode === "uf" ? `<td class="n"><span class="days${u.late ? " bad" : " none"}">${u.late || "—"}</span>
-          <span class="sub2">${u.soon} inside 60d</span></td>` : ""}
-        <td><span class="mono" style="font-size:12px"><i class="kind" style="background:${KINDC[u.kind]}"></i>${esc(kindWord[u.kind])}</span>
-            <span class="sub2">${esc(mode === "uf" ? `${u.first.site} · ${u.first.name}` : u.first.name)}</span></td>
-        <td>${spark(u.o, 96, 34)}</td>
-        <td class="n"><span class="days${u.days < 30 ? " bad" : ""}">${u.days}d</span><span class="sub2">${u.o.f.lo}–${u.o.f.hi}d</span></td>
-        <td class="n"><span class="days${ob <= 0 ? " bad" : ""}">${ob <= 0 ? "now" : MONTHS[monthOf(ob)]}</span><span class="sub2">${u.first.lead}-day lead</span></td>
-        <td class="n">${confBars(u.o.f.days)}</td></tr>`;
-    }).join("")}</tbody></table></div>
-    ${hidden.length ? `<p class="after">${hidden.length} more ${mode === "uf" ? "federative units" : "sites"} have a date,
-      reaching a limit between ${Math.min(...hidden.map((u) => u.days))} and ${Math.max(...hidden.map((u) => u.days))} days from now${
-      hidden.some((u) => u.late) ? `, and ${hidden.reduce((a, u) => a + u.late, 0)} of their orders are already late` : ""}.</p>` : ""}`;
-}
-
-function netView() {
-  const dated = subjects().filter((s) => s.o.f && s.days != null);
-  let measured = LINKS.length * 2;
-  DEVICES.forEach((d) => { measured += 1; if (d.ports.some((p) => p.uplink && p.hist)) measured += 1; });
-  const datedSites = new Set(dated.map((s) => s.site)).size;
-  const mode = datedSites > GROUP_AT ? "uf" : "site";
-  const units = unitsFor(dated, mode);
-  const quiet = SITE_DEFS.length - datedSites;
-  const word = mode === "uf" ? "federative units" : "sites";
-
-  return `
-    <div class="card" style="margin-bottom:13px">
-      <h2>Every forecast on the network<span>${SITE_DEFS.length} sites · ${measured} measured · ${dated.length} with a date</span></h2>
-      ${tierChart(units, dated, measured, quiet, word)}
-      <figcaption><b>One line per ${mode === "uf" ? "federative unit" : "site"}</b> — the first thing to give
-        inside it. Solid is 30 days of record, dashed is the line through it, and it stops at the dot where it
-        reaches the limit its owner stated. The ${NAMED} nearest are drawn and the nearest named;
-        <b>the dotted span holds the other ${Math.max(0, units.length - NAMED)}</b>, narrowing as each arrives.
-        Below the axis, the same dates less the time to do the work, counted by fortnight.
-        ${mode === "uf" ? `The six drawn are the six carrying the most work — the soonest thing inside a group of
-        a dozen sites is always early, so a date alone stops telling these apart.` : ""}
-      </figcaption>
-      <div class="legend"><span><i class="kind" style="background:var(--warn)"></i>WAN contract</span>
-        <span><i class="kind" style="background:var(--cyan)"></i>uplink</span>
-        <span><i class="kind" style="background:var(--violet)"></i>processor</span>
-        <span>${measured - dated.length} of ${measured} measured subjects have no date: the line through their
-          record never reaches the limit${quiet ? `, which leaves ${quiet} of ${SITE_DEFS.length} sites with nothing on course` : ""}.
-          ${mode === "uf" ? `${datedSites} sites is past what one screen can name, so the unit here is the
-          federative unit — the tier already on every device as a tag. The sites are one level down.` : ""}</span></div>
+function lineRow(g, ln, withUf) {
+  const open = view.line === `${g.key}/${ln.key}`;
+  const SHOWN = 10, head = ln.items.slice(0, SHOWN), tail = ln.items.slice(SHOWN);
+  return `<li class="ln2${open ? " open" : ""}">
+    <div class="grow pick" role="button" tabindex="0" aria-expanded="${open}"
+      aria-label="${esc(ln.key)}, ${ln.items.length} to quote, soonest in ${ln.soonest} days"
+      data-line="${esc(g.key)}/${esc(ln.key)}">
+      <div class="what"><b class="mono">${esc(ln.key)}</b>
+        <span class="sub2">${ln.items.length} to quote · ${ln.sites} site${ln.sites > 1 ? "s" : ""}</span></div>
+      <div class="where">${ln.ufs} state${ln.ufs > 1 ? "s" : ""}<span class="sub2">${esc(g.key)}</span></div>
+      <div class="evw">${spread(ln.items, 164, 42)}</div>
+      <div class="num"><span class="days${ln.soonest < 30 ? " bad" : ""}">${ln.soonest}d</span><span class="sub2">soonest</span></div>
+      ${overdueCell(ln)}
+      <div class="num rec"><span class="chev">${open ? "−" : "+"}</span></div>
     </div>
-    <div class="card">
-      <h2>${mode === "uf" ? "Federative units" : "Sites"}<span>hover to pick one out of the chart · click to open it</span></h2>
-      ${unitTable(units, mode, 12)}
-    </div>`;
+    ${open ? `<ul class="work inner">${head.map((s) => workRow(s, withUf)).join("")}</ul>
+      ${tail.length ? `<div class="restw"><p class="after">The other ${tail.length} on this line, by the day each
+        reaches its limit. Every one is here; the box scrolls so the page does not.</p>
+        <div class="rest">${tail.map((s) => `<button class="rc" data-site="${esc(s.site)}">
+          <span>${esc(s.site)}</span><b class="${orderBy(s) <= 0 ? "bad" : ""}">${s.days}d</b></button>`).join("")}</div></div>` : ""}` : ""}
+  </li>`;
+}
+
+function groupRow(g, withUf) {
+  const open = view.open === g.key;
+  return `<li class="g${open ? " open" : ""}">
+    <div class="grow pick" role="button" tabindex="0" aria-expanded="${open}"
+      aria-label="${esc(g.key)}, ${g.items.length} subjects, soonest in ${g.soonest} days"
+      data-group="${esc(g.key)}">
+      <div class="what"><b class="mono">${esc(g.key)}</b>
+        <span class="sub2"><i class="kind" style="background:${KINDC[g.kind]}"></i>${g.carrier ? "Carrier" : "Hardware"} ·
+          ${Object.entries(g.reasons).map(([r, n]) => REASONW[r](n)).join(" · ")}</span></div>
+      <div class="where">${g.sites} site${g.sites > 1 ? "s" : ""}
+        <span class="sub2">${g.ufs} state${g.ufs > 1 ? "s" : ""}</span></div>
+      <div class="evw">${spread(g.items, 164, 42)}</div>
+      <div class="num"><span class="days${g.soonest < 30 ? " bad" : ""}">${g.soonest}d</span><span class="sub2">soonest of ${g.items.length}</span></div>
+      ${overdueCell(g)}
+      <div class="num rec"><span class="chev">${open ? "−" : "+"}</span></div>
+    </div>
+    ${open ? `<ul class="work lines">${g.lines.map((ln) => lineRow(g, ln, withUf)).join("")}</ul>` : ""}
+  </li>`;
+}
+
+/**
+ * The page is laid out by what the data supports, and the sections run in that order.
+ *
+ * It used to be a trend forecaster with a calendar on top. Measured, of twenty-one series whose
+ * rise passed the noise test, nineteen contained a step and thirteen were flat after it — so most
+ * of what the page announced as a date was an event that had already finished. Meanwhile the
+ * events themselves, and the ports already discarding packets, were reported nowhere at all.
+ *
+ * Now the forecast is the last and smallest section, which is what the record can carry.
+ */
+const FLAT_UNTIL = 24;
+
+/**
+ * An empty section is a finding, not a gap, and the emptiest one is the forecast.
+ *
+ * With a month of record the horizon that record can carry is two months, and almost nothing
+ * crosses a limit inside two months on a slope that survives its own noise. That is not a flaw in
+ * the method; it is the method refusing to invent. The earlier version of this page filled the
+ * same space with dates because it extrapolated six months from thirty days and fitted straight
+ * through level changes — and measured, thirteen of twenty-one of those dates were artifacts.
+ */
+const EMPTY = {
+  dropping: "No discard counter on the network has started rising.",
+  changed: "Nothing stepped to a new level and stayed there.",
+  onejump: "Nothing is within one of its own jumps of a limit.",
+  climbing: `Nothing is climbing on a line the record can carry. A month of history supports a
+    forecast two months out at most, and no slope here survives its own noise and reaches a limit
+    inside that. This section fills as the record deepens — it is the one that needs a year.`,
+};
+
+function renderSet(items, withUf) {
+  if (items.length <= FLAT_UNTIL) {
+    return `${listHead()}<ul class="work">${items.map((s) => workRow(s, withUf)).join("")}</ul>`;
+  }
+  const by = new Map();
+  items.forEach((s) => { const k = orderKey(s), g = by.get(k);
+    if (g) g.items.push(s); else by.set(k, { key: k, kind: s.kind, carrier: s.kind === "link", items: [s] }); });
+  const tally = (list) => ({ items: list,
+    soonest: Math.round(Math.max(...list.map((x) => x.o.now))), late: list.filter((x) => x.o.drops > 0).length,
+    sites: new Set(list.map((x) => x.site)).size, ufs: new Set(list.map((x) => UF_OF.get(x.site))).size });
+  const groups = [...by.values()].map((g) => {
+    const lines = new Map();
+    g.items.forEach((x) => { const k = lineKey(x); lines.set(k, (lines.get(k) ?? []).concat(x)); });
+    return { ...g, ...tally(g.items),
+      reasons: g.items.reduce((a, x) => { const r = reasonOf(x); a[r] = (a[r] ?? 0) + 1; return a; }, {}),
+      lines: [...lines.entries()].map(([k, v]) => ({ key: k, ...tally(v) })).sort((a, b) => b.items.length - a.items.length) };
+  }).sort((a, b) => b.items.length - a.items.length);
+  return `<p class="after">${items.length} subjects is more than one screen, so they are gathered into the
+      ${groups.length} orders somebody would actually place — a carrier, a hardware model. Open one for its
+      line items, and a line item for the sites it covers.</p>
+    <ol class="head"><li><span>What</span><span>Where</span><span>Where they sit</span>
+      <span class="num">Highest</span><span class="num">Dropping</span><span class="num"></span></li></ol>
+    <ul class="work groups">${groups.map((g) => groupRow(g, withUf)).join("")}</ul>`;
+}
+
+function verdictSection(k, items, withUf) {
+  const d = VERDICT[k];
+  return `<section class="vs" id="v-${k}" style="--vc:${d.colour}">
+    <h2 class="vh"><i></i>${d.title}<b>${items.length.toLocaleString("en")}</b><span>${d.note}</span></h2>
+    ${items.length ? renderSet(items, withUf) : `<p class="after">${EMPTY[k]}</p>`}
+  </section>`;
+}
+
+function workList(all, withCensus, withUf) {
+  const sets = {};
+  STATES.forEach((k) => { sets[k] = []; });
+  all.forEach((s) => sets[s.state].push(s));
+  const quietN = sets.quiet.length;
+
+  const index = `<nav class="vindex">${Object.keys(VERDICT).map((k) => `<a href="#v-${k}" style="--vc:${VERDICT[k].colour}">
+      <b>${sets[k].length.toLocaleString("en")}</b><span>${VERDICT[k].title}</span></a>`).join("")}</nav>`;
+
+  const why = {};
+  sets.quiet.forEach((s) => {
+    const f = s.o.f;
+    const k = !f ? "too little record" : !f.rising ? f.why : "reaches the limit beyond what the record can see";
+    why[k] = (why[k] ?? 0) + 1;
+  });
+  const quiet = withCensus ? `<section class="vs" id="v-quiet" style="--vc:var(--muted)">
+    <h2 class="vh"><i></i>Nothing to say<b>${quietN.toLocaleString("en")}</b>
+      <span>measured against a limit, and the record supports none of the four claims above</span></h2>
+    <ul class="why">${Object.entries(why).sort((a, b) => b[1] - a[1]).map(([k, n]) =>
+      `<li><b>${n.toLocaleString("en")}</b><span>${k}</span><i>${Math.round(n / all.length * 100)}%</i></li>`).join("")}</ul>
+    <p class="after">Each of these is a different thing to do about it, which is why they are counted apart
+      rather than as one silence. Too little record is a question of retention; a rise inside the noise is a
+      come-back-later; reaching the limit beyond what the record can see is genuinely fine. None of it is
+      dropped, because a thing this page stops reporting is a thing the reader will take for healthy.</p>
+  </section>` : "";
+
+  return index + Object.keys(VERDICT).map((k) => verdictSection(k, sets[k], withUf)).join("") + quiet;
+}
+
+/**
+ * One subject drawn in full, chosen as the strongest claim the record makes anywhere — a port
+ * already discarding before a step, a step before a near miss, a near miss before a trend. It is
+ * the only place a series gets room to be read properly; every row below carries the same history
+ * compressed to a thumbnail.
+ */
+/**
+ * One forecast with the room to be read: what changed, the chance of crossing rather than a bare
+ * date, how the method scored when it last predicted this very series, and the cone it was fitted
+ * on. An inventory answers "how many"; this answers "what is happening to this one, how sure are
+ * you".
+ */
+function caseOf(s) {
+  const o = s.o, f = o.f;
+  if (!f || f.mid == null) return "";
+  const likely = likelyDay(f) ?? f.mid, peak = Math.round(chanceBy(f, f.far) * 100);
+  const bt = backtest(o.hist, o.st ? o.st.at : 0);
+  const W = 880, H = 300, L = 50, B = 50, T = 20, n = o.hist.length;
+  const ahead = Math.min(f.far, Math.max(14, Math.round(f.mid * 1.7)));
+  const top = Math.max(118, ...o.hist, f.at(ahead) + f.band(ahead));
+  const mid = L + (W - L - 16) * 0.56;
+  const X = (i) => L + (i / Math.max(1, n - 1)) * (mid - L);
+  const F = (d) => mid + (d / ahead) * (W - 16 - mid);
+  const Y = (v) => (H - B) - (Math.min(Math.max(v, 0), top) / top) * (H - B - T);
+  const steps = Array.from({ length: 25 }, (_, k) => (k / 24) * ahead);
+  const line = o.hist.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  const proj = steps.map((d) => `${F(d).toFixed(1)},${Y(f.at(d)).toFixed(1)}`).join(" ");
+  const cone2 = steps.map((d) => `${F(d).toFixed(1)},${Y(f.at(d) + f.band(d)).toFixed(1)}`)
+    .concat(steps.slice().reverse().map((d) => `${F(d).toFixed(1)},${Y(Math.max(0, f.at(d) - f.band(d))).toFixed(1)}`)).join(" ");
+  const bw = (W - 16 - mid) / 24 - 1.5;
+  const bars = steps.slice(1).map((d) => `<rect x="${(F(d) - bw / 2).toFixed(1)}" y="${H - B + 22}" width="${Math.max(2, bw).toFixed(1)}"
+    height="15" rx="2" fill="${FX.limit}" opacity="${(0.1 + chanceBy(f, d) * 0.85).toFixed(2)}"/>`).join("");
+  const kpi = (k, v, c) => `<li><span>${k}</span><strong>${v}</strong><small>${c}</small></li>`;
+  return `<section class="case">
+    <header class="case-top">
+      <p class="case-chip"><i></i>${o.st ? "Changed level · still climbing" : "Climbing"}
+        <em>${bt ? `backtest ${bt.grade} · ${bt.inBand}/${bt.of} days inside the band` : "no backtest: record too short"}</em></p>
+      <div><h3>${esc(s.name)}</h3><p>${esc(s.sub)} · ${esc(s.site || "untagged site")} · against ${esc(s.limit)}</p></div>
+      <button class="open" ${goAttr(s)}>Open ${esc(s.kind === "link" ? "the circuit" : s.ref.name)} →</button>
+    </header>
+    <ul class="kpi">
+      ${kpi("Change", o.st ? `${o.st.from.toFixed(0)}% → ${o.st.to.toFixed(0)}%` : `${o.hist[0].toFixed(0)}% → ${o.now.toFixed(0)}%`,
+        o.st ? `${(o.st.to / Math.max(1, o.st.from)).toFixed(2)}× since ${o.st.ago}d ago` : "over the whole month")}
+      ${kpi("Chance of crossing", `${peak}%`, `by day ${ahead}`)}
+      ${kpi("Probably past it", `in ${likely}d`, "chance passes a half")}
+      ${kpi("Room left", `${(100 - o.now).toFixed(0)} pts`, `at ${f.slope.toFixed(2)} pts a day`)}
+    </ul>
+    <figure class="case-fig">
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(s.name)} reaches its limit between ${f.lo} and ${f.hi} days from now">
+        ${chartFx("cs")}
+        <rect x="${L}" y="${T - 8}" width="${W - L - 16}" height="${H - B - T + 8}" fill="url(#cs-grid)"/>
+        ${o.st ? `<rect x="${X(o.st.at).toFixed(1)}" y="${T - 8}" width="${(mid - X(o.st.at)).toFixed(1)}" height="${H - B - T + 8}" fill="${FX.proj}" opacity=".07"/>` : ""}
+        ${[25, 50, 75, 100].map((v) => `<line x1="${L}" y1="${Y(v).toFixed(1)}" x2="${W - 16}" y2="${Y(v).toFixed(1)}"
+            stroke="${v === 100 ? FX.limit : FX.grid}" stroke-width="${v === 100 ? 1.4 : 1}" ${v === 100 ? 'stroke-dasharray="6 5" filter="url(#cs-soft)"' : ""}/>
+          <text class="ax" x="${L - 8}" y="${(Y(v) + 3.5).toFixed(1)}" text-anchor="end" ${v === 100 ? `fill="${FX.limit}"` : ""}>${v === 100 ? "LIMIT" : `${v}%`}</text>`).join("")}
+        <polygon points="${cone2}" fill="url(#cs-cone)"/>
+        <polyline points="${proj}" fill="none" stroke="${FX.proj}" stroke-width="2.6" stroke-dasharray="7 5" stroke-linecap="round" filter="url(#cs-soft)"/>
+        <polyline points="${line}" fill="none" stroke="${FX.trace}" stroke-width="2.4" stroke-linejoin="round" filter="url(#cs-glow)"/>
+        ${o.st ? `<line x1="${X(o.st.at).toFixed(1)}" y1="${T - 8}" x2="${X(o.st.at).toFixed(1)}" y2="${H - B}" stroke="${FX.proj}" stroke-dasharray="3 4"/>
+          <text class="tag" x="${(X(o.st.at) + 7).toFixed(1)}" y="${T + 4}" fill="${FX.proj}">stepped ${(o.st.to - o.st.from).toFixed(0)} points · ${o.st.ago}d ago</text>` : ""}
+        <line x1="${mid.toFixed(1)}" y1="${T - 8}" x2="${mid.toFixed(1)}" y2="${H - B + 38}" stroke="${FX.axis}"/>
+        <text class="tag" x="${(mid + 7).toFixed(1)}" y="${H - B + 15}">now</text>
+        <circle cx="${mid.toFixed(1)}" cy="${Y(o.now).toFixed(1)}" r="4.6" fill="${FX.trace}" filter="url(#cs-soft)"/>
+        <line x1="${F(f.lo).toFixed(1)}" y1="${Y(100).toFixed(1)}" x2="${F(Math.min(f.hi, ahead)).toFixed(1)}" y2="${Y(100).toFixed(1)}"
+          stroke="${FX.limit}" stroke-width="4" stroke-linecap="round" opacity=".45"/>
+        <circle cx="${F(f.mid).toFixed(1)}" cy="${Y(100).toFixed(1)}" r="5.6" fill="${FX.limit}" filter="url(#cs-glow)"/>
+        <text class="tag" x="${F(f.mid).toFixed(1)}" y="${(Y(100) - 13).toFixed(1)}" text-anchor="middle" fill="${FX.limit}">${f.lo}–${f.hi}d</text>
+        <text class="ax" x="${L - 8}" y="${H - B + 33}" text-anchor="end">P(limit)</text>${bars}
+      </svg>
+      <figcaption>Solid is the record. The dashed line is fitted ${o.st ? "after the change, not across it" : "through the whole record"},
+        and the cone is what its own scatter allows. The bar under the axis is the chance of being past the limit
+        that day — faint early, solid late. Nothing is drawn beyond ${f.far} days, twice the record it rests on.</figcaption>
+    </figure>
+  </section>`;
+}
+
+/**
+ * Three bands, in the order a reader needs them.
+ *
+ * The chart first and whole, because it is the only thing that answers how much and when. Then one
+ * forecast drawn properly, so the reader learns what a forecast here is before meeting forty an
+ * inch wide. Then everything else behind a click.
+ *
+ * What this replaced was a pile that had grown one right decision at a time: a headline repeating
+ * the chart's caption, chips repeating the counts under them, a table of twenty-five rows open by
+ * default, four sections, and the counts again.
+ */
+function netView() {
+  const all = subjects(), forecasts = all.filter((x) => x.state === "climbing" && x.o.f?.mid != null)
+    .sort((a, b) => a.o.f.mid - b.o.f.mid);
+  const n = {};
+  STATES.forEach((k) => { n[k] = all.filter((x) => x.state === k).length; });
+  const scope = ufScope(all);
+  return `<div class="card" style="margin-bottom:13px">
+      <h2>When this network runs out<span>at or over the limit their owner stated · the record behind, the forecast ahead</span></h2>
+      ${scope}${runway(all, forecasts)}
+    </div>
+    ${forecasts.length ? `<div class="card" style="margin-bottom:13px">
+      <h2>The nearest, in full<span>${forecasts.length} forecasts · this is the soonest</span></h2>
+      ${caseOf(forecasts[0])}
+    </div>` : ""}
+    ${claimRows(all, n, forecasts)}`;
+}
+
+/** the estate cut by the tag the hierarchy puts above a site */
+function ufScope(all) {
+  const by = new Map();
+  all.forEach((x) => { const k = UF_OF.get(x.site) ?? "—"; by.set(k, (by.get(k) ?? []).concat(x)); });
+  const rows = [...by.entries()].map(([uf, list]) => ({
+    uf, past: list.filter((x) => crossedAgo(x.o.hist) != null).length,
+    soon: list.filter((x) => x.state === "climbing" && x.o.f?.mid != null).length,
+    first: Math.min(...list.filter((x) => x.o.f?.mid != null).map((x) => x.o.f.mid), Infinity),
+  })).sort((a, b) => b.past - a.past || a.first - b.first).slice(0, 8);
+  const worst = Math.max(1, ...rows.map((r) => r.past + r.soon));
+  return `<div class="scope">
+    <p class="crumbs2"><b>Whole network</b><i>grouped by federative unit</i></p>
+    <ul>${rows.map((r) => `<li><button data-uf="${esc(r.uf)}">
+      <span class="sn">${esc(r.uf)}</span>
+      <span class="sb"><i style="width:${(((r.past + r.soon) / worst) * 100).toFixed(0)}%"></i></span>
+      <span class="snum">${r.past ? `<b class="pst">${r.past}</b>` : ""}${r.soon ? `<b>${r.soon}</b>` : ""}${!r.past && !r.soon ? '<b class="non">—</b>' : ""}</span>
+      <span class="swhen">${Number.isFinite(r.first) ? `first in ${r.first}d` : "nothing on course"}</span>
+    </button></li>`).join("")}</ul>
+    <p class="after"><b class="pst">red</b> already past a limit in the record · <b class="amb">amber</b> on course to reach one ·
+      the bar is the two together, so the longest bar is where to look first.</p>
+  </div>`;
+}
+
+/** everything that is not the forecast, behind a click */
+function claimRows(all, n, forecasts) {
+  const why = {};
+  all.filter((x) => x.state === "quiet").forEach((x) => {
+    const f = x.o.f;
+    const k = !f ? "too little record" : !f.rising ? f.why : "reaches the limit beyond what the record can see";
+    why[k] = (why[k] ?? 0) + 1;
+  });
+  const row = (key, title, count, gist, ink) => {
+    const open = view.open === key;
+    return `<li class="claim${open ? " is-open" : ""}" style="--claim:${ink}">
+      <div class="claim-head pick" role="button" tabindex="0" aria-expanded="${open}" data-claim="${key}">
+        <span class="claim-n">${count.toLocaleString("en")}</span>
+        <span class="claim-t"><strong>${title}</strong><small>${gist}</small></span>
+        <span class="claim-c">${open ? "−" : "+"}</span>
+      </div>
+      ${open ? `<div class="claim-body">${
+        key === "quiet"
+          ? `<ul class="why">${Object.entries(why).sort((a, b) => b[1] - a[1])
+              .map(([k, v]) => `<li><b>${v.toLocaleString("en")}</b><span>${k}</span><i>${Math.round(v / all.length * 100)}%</i></li>`).join("")}</ul>`
+          : renderSet(key === "all" ? forecasts : all.filter((x) => x.state === key), true)
+      }</div>` : ""}
+    </li>`;
+  };
+  const ev = changeEvents(all)[0];
+  const lead = forecasts[0];
+  return `<ul class="claims">
+    ${row("dropping", "Already dropping packets", n.dropping, `${n.dropping ? "the discard rate started rising" : "none"}`, "var(--bad)")}
+    ${row("onejump", "One jump from a limit", n.onejump, "headroom smaller than a rise they have shown", "var(--warn)")}
+    ${row("changed", "Changed level and held", n.changed, ev ? `the biggest day moved ${ev.n} at ${ev.sites} sites, ${ev.ago}d ago` : "on their own days", "var(--ink-2)")}
+    ${row("all", "Every forecast", forecasts.length, lead ? `soonest in ${lead.o.f.lo}–${lead.o.f.hi} days, at ${esc(lead.site)}` : "nothing on course", "var(--cyan)")}
+    ${row("quiet", "Nothing the record can say", n.quiet, `${Object.entries(why).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "silent"} is the commonest reason`, "var(--muted)")}
+  </ul>`;
 }
 
 function ufView(uf) {
-  const dated = subjects().filter((s) => s.o.f && s.days != null && UF_OF.get(s.site) === uf);
-  const here = SITE_DEFS.filter(([, u]) => u === uf);
-  const units = unitsFor(dated, "site");
-  const quiet = here.length - units.length;
-  return `
-    <div class="card" style="margin-bottom:13px">
-      <h2>${esc(uf)}<span>${here.length} sites · ${dated.length} with a date</span></h2>
-      ${tierChart(units, dated, 0, quiet, "sites")}
-      <figcaption>The same picture, one tier down: <b>one line per site in ${esc(uf)}</b>, the first thing to
-        give there. ${quiet ? `${quiet} of the ${here.length} sites here have nothing on course.` : ""}</figcaption>
+  const here = subjects().filter((x) => UF_OF.get(x.site) === uf);
+  const forecasts = here.filter((x) => x.state === "climbing" && x.o.f?.mid != null).sort((a, b) => a.o.f.mid - b.o.f.mid);
+  const n = {};
+  STATES.forEach((k) => { n[k] = here.filter((x) => x.state === k).length; });
+  return `<div class="card" style="margin-bottom:13px">
+      <h2>When ${esc(uf)} runs out<span>the same count, the same axis, one tier down</span></h2>
+      ${runway(here, forecasts)}
     </div>
-    <div class="card">
-      <h2>Sites in ${esc(uf)}<span>hover to pick one out of the chart · click to open it</span></h2>
-      ${unitTable(units, "site", 14)}
-    </div>`;
+    ${forecasts.length ? `<div class="card" style="margin-bottom:13px">
+      <h2>The nearest in ${esc(uf)}<span>${forecasts.length} forecasts</span></h2>${caseOf(forecasts[0])}</div>` : ""}
+    ${claimRows(here, n, forecasts)}`;
 }
 
-// ---------------------------------------------------------------- level 2
 function siteView(name) {
   const subs = subjects().filter((s) => s.site === name);
   const links = LINKS.filter((l) => l.site === name), devs = DEVICES.filter((d) => d.site === name);
@@ -641,12 +1360,13 @@ const colourOf = (p) => {
   return p.f.mid < 30 ? "var(--bad)" : p.f.mid < 90 ? "var(--warn)" : "var(--cyan)";
 };
 function plate(d) {
+  d.ports.forEach(fillPort);
   const PW = 17, PH = 20, GAP = 3, GROUP = 10, COLS = 24;
   const W = 40 + COLS * (PW + GAP) + 3 * GROUP + 92, H = 2 * (PH + 7) + 34;
   const px = (i) => 34 + i * (PW + GAP) + Math.floor(i / 6) * GROUP;
   const ports = d.ports.slice(0, 48).map((p, k) => {
     const row = k % 2, x = px(Math.floor(k / 2)), y = 22 + row * (PH + 7), on = view.port === p.n;
-    return `<g class="pick" data-port="${p.n}">
+    return `<g class="pick" role="button" tabindex="0" aria-label="${esc(p.name)}" data-port="${p.n}">
       <rect x="${x}" y="${y}" width="${PW}" height="${PH}" rx="2.5" fill="${colourOf(p)}"
         stroke="${on ? "#fff" : p.up ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.1)"}" stroke-width="${on ? 1.8 : 1}"/>
       <rect x="${x + 3}" y="${y + PH - 5}" width="${PW - 6}" height="2.5" rx="1.2" fill="rgba(0,0,0,.42)"/>
@@ -655,7 +1375,7 @@ function plate(d) {
   }).join("");
   const uplinks = d.ports.slice(48).map((p, k) => {
     const x = 34 + COLS * (PW + GAP) + 3 * GROUP + 16 + k * 18, on = view.port === p.n;
-    return `<g class="pick" data-port="${p.n}"><rect x="${x}" y="22" width="15" height="${2 * PH + 7}" rx="2.5"
+    return `<g class="pick" role="button" tabindex="0" aria-label="${esc(p.name)}" data-port="${p.n}"><rect x="${x}" y="22" width="15" height="${2 * PH + 7}" rx="2.5"
       fill="${colourOf(p)}" stroke="${on ? "#fff" : "rgba(255,255,255,.28)"}" stroke-width="${on ? 1.8 : 1}"/>
       <title>${esc(p.name)} · 10 Gb/s</title></g>`;
   }).join("");
@@ -717,84 +1437,152 @@ function devView(d) {
 }
 
 // ---------------------------------------------------------------- shell
-/** the federative unit only earns a crumb when it is the tier the top screen draws */
+/** a site hangs under its federative unit whenever it is tagged with one */
 function ufCrumb(site) {
-  const dated = subjects().filter((s) => s.o.f && s.days != null);
-  if (new Set(dated.map((s) => s.site)).size <= GROUP_AT) return [];
   const uf = UF_OF.get(site);
   return uf ? [`<i>›</i><button data-uf="${esc(uf)}">${esc(uf)}</button>`] : [];
 }
 
-function render() {
+/**
+ * Navigation.
+ *
+ * Six things were wrong, and all six were the same mistake: the screen treated every change as a
+ * fresh page.
+ *
+ *   - The browser's back button left the prototype entirely, because nothing was ever pushed to
+ *     history. A drill-down with no back is a trap.
+ *   - Every render scrolled to the top, so opening a group near the bottom of a long list threw
+ *     the reader to the top of the page to look at something they could no longer see.
+ *   - Drilling into a device and coming back dropped the month, the open order and the open line.
+ *     The reader had to rebuild their place by hand.
+ *   - Rows answered the mouse and nothing else: no tab stop, no Enter, no focus ring.
+ *   - Focus stayed on a button that no longer existed after the page changed under it.
+ *   - No view had a URL, so none could be reloaded, linked or sent to anybody.
+ *
+ * So: the list state (month, open order, open line) belongs to the reader and survives a drill.
+ * Opening something in place keeps the scroll and rewrites the current history entry; walking down
+ * a level pushes one and goes to the top, recording where the reader was so coming back puts them
+ * where they were. Everything clickable is reachable by keyboard and says what it is.
+ */
+const AT = { at: "network", open: null, line: null, uf: null, site: null, link: null, dev: null, port: null };
+let view = { ...AT }, listY = 0;
+
+const hashOf = (v) => {
+  const p = new URLSearchParams();
+  ["at", "open", "line", "uf", "site", "link", "dev", "port"]
+    .forEach((k) => { if (v[k] != null && v[k] !== "") p.set(k, v[k]); });
+  return "#" + p.toString();
+};
+function viewFromHash() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (!p.get("at")) return null;
+  const num = (k) => (p.get(k) == null ? null : Number(p.get(k)));
+  return { ...AT, at: p.get("at"), open: p.get("open"), line: p.get("line"),
+    uf: p.get("uf"), site: p.get("site"), link: num("link"), dev: num("dev"), port: num("port") };
+}
+
+/** `down` walks a level and is a history entry; anything else rewrites the one we are on */
+function go(next, down) {
+  if (down) {
+    if (view.at === "network") listY = window.scrollY;
+    history.replaceState({ y: window.scrollY }, "", hashOf(view));
+    view = next;
+    history.pushState({ y: 0 }, "", hashOf(view));
+    render("top");
+  } else {
+    view = next;
+    history.replaceState({ y: window.scrollY }, "", hashOf(view));
+    render("keep");
+  }
+}
+
+function render(scroll) {
   const crumbs = [`<button data-go="network">Network</button>`];
-  let title = "Capacity ahead", kicker = "Prototype · Ahead", lede = "", body = "";
+  let title = "What to act on", kicker = "Prototype · Ahead", lede = "", body = "";
   if (view.at === "network") {
-    const subs = subjects(), late = subs.filter((s) => orderBy(s) <= 0).length;
-    const nearest = subs[0], sites = new Set(subs.map((s) => s.site)).size;
-    lede = `A <b>forecast</b> here is a straight line through 30 days of record, carried forward until it
-      reaches a limit someone else stated — a contracted rate, a line rate, saturation. Most things never
-      reach one: ${sites} of ${SITE_DEFS.length} sites have anything on course at all. The nearest is
-      <b>${esc(nearest.site)}</b>, in ${nearest.days} days.${late ? ` <em>${late} of these orders should already have left.</em>` : ""}`;
+    const all = subjects(), n = {};
+    STATES.forEach((k) => { n[k] = all.filter((x) => x.state === k).length; });
+    lede = `This page says four things, in the order the record supports them.
+      <b>${n.dropping.toLocaleString("en")}</b> subjects are discarding packets, which is observed rather than
+      predicted. <b>${n.changed.toLocaleString("en")}</b> stepped to a new level and stayed.
+      <b>${n.onejump.toLocaleString("en")}</b> have less headroom left than a rise they have already shown.
+      <b>${n.climbing.toLocaleString("en")}</b> are climbing on a line that survives after the step — and that
+      last one is the only forecast on the page.`;
     body = netView();
   } else if (view.at === "uf") {
-    crumbs.push(`<i>›</i><b>${esc(view.uf)}</b>`);
+    crumbs.push(`<i>›</i><b aria-current="page">${esc(view.uf)}</b>`);
     title = view.uf; kicker = "Federative unit";
     lede = "Every site tagged to this federative unit, read the same way as the network above it.";
     body = ufView(view.uf);
   } else if (view.at === "site") {
-    crumbs.push(...ufCrumb(view.site), `<i>›</i><b>${esc(view.site)}</b>`);
+    crumbs.push(...ufCrumb(view.site), `<i>›</i><b aria-current="page">${esc(view.site)}</b>`);
     title = view.site; kicker = "Site";
     lede = "The whole path at this site, in the order it will give. The WAN contract, the uplinks that carry it and the processors behind them.";
     body = siteView(view.site);
   } else if (view.at === "link") {
     const l = LINKS.find((x) => x.id === view.link);
-    crumbs.push(...ufCrumb(l.site), `<i>›</i><button data-site="${esc(l.site)}">${esc(l.site)}</button>`, `<i>›</i><b>WAN · ${esc(l.carrier)}</b>`);
+    crumbs.push(...ufCrumb(l.site), `<i>›</i><button data-site="${esc(l.site)}">${esc(l.site)}</button>`,
+      `<i>›</i><b aria-current="page">WAN · ${esc(l.carrier)}</b>`);
     title = `WAN · ${l.carrier} ${l.contracted}`; kicker = "WAN link";
     lede = `${l.site} · ${l.role} circuit.`;
     body = linkView(l);
   } else if (view.at === "device") {
     const d = DEVICES.find((x) => x.id === view.dev);
-    crumbs.push(...ufCrumb(d.site), `<i>›</i><button data-site="${esc(d.site)}">${esc(d.site)}</button>`, `<i>›</i><b>${esc(d.name)}</b>`);
+    crumbs.push(...ufCrumb(d.site), `<i>›</i><button data-site="${esc(d.site)}">${esc(d.site)}</button>`,
+      `<i>›</i><b aria-current="page">${esc(d.name)}</b>`);
     title = d.name; kicker = "Device";
     lede = "The front panel as the device reports it. The colour on a live port is how long its forecast gives it — not how full it is today.";
     body = devView(d);
   }
+  const y = window.scrollY;
   document.getElementById("crumbs").innerHTML = crumbs.join(" ");
   document.getElementById("kicker").textContent = kicker;
   document.getElementById("title").textContent = title;
   document.getElementById("lede").innerHTML = lede;
   document.getElementById("body").innerHTML = body;
-  window.scrollTo(0, 0);
+  if (typeof scroll === "number") window.scrollTo(0, scroll);
+  else if (scroll === "keep") window.scrollTo(0, y);
+  else { window.scrollTo(0, 0); document.getElementById("title").focus({ preventScroll: true }); }
 }
-// The chart and the list under it are one object. Sixteen trajectories are legible as a shape but
-// not as sixteen things, so the row lends its site to the picture: the lines that belong to it stay,
-// the rest fall back far enough to read as context.
-document.addEventListener("mouseover", (e) => {
-  const row = e.target.closest("tr.pick[data-unit]"), svg = document.getElementById("all");
-  if (!svg) return;
-  const unit = row ? row.dataset.unit : null;
-  svg.classList.toggle("lit", !!unit);
-  svg.querySelectorAll(".trail").forEach((t) => t.classList.toggle("on", t.dataset.unit === unit));
+
+document.addEventListener("click", (e) => {
+  const t = (sel) => e.target.closest(sel);
+  const p = t("[data-port]"), g = t("[data-group]"), ln = t("[data-line]"), cl = t("[data-claim]");
+  // these three change what is showing, not where we are
+  if (p) { const v = Number(p.dataset.port); return go({ ...view, port: view.port === v ? null : v }); }
+  if (cl) { return go({ ...view, open: view.open === cl.dataset.claim ? null : cl.dataset.claim, line: null }); }
+  if (cl) { return go({ ...view, open: view.open === cl.dataset.claim ? null : cl.dataset.claim, line: null }); }
+  if (g) { return go({ ...view, open: view.open === g.dataset.group ? null : g.dataset.group, line: null }); }
+  if (ln) { return go({ ...view, line: view.line === ln.dataset.line ? null : ln.dataset.line }); }
+
+  // and these walk a level, carrying the list the reader built with them
+  const keep = { open: view.open, line: view.line };
+  const go2 = t("[data-go]"), u = t("[data-uf]"), s = t("[data-site]"), l = t("[data-link]"), d = t("[data-dev]");
+  if (go2) { go({ ...AT, ...keep }, true); return window.scrollTo(0, listY); }
+  if (u) return go({ ...AT, ...keep, at: "uf", uf: u.dataset.uf }, true);
+  if (s) return go({ ...AT, ...keep, at: "site", uf: UF_OF.get(s.dataset.site) ?? null, site: s.dataset.site }, true);
+  if (l) { const li = LINKS.find((x) => x.id === Number(l.dataset.link));
+    return go({ ...AT, ...keep, at: "link", uf: UF_OF.get(li.site) ?? null, site: li.site, link: li.id }, true); }
+  if (d) { const dv = DEVICES.find((x) => x.id === Number(d.dataset.dev));
+    return go({ ...AT, ...keep, at: "device", uf: UF_OF.get(dv.site) ?? null, site: dv.site, dev: dv.id }, true); }
 });
 
-const AT = { at: "network", uf: null, site: null, link: null, dev: null, port: null };
-document.addEventListener("click", (e) => {
-  const go = e.target.closest("[data-go]"), u = e.target.closest("[data-uf]"), s = e.target.closest("[data-site]"),
-        l = e.target.closest("[data-link]"), d = e.target.closest("[data-dev]"), p = e.target.closest("[data-port]");
-  if (p) { const v = Number(p.dataset.port); view.port = view.port === v ? null : v; return render(); }
-  if (go) { view = { ...AT }; return render(); }
-  // a trail carries whichever tier the chart is drawing, so it is a site name or a federative unit
-  const tr = e.target.closest(".trail,.dot");
-  if (tr) {
-    const k = tr.dataset.unit;
-    view = UF_OF.has(k) ? { ...AT, at: "site", uf: UF_OF.get(k), site: k } : { ...AT, at: "uf", uf: k };
-    return render();
-  }
-  if (u) { view = { ...AT, at: "uf", uf: u.dataset.uf }; return render(); }
-  if (s) { view = { ...AT, at: "site", uf: UF_OF.get(s.dataset.site) ?? null, site: s.dataset.site }; return render(); }
-  if (l) { const li = LINKS.find((x) => x.id === Number(l.dataset.link)); view = { ...AT, at: "link", uf: UF_OF.get(li.site) ?? null, site: li.site, link: li.id }; return render(); }
-  if (d) { const dv = DEVICES.find((x) => x.id === Number(d.dataset.dev)); view = { ...AT, at: "device", uf: UF_OF.get(dv.site) ?? null, site: dv.site, dev: dv.id }; return render(); }
+// anything the mouse can open, the keyboard opens the same way
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const t = e.target.closest?.('[role="button"]');
+  if (!t || t.tagName === "BUTTON") return;
+  e.preventDefault();
+  t.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 });
+
+window.addEventListener("popstate", (e) => {
+  view = viewFromHash() ?? { ...AT };
+  render(e.state?.y ?? 0);
+});
+
+view = viewFromHash() ?? { ...AT };
+history.replaceState({ y: 0 }, "", hashOf(view));
 render();
 </script>
 </body>

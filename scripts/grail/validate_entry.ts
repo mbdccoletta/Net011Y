@@ -16,3 +16,5 @@ export { buildJourney, asRoutes } from "../../app/ui/app/model/journey";
 export { clusterPoints, worstOf, CELL, bubbleRadius } from "../../app/ui/app/model/mapClusters";
 export { mergeRows } from "../../app/ui/app/data/logCache";
 export { logsSearchQuery, logsQuery } from "../../app/ui/app/utils/drilldown";
+export { read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, silence, HORIZON, STATES,
+  crossedAgo, chanceBy, likelyDay, backtest, clusterChanges, narrow, branchesAt, UNTAGGED, busyHour, shownCeiling, headroomOf, quantile } from "../../app/ui/app/model/ahead";

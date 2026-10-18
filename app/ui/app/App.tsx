@@ -2,7 +2,7 @@
 //
 // Structured like Infrastructure & Operations: AppHeader navigation per entity type, a
 // FilterBar and DataTable per page, and the selected entity in PageLayout.Details.
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppHeader, HelpMenu, PageLayout } from "@dynatrace/strato-components/layouts";
 import { Button } from "@dynatrace/strato-components/buttons";
@@ -14,12 +14,14 @@ import { useNetwork } from "./data/useNetwork";
 import { useUrlState, type Page } from "./hooks/useUrlState";
 import { allSites } from "./model/site";
 import { EntityDetails } from "./components/EntityDetails";
+import { DetailsSlotProvider } from "./components/DetailsSlot";
 import { useLogBuckets } from "./hooks/useLogBucket";
 import { SearchPalette } from "./components/SearchPalette";
 import type { Filters } from "./pages/EntityPages";
 import { DevicesVisual, LinksVisual, SitesVisual } from "./pages/VisualPages";
 import { LiveMapPage } from "./pages/LiveMapPage";
 import { TrafficPage } from "./pages/TrafficPage";
+import { AheadPage } from "./pages/AheadPage";
 import { evaluateNeeds, VIEW_NEEDS, type NeedKey } from "./data/requirements";
 import { coverage, nextSteps } from "./model/nextSteps";
 import { pageCoverage } from "./model/coverage";
@@ -27,13 +29,16 @@ import { SettingsSheet } from "./components/SettingsSheet";
 import { MagnifyingGlassIcon, SettingIcon } from "@dynatrace/strato-icons";
 
 const APP_NAME = "NetO11y";
-const LABEL: Record<Page, string> = { causes: "Live map", sites: "Sites", devices: "Devices", links: "WAN links", traffic: "Traffic" };
+const LABEL: Record<Page, string> = { causes: "Live map", sites: "Sites", devices: "Devices", links: "WAN links", traffic: "Traffic", ahead: "Ahead" };
 const NO_FILTERS: Filters = { status: null, region: null, role: null, carrier: null, q: "" };
 const DOCS = {
   networks: "https://docs.dynatrace.com/docs/observe/infrastructure-observability/networks",
   networkDevices: "https://docs.dynatrace.com/docs/observe/infrastructure-observability/networks/network-devices/network-devices-get-started-guide",
 };
-const PAGES: [Page, string][] = [["causes", "Live map"], ["sites", "Sites"], ["devices", "Devices"], ["links", "WAN links"], ["traffic", "Traffic"]];
+const PAGES: [Page, string][] = [["causes", "Live map"], ["sites", "Sites"], ["devices", "Devices"], ["links", "WAN links"], ["traffic", "Traffic"], ["ahead", "Ahead"]];
+
+/** the queries the Live map counts, colours and names causes from */
+const MAP_SPEAKS_FROM = ["alerts", "problems", "devices", "sites", "wan", "icmp"];
 
 const hrefOf = (p: Page, source: "live" | "example", scale: "xl" | null = null) => {
   const q = new URLSearchParams();
@@ -106,6 +111,30 @@ export function App() {
   };
   const showProgress = useDelayed(!model, 500);
   const select = (sel: string | null) => setUrl({ sel, tab: "overview" });
+  /**
+   * The detail region, and who is using it.
+   *
+   * Usually it is the entity in the URL. A page with a detail of its own borrows it through the
+   * slot: `detailHost` is the node the page renders into, `detailClose` is how to close whatever
+   * the page put there — held so the region's own close button reaches the page's state instead
+   * of leaving it open behind a collapsed panel.
+   */
+  const [detailHost, setDetailHost] = useState<HTMLElement | null>(null);
+  const [detailClose, setDetailClose] = useState<{ fn: () => void } | null>(null);
+  // read inside `claimDetails`, which has to keep one identity for the life of the app: a slot
+  // that changed on every render would be re-claimed on every render
+  const live = useRef({ sel: url.sel, select });
+  live.current = { sel: url.sel, select };
+  const claimDetails = useCallback((close: (() => void) | null) => {
+    setDetailClose(close ? { fn: close } : null);
+    // One occupant. A page claims the region because the reader just clicked a mark on it, so
+    // the claim wins and whatever entity was selected lets go.
+    if (close && live.current.sel) live.current.select(null);
+  }, []);
+  const detailSlot = useMemo(() => ({ host: detailHost, claim: claimDetails }), [detailHost, claimDetails]);
+  // and the other way round: selecting an entity — from the search palette, from a drill-down —
+  // closes the page's own detail, so the two never stack in the one region
+  useEffect(() => { if (url.sel && detailClose) detailClose.fn(); }, [url.sel, detailClose]);
   // search from anywhere: ⌘K / Ctrl+K, or "/" when not typing
   const [searchOpen, setSearchOpen] = useState(false);
   useEffect(() => {
@@ -201,6 +230,7 @@ export function App() {
   const visualProps = { ...pageProps, needs, failed: net.failed, view: url.view, onView: (view: "visual" | "table") => setUrl({ view }, false), onExample, onLive, onSettings: openSettings, nextFor };
 
   return (
+    <DetailsSlotProvider value={detailSlot}>
     <div className="np-root">
       <PageLayout>
         <PageLayout.Header>{header}</PageLayout.Header>
@@ -214,24 +244,50 @@ export function App() {
           </nav>
           {page === "causes" ? (
             <LiveMapPage model={model} infos={infos} causeId={url.cause} failed={net.failed} needs={needs} onExample={onExample} onSettings={openSettings} next={nextFor(VIEW_NEEDS.map)} onLive={onLive} onCause={(cause) => setUrl({ cause }, false)}
+              /* The reads the map makes a statement from: who exists, what is alerting on them,
+                 and what the ping and the links say. The rest — flows, LLDP, syslog volume —
+                 fills detail in panels the reader has to open, so it does not hold the page.
+                 A failure counts as an answer, as it does for Ahead: a source that errors on an
+                 environment would otherwise hold the map at "reading" for ever. */
+              ready={!net.unread.some((q) => MAP_SPEAKS_FROM.some((n) => q.startsWith(`${n}:`)) && !net.failed.includes(q))}
               onSite={(code) => select(`site:${code}`)} onDevice={(name) => select(`device:${name}`)}
               onSites={(patch) => setUrl({ page: "sites", sel: null, ...NO_FILTERS, ...patch })}
               selectedSite={url.sel?.startsWith("site:") ? url.sel.slice(5) : null} />
           ) : page === "traffic" ? (
             <TrafficPage model={model} needs={needs} onSettings={openSettings} onSite={(code) => select(`site:${code}`)} onExample={onExample} />
+          ) : page === "ahead" ? (
+            <AheadPage model={model} needs={needs} onSettings={openSettings} onDevice={(name) => select(`device:${name}`)} onExample={onExample}
+              /* the estate forecast must not be asked for while the hourly reads are still
+                 landing: a partial model is a real answer about a handful of interfaces, and
+                 it drew a chart in milligigabits that then replaced itself */
+              /* Pending, not merely unread. `unread` holds failures too, so a single hourly read
+                 that errors on an environment would hold the page at "still reading" for ever.
+                 A failure is an answer: it settles, the needs panel explains it, and the page
+                 draws what did arrive. */
+              hourlyReady={!net.unread.some((q) => (q.startsWith("ifHourlyUp:") || q.startsWith("cpuHourly:")
+                || q.startsWith("memHourly:")) && !net.failed.includes(q))} />
           ) : page === "devices" ? <DevicesVisual {...visualProps} /> : page === "links" ? <LinksVisual {...visualProps} /> : <SitesVisual {...visualProps} />}
         </PageLayout.Content>
 
         <SearchPalette model={model} open={searchOpen} onClose={() => setSearchOpen(false)} onOpen={(sel) => select(sel)} />
-        <PageLayout.Details collapsed={!url.sel} defaultWidth="44%" minWidth={460} onCollapsedChange={(collapsed) => { if (collapsed) select(null); }}>
-          {url.sel && (
+        <PageLayout.Details collapsed={!url.sel && !detailClose} defaultWidth="44%" minWidth={460}
+          onCollapsedChange={(collapsed) => { if (collapsed) { select(null); detailClose?.fn(); } }}>
+          {url.sel ? (
             <EntityDetails model={model} infos={infos} needs={needs} sel={url.sel} tab={url.tab}
               onTab={(tab) => setUrl({ tab }, false)} onSelect={select} onClose={() => select(null)} />
-          )}
+          ) : detailClose ? (
+            /* a page's own detail brings no header of its own: the region's control bar closes it
+               and switches it between side-by-side and overlay */
+            <PageLayout.Details.ControlBar />
+          ) : null}
+          {/* the slot. Always mounted, so a page never has to wait a frame for somewhere to render,
+              and never renders into a node that has just been removed. */}
+          <div className="np-detail-slot" ref={setDetailHost} />
         </PageLayout.Details>
       </PageLayout>
       <ToastContainer />
       {settings}
     </div>
+    </DetailsSlotProvider>
   );
 }

@@ -1,10 +1,9 @@
 // Traffic: where the last hour of traffic came from, which device exported it and where it went (NetFlow
-// / IPFIX), how the paths behave for the applications (OneAgent network flows), the findings the flows
+// / IPFIX), how the paths behave for the applications (OneAgent network flows), and what the flows
 // support and Assist to argue them. The sources in use are named on the page, never assumed.
 import React, { useMemo, useState } from "react";
 import type { Conversation, NetworkModel } from "../model/types";
 import { asRoutes, buildJourney } from "../model/journey";
-import { environmentFindings } from "../model/traffic";
 import { JourneyChart, JOURNEY_LEGEND, type JourneyPick } from "../components/JourneyChart";
 import { RouteStrip } from "../components/RouteStrip";
 import { PathQualityTile } from "../components/Traffic";
@@ -45,7 +44,6 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
   }, [model.devices]);
 
   const journey = useMemo(() => (f ? buildJourney(f.conversations, model.sites, { site: site || undefined }) : null), [f, site, model.sites]);
-  const findings = useMemo(() => environmentFindings(model).filter((x) => !site || x.site === site), [model, site]);
   const siteOptions = useMemo(() => {
     const codes = new Set<string>();
     (f?.conversations ?? []).forEach((c) => [c.viaSite, c.fromSite, c.toSite].forEach((s) => s && codes.add(s)));
@@ -80,6 +78,21 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
 
   return (
     <div className="lm vz vz-body tr">
+      {/* Intelligence sits at the top of every page, in the same frame on every page.
+          On this one it was the last thing on the screen, folded inside a "Findings" tile —
+          so the control that answers a question about the page was below the whole page, and
+          it was the only page where it did not look like the others.
+
+          The findings themselves are gone with that tile. They were seven sentences this app
+          wrote about the hour, five of them the same sentence about the same /24 with a
+          different host count, and the one reader action they offered — the site name at the
+          end of each — is a filter this page already has at the top. What they were for is a
+          question, and the question is right here. */}
+      <Tile className="vz-assist-row">
+        <AssistPanel subject={`traffic|${site}`} questions={trafficQuestions(site ? nameOf(site) : "this network")} object="traffic"
+          context={() => trafficContext(model, site || undefined)} />
+      </Tile>
+
       <div className="tr-bar">
         <div className="tr-sources" aria-label="Sources in use">
           <span className={`tr-src${s.netflow ? " is-on" : ""}`} title="NetFlow / IPFIX through the OpenTelemetry Collector">
@@ -141,18 +154,6 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
 
       <PathQualityTile model={model} site={site || undefined} onSite={onSite} />
 
-      {/* the caption says it: measured, not judged. Amber here announced a warning nobody raised. */}
-      <Tile tone={TONE.cyan} title={`Findings · ${findings.length}`} right="measured, not judged">
-        {findings.length ? (
-          <ul className="tr-findings">
-            {findings.map((x) => (
-              <li key={x.text}>{x.text}{x.site && !site && <> · <button type="button" className="tf-link" onClick={() => onSite(x.site!)}>{nameOf(x.site)}</button></>}</li>
-            ))}
-          </ul>
-        ) : <p className="tr-none">Nothing stands out in the last hour{site ? ` at ${nameOf(site)}` : ""}.</p>}
-        <AssistPanel subject={`traffic|${site}`} questions={trafficQuestions(site ? nameOf(site) : "this network")} object="traffic"
-          context={() => trafficContext(model, site || undefined)} />
-      </Tile>
     </div>
   );
 }

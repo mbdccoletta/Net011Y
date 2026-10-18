@@ -115,6 +115,14 @@ export interface AppNetwork {
 export interface Iface {
   /** Smartscape node id (EXT_NETWORK_INTERFACE-…), when known */
   id?: string;
+  /**
+   * Which extension family reported this port's hourly record.
+   *
+   * The metric key is the family's prefix plus the measure, so nothing can build a DQL
+   * expression for one port without knowing it — and the platform's forecast analyzer takes a
+   * DQL expression. The rows carry it already (`fieldsAdd family = …`); it just stopped here.
+   */
+  family?: string;
   name: string;
   speed: number | null;
   oper: string;
@@ -129,6 +137,12 @@ export interface Iface {
   uplink: boolean;
   /** "inconsistent" when the counters exceed the port's own reported speed: a fact about the data */
   flag: "inconsistent" | null;
+  /** one point per hour of the last fortnight, as a percentage of this port's own line rate (Ahead only) */
+  hourly?: number[];
+  /** discards counted over the window, and only when the discard rate itself rose (Ahead only) */
+  dropsRising?: number;
+  /** discards per hour over the same fortnight as `hourly`, aligned bucket for bucket */
+  discHourly?: number[];
 }
 
 export interface NetEvent {
@@ -147,6 +161,24 @@ export interface Icmp {
   rtt: number[];
   loss: number | null;
   sent?: number;
+}
+
+/**
+ * One address of a device, and what the ping of it returns.
+ *
+ * A device answers on several addresses and a monitoring configuration pings all of them.
+ * Measured on this environment: CTR-007 carries four, two of which answer every packet and
+ * two of which answer none — and the alert raised on the monitor is about the second pair.
+ * The app held one reading per device, keyed on its primary address, so the two that fail
+ * were nowhere on the screen and the alert read as a fault on a device that was answering.
+ */
+export interface IcmpTarget {
+  ip: string;
+  monitor: string | null;
+  sent: number;
+  recv: number;
+  /** when it last stopped answering, if it has */
+  since: string | null;
 }
 
 /** An open Davis problem or alert affecting an entity (opens in the Problems app). */
@@ -231,10 +263,26 @@ export interface Device {
   rebootedAt?: string;
   /** what the per-device summaries say; overSpeed counts ports whose counters exceed their own speed */
   ifStats?: { maxUtil: number | null; interfaces: number; errors: number; discards: number; overSpeed?: number };
+  /** one point per hour of the last fortnight, processor percent (Ahead only) */
+  cpuHourly?: number[];
+  /** memory in use per hour over the same fortnight, per cent — the record a forecast needs */
+  memHourly?: number[];
+  /**
+   * Which extension actually supplied each device-level record.
+   *
+   * Not the one its ports come from: measured here, a switch reports `memory_used` under the
+   * common network_device set and no `memory_total` at all, while its percentage comes from
+   * the Cisco pair. Asking the analyzer with the ports' family built a query against a metric
+   * that has no data for that device, and the answer was "There is no input data to analyze".
+   */
+  cpuFamily?: string;
+  memFamily?: string;
   reasons: Reason[];
   verdict: Verdict;
   impact: number;
   icmp: Icmp | null;
+  /** every address of this device a network availability monitor pings, and what came back */
+  icmpTargets?: IcmpTarget[];
   incident?: string;
   unreachableSince?: string;
 }
@@ -460,6 +508,25 @@ export interface NetworkModel {
     /** the network problems that opened or closed in the last 24 h, newest first */
     recent: { id: string; name: string; start: string; end: string | null; device: string | null }[];
   };
+  /**
+   * What the devices reported as having changed, already counted in Grail.
+   *
+   * One row per facility, mnemonic, device and port over the window: `LINK-UPDOWN` on
+   * `GigabitEthernet1/0/17` of 10.171.126.132, 437 times, last at 21:59. The panel groups
+   * these into kinds; it does not see the lines they were counted from.
+   */
+  /**
+   * Ping targets that are sending and getting nothing back, worst first.
+   *
+   * A monitor problem names the monitor, never the address that stopped answering, and the
+   * address is the fault. `device` is null when nothing in the inventory answers to it —
+   * which is the common case and the one that used to vanish from the app entirely.
+   */
+  pingDown?: { ip: string; monitor: string | null; sent: number; since: string | null;
+    device: string | null; site: string | null }[];
+  netChanges?: { fac: string; mnem: string; ip: string; iface: string | null; events: number; last: string;
+    /** the device it was resolved to, where the address answers to one */
+    device: string | null; site: string | null }[];
   demo?: boolean;
   meta: { tenant: string; generatedAt: string; thresholds: Record<string, number> };
   sites: Record<string, Site>;
