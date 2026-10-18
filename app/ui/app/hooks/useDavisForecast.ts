@@ -443,18 +443,39 @@ export function useNetworkDemand(families: string[], hours: number): { data: Net
     const days = Math.max(2, Math.round(hours / 24));
     const ctrl = new AbortController();
     setLoading(true); setError(null);
-    Promise.all([
-      fetch("/platform/storage/query/v1/query:execute", {
-        method: "POST", signal: ctrl.signal, headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: expression.replace("interval:1h", `from:now()-${days}d, interval:1h`),
-          maxResultRecords: 2, requestTimeoutMilliseconds: 20000 }),
-      }).then((r) => r.json()),
-      forecast({ timeSeriesData: { expression },
-        forecastHorizon: horizonFor(hours),
-        forecastOffset: 1,
-        generalParameters: { timeframe: { startTime: `now-${days}d`, endTime: "now" } } }, ctrl.signal),
-    ])
-      .then(async ([h, j]) => {
+    /**
+     * The record is read first, and the window is chosen from it.
+     *
+     * These two ran side by side, and the forecast was asked for a window ending now whatever
+     * the record looked like. The analyzer needs an unbroken run up to the end of its window,
+     * so a few hours of missed collection — a restarted extension, an ActiveGate that went
+     * away — made it answer nothing, and the page said so. Asking afterwards, with a shorter
+     * window, works and is what this did; but there was never a reason to ask the failing
+     * question first. The history is a metric query, which is quick and carries no charge, so
+     * it is read, the last hour that has data is found, and the forecast is asked once for a
+     * window that ends there. Where the record reaches now, the window ends now and nothing
+     * about this is visible.
+     */
+    const since = (endsHoursAgo: number) => (endsHoursAgo > 0 ? `now-${endsHoursAgo}h` : "now");
+    fetch("/platform/storage/query/v1/query:execute", {
+      method: "POST", signal: ctrl.signal, headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: expression.replace("interval:1h", `from:now()-${days}d, interval:1h`),
+        maxResultRecords: 2, requestTimeoutMilliseconds: 20000 }),
+    }).then((r) => r.json())
+      .then(async (h) => {
+        const series = (h?.result?.records?.[0]?.total ?? []) as (number | null)[];
+        /* the last stretch the analyzer can work with: back to the most recent empty hour
+           inside the window it looks at, or none when there is not one */
+        const tail = series.slice(-RECENT_HOURS);
+        const firstHole = tail.findIndex((v) => v == null);
+        const ends = firstHole >= 0 ? tail.length - firstHole : 0;
+        const j = await forecast({ timeSeriesData: { expression },
+          forecastHorizon: horizonFor(hours),
+          forecastOffset: 1,
+          generalParameters: { timeframe: { startTime: `now-${days}d`, endTime: since(ends) } } }, ctrl.signal);
+        return [h, j, ends] as const;
+      })
+      .then(async ([h, j, ends]) => {
         const out = j?.result?.output?.[0];
         const rec = out?.timeSeriesDataWithPredictions?.records?.[0];
         if (!rec || out?.analysisStatus !== "OK") {
@@ -477,42 +498,8 @@ export function useNetworkDemand(families: string[], hours: number): { data: Net
              analyzer cannot work with is a hole among the recent hours, wherever it stops. */
             const recent = hist.slice(-RECENT_HOURS);
           const holes = recent.filter((v) => v == null).length;
-          /**
-           * A hole near the end is not a reason to say nothing.
-           *
-           * The analyzer needs an unbroken run, and an environment that stopped collecting for
-           * a few hours — a restarted extension, an ActiveGate that went away, the environment
-           * itself switched off — leaves exactly that. Waiting for it to heal means the page
-           * is blank for as long as the gap sits inside the window, which on a fortnightly
-           * read is days. The record before the hole is intact, so the forecast is asked again
-           * from it, and the answer says which hour it was drawn up to. A forecast three hours
-           * old, labelled, beats no forecast at all; one presented as current would not.
-           */
-          let back = 0;
-          while (back < hist.length && hist[hist.length - 1 - back] == null) back++;
-          const firstHole = recent.findIndex((v) => v == null);
-          const endsHoursAgo = firstHole >= 0 ? recent.length - firstHole : back;
-          if (holes > 0 && endsHoursAgo > 0 && endsHoursAgo < RECENT_HOURS) {
-            const retry = await forecast({ timeSeriesData: { expression },
-              forecastHorizon: horizonFor(hours), forecastOffset: 1,
-              generalParameters: { timeframe: { startTime: `now-${days}d`, endTime: `now-${endsHoursAgo}h` } } },
-              ctrl.signal).catch(() => null);
-            const out2 = retry?.result?.output?.[0];
-            const rec2 = out2?.timeSeriesDataWithPredictions?.records?.[0];
-            if (rec2 && out2?.analysisStatus === "OK") {
-              const bps2 = (arr: unknown): number[] => (Array.isArray(arr) ? arr : [])
-                .filter((v): v is number => typeof v === "number").map((v) => (v * 8) / 3600);
-              cacheDemand.set(key, {
-                history: bps2(hist.slice(0, hist.length - endsHoursAgo)),
-                point: bps2(rec2["dt.davis.forecast:point"]),
-                lower: bps2(rec2["dt.davis.forecast:lower"]),
-                upper: bps2(rec2["dt.davis.forecast:upper"]),
-                quality: out2?.forecastQualityAssessment ?? "UNKNOWN",
-                endsHoursAgo,
-              });
-              return;
-            }
-          }
+          /* the window was already chosen to end where the record does, so a failure here is
+             not the gap — it is the analyzer declining this series for a reason of its own */
           setError(j?.result?.logs?.[0]?.message
             ?? (holes > 0
               ? `the record has ${holes} empty ${holes === 1 ? "hour" : "hours"} in its last ${recent.length}, and the forecast needs an unbroken run up to now — it returns once the ports have been polled through those hours`
@@ -522,12 +509,16 @@ export function useNetworkDemand(families: string[], hours: number): { data: Net
         // octets in an hour to bits per second, which is how a network engineer reads demand
         const bps = (arr: unknown): number[] => (Array.isArray(arr) ? arr : [])
           .filter((v): v is number => typeof v === "number").map((v) => (v * 8) / 3600);
+        const whole = bps(h?.result?.records?.[0]?.total);
         cacheDemand.set(key, {
-          history: bps(h?.result?.records?.[0]?.total),
+          /* the history drawn is the history forecast from: the hours after the window ends
+             are not part of this answer and are not shown as if they were */
+          history: ends > 0 ? whole.slice(0, Math.max(0, whole.length - ends)) : whole,
           point: bps(rec["dt.davis.forecast:point"]),
           lower: bps(rec["dt.davis.forecast:lower"]),
           upper: bps(rec["dt.davis.forecast:upper"]),
           quality: out?.forecastQualityAssessment ?? "UNKNOWN",
+          ...(ends > 0 ? { endsHoursAgo: ends } : {}),
         });
       })
       .catch((e: unknown) => {
