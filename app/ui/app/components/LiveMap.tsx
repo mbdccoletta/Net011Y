@@ -253,6 +253,8 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
    * ring centred at nought, and the frame left over from Brazil showed two of thirteen
    * sites, with the rest off the edge and no way to tell they were there.
    */
+  /** false until the reader pans or zooms: see the refit effect below. */
+  const touched = useRef(false);
   const wasSchematic = useRef(schematic);
   useEffect(() => {
     if (wasSchematic.current === schematic) return;
@@ -270,7 +272,6 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
    * count grows and stops the moment the reader pans or zooms: after that the frame is
    * theirs, and the zoom-to-fit button is how they ask for it back.
    */
-  const touched = useRef(false);
   const seen = useRef(sites.length);
   useEffect(() => {
     if (sites.length === seen.current) return;

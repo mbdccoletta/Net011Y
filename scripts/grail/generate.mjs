@@ -131,15 +131,29 @@ for (const d of devices) {
     const speed = /^(xe-|TenGig)/.test(name) ? 10000 : d.role === "RTR" && i < 2 ? (d.site.size === "L" ? 200 : 50) : /Tunnel|Loopback/.test(name) ? 0 : 1000;
     const down = outage.includes(d.site.code) && d.role === "RTR" && i === 0;
     const used = d.role !== "SWT" || i < 2 || i % 3 === 0;
-    ifaces.push({ d, i, name, speed, up: used && !down, id: `EXT_NETWORK_INTERFACE-${hex(d.name + name)}` });
+    /**
+     * An unpatched port is shut or empty, not broken.
+     *
+     * Every port this generator left unused came out admin up(1) and oper down(2) — a port
+     * somebody expects to be carrying traffic and is not. On the estate that produced 2,646 up
+     * ports it also produced 1,994 of those and not one shut or absent port, so the three states
+     * the app is built on were never exercised by the suite: the counting could have been wrong
+     * in either direction and every check would still have passed. One real environment, for
+     * scale: of 4,310 ports not up, 2,836 were administratively down or absent and 1,485 were
+     * ports someone expected up. The outage port stays a genuine fault, and one unpatched port
+     * in seven is left enabled and down so the fault state is populated too.
+     */
+    const absent = !used && i % 11 === 5;
+    const shut = !used && !absent && i % 7 !== 0;
+    ifaces.push({ d, i, name, speed, up: used && !down, shut, absent, id: `EXT_NETWORK_INTERFACE-${hex(d.name + name)}` });
   }
 }
 const ifaceNodes = ifaces.map((f) => ({
-  admin_status: "up(1)", alias: f.d.role === "RTR" && f.i === 0 ? `WAN ${circuits.find((c) => c.site === f.d.site.code)?.circuit_id ?? ""}` : "n/a",
+  admin_status: f.shut ? "down(2)" : "up(1)", alias: f.d.role === "RTR" && f.i === 0 ? `WAN ${circuits.find((c) => c.site === f.d.site.code)?.circuit_id ?? ""}` : "n/a",
   description: f.name, "device.chassis_mac": f.d.mac, "dt.security_context": [], id: f.id, id_classic: `CUSTOM_DEVICE-${hex(f.id)}`,
   interface_index: S(f.i + 1), interface_type: /Tunnel/.test(f.name) ? "tunnel(131)" : /Loopback/.test(f.name) ? "softwareLoopback(24)" : "ethernetCsmacd(6)",
   lifetime: { start: iso(NOW - 90 * 864e5), end: iso(NOW - 4 * 60e3) }, mac: [f.d.mac], mtu: "1500", name: f.name,
-  operational_status: f.up ? "up(1)" : "down(2)", promiscuous_mode: "false(2)", speed: S(f.speed),
+  operational_status: f.up ? "up(1)" : f.absent ? "notPresent(6)" : "down(2)", promiscuous_mode: "false(2)", speed: S(f.speed),
   "troubleshooting.upsert_source": `extension:${EXT[f.d.vendor].ext}|metric:if.status`, type: "EXT_NETWORK_INTERFACE",
   ...siteTags(f.d.site),
 }));

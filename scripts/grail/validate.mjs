@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES } from "./out/queries.mjs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, deviceVerdict, portCounts, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -106,12 +106,18 @@ check("Event already folded into a problem is not counted twice",
   dup && openOf(dup).filter((p) => /unreachable/i.test(p.name)).length === 1,
   `${dup?.name} ${openOf(dup).map((p) => p.name).join("; ")}`);
 
-// an alert bound to the environment names no device: it must surface instead of being dropped
-// unplaced alerts are grouped by why they could not be placed: environment-bound, on a network element
-// outside this inventory, or outside the network domain
-check("Environment-level alert surfaced apart", (model.unmappedAlerts ?? []).some((a) => /Memory Free/i.test(a.name))
-  && causes.some((c) => c.id === "alerts:environment"),
-  `${(model.unmappedAlerts ?? []).map((a) => `${a.name} [${a.scope ?? "?"}]`).join("; ")} · causes ${causes.filter((c) => c.id.startsWith("alerts:")).map((c) => c.id).join(", ") || "none"}`);
+// An alert bound to the environment names no device. It is kept — dropping it hides an open alert —
+// and it is not a cause: nothing says what it impacted, or that the network impacted anything, and a
+// reader who opened that entry found a panel with no site, no device and nothing the network had done.
+// The page counts these under the list of causes as a gap in coverage, with the one thing that would
+// place them. This check holds both halves: the alert survives the build with the scope that explains
+// why it could not be placed, and no entry on the list of faults is made out of it.
+{
+  const env = (model.unmappedAlerts ?? []).filter((a) => a.scope === "environment");
+  check("Environment-level alert kept, and not made into a cause",
+    env.some((a) => /Memory Free/i.test(a.name)) && !causes.some((c) => c.id.startsWith("alerts:")),
+    `${(model.unmappedAlerts ?? []).map((a) => `${a.name} [${a.scope ?? "?"}]`).join("; ")} · cause entries for them: ${causes.filter((c) => c.id.startsWith("alerts:")).map((c) => c.id).join(", ") || "none"}`);
+}
 
 // ---- isolating the network in or out ----
 // the suspicion is a reading, never a status: it must not change a single verdict
@@ -201,9 +207,15 @@ check("Without user sessions, the traffic reading falls back to service requests
   const mk = (scope, i) => ({ eventId: `out-${scope}-${i}`, eventKind: "DAVIS_PROBLEM", displayId: `P-OUT${i}`, name: `${scope} trouble`, start: new Date().toISOString(), category: "AVAILABILITY", scope, entities: [`${scope}-x`] });
   const m2 = { ...model, unmappedAlerts: [...(model.unmappedAlerts ?? []), mk("service", 1), mk("application", 2), mk("host", 3)] };
   const c2 = buildCauses(m2, allSites(m2));
-  const out = c2.find((c) => c.id === "alerts:other");
-  check("Alerts on applications, services and hosts stay on the list of causes", !!out && /^\d+ alerts outside the network domain$/.test(out.title),
-    out ? `${out.title}` : "no outside entry");
+  const out = outsideCounts(m2);
+  const s2 = suspicionFor(m2, { dropPct: 50 });
+  const susOutside = Object.values(s2.outside ?? {}).reduce((a, n) => a + n, 0);
+  // They are not causes — what an alert outside the network is evidence of is that the fault is not
+  // here — so they are counted where that reading is made, and the suspicion has to carry them.
+  check("Alerts on applications, services and hosts are counted outside the network",
+    out.application >= 1 && out.service >= 1 && out.host >= 1
+      && !c2.some((c) => c.id.startsWith("alerts:")) && susOutside >= 3,
+    `application ${out.application} · service ${out.service} · host ${out.host} · suspicion outside ${susOutside}`);
 }
 // events that never became a problem are grouped by what they are and where, not listed one by one
 {
@@ -290,18 +302,29 @@ check("Flat retransmissions stated as counter-evidence", !fS.app?.rising && fS.f
   const named = { ...d, problems: [{ ...watched.problems[0], viaMonitor: undefined }] };
   const [vw, rw] = deviceVerdict(watched);
   const [vn] = deviceVerdict(named);
+  // The sentence used to open "Reachability is not being measured". Measured against the record that
+  // was false — the monitor was sending packets and getting answers from most of its targets — so what
+  // the reason says now is where the alert sits, and this asks for that and for no claim about the device.
   check("A monitor outage does not make the device it watches critical",
-    vw === "Healthy" && vn === "Critical" && /not being measured/.test(rw[0]?.text ?? ""),
+    vw === "Healthy" && vn === "Critical" && /on the monitoring configuration that pings this device, not on the device/.test(rw[0]?.text ?? ""),
     `through the monitor: ${vw} · on the device: ${vn} · ${rw[0]?.text?.slice(0, 80)}`);
 }
 // A switch's unpatched and shut ports are not faults, and folding them into one number over a total
 // made a healthy switch look half broken.
 {
   const withPorts = model.devices.filter((x) => x.interfaces.length);
-  const ok = withPorts.every((x) => { const p = portCounts(x); return p.up + p.down + p.unused === p.total && p.total === x.interfaces.length; });
+  // Four states now: a port whose status the app could not read is its own answer, not a failure.
+  // And the middle figure has to be the list underneath it — "5 down" over a list of two was a
+  // loopback and two tunnels counted as broken links.
+  const ok = withPorts.every((x) => {
+    const p = portCounts(x);
+    return p.up + p.down + p.unused + p.unknown === p.total && p.total === x.interfaces.length
+      && p.down === portsDown(x).length;
+  });
+  const bad = withPorts.find((x) => { const p = portCounts(x); return p.down !== portsDown(x).length; });
   const shut = withPorts.map((x) => portCounts(x)).reduce((a, p) => a + p.unused, 0);
-  check("Ports are counted in three states that add up", ok && withPorts.length > 0,
-    `${withPorts.length} devices with ports · ${shut} shut or empty`);
+  check("Ports are counted in four states that add up, and down is the list beside it", ok && withPorts.length > 0,
+    `${withPorts.length} devices with ports · ${shut} shut, empty or not a link${bad ? ` · ${bad.name} counts ${portCounts(bad).down} down and lists ${portsDown(bad).length}` : ""}`);
 }
 // A road that classifies nothing still carries lines. An environment collecting its syslog server's
 // files through a OneAgent delivers every line as loglevel NONE, the app counted only ERROR, WARN and

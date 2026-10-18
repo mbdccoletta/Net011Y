@@ -206,12 +206,15 @@ export const deviceQuestions = (name: string, healthy: boolean): AssistQuestion[
 export const isolationQuestions = (where: string): AssistQuestion[] => [
   q("Analyse",
     `Does the network explain what is degraded in ${where}?`,
-    "networkAlertCount 0 means none is open; nothing in outsideNetwork is one. networkBurst is network alerts before an impact: take the order from it. reachability, where present, is direct network evidence: addresses pinged with no answer.",
-    "demandFell is the seasonal baseline detector. False means within range: never write fall, drop or outage of demand. Null means unjudged. The percentage under demand is a median comparison, not a verdict. Use the hour and openedAt labels as given.",
-    "Decide by order: a fall after a network alert opened supports the network, one before it rules the network out, alerts only outside point outside.",
-    "Four bullets: Conclusion (network implicated, not the network, contained, nothing to isolate); Evidence (ids and times); Against (the one fact for a different conclusion, or none); Next step (action and team).",
-    "Demand counted for the environment is never attributed to one site.",
-    "retransmissionsRose and roundTripRose are the adaptive detector: true is direct evidence the applications feel the network — with a networkBurst it supports the network, with no network alert it points to an unmonitored segment or the hosts. False means within range: never say they rose. Null means unjudged."),
+    "networkAlertCount 0 means none is open; nothing in outsideNetwork is one. networkBurst is network alerts before an impact: take the order from it. reachability, where present, is direct evidence: addresses pinged with no answer.",
+    /* The three-state convention was spelled out twice, once per detector, and the instruction ran
+       to within eight characters of what Assist accepts. It is one rule about every detector
+       field, so it is stated once. */
+    "demandFell is the seasonal baseline detector; retransmissionsRose and roundTripRose the adaptive one. For each: false means within range — never report a fall or a rise — and null means unjudged. The demand percentage is a median comparison, not a verdict. Use the hour and openedAt labels as given.",
+    "Decide by order: a fall after a network alert opened supports the network, one before rules it out, alerts only outside point outside.",
+    "Four bullets: Conclusion (network implicated, not the network, contained, nothing to isolate); Evidence (ids and times); Against (the one fact for another conclusion, or none); Next step (action, team).",
+    "Environment demand is never attributed to one site.",
+    "retransmissionsRose or roundTripRose true is direct evidence the applications feel the network: with a networkBurst it supports the network; with no network alert, an unmonitored segment or the hosts."),
   q("What is missing",
     `What data is missing to decide whether the network explains what is degraded in ${where}?`,
     "Name only items the context marks as missing or partial under sources, and anything else it states is absent.",
