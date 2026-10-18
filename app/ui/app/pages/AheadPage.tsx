@@ -147,7 +147,7 @@ export function AheadPage({ model, needs, onSettings, onDevice, onExample, hourl
     return (
       <div className="lm vz ahead">
         <div className="acx"><header className="acx-mast">
-          <h2>Ahead · how much room is left <b>// reading the record</b></h2>
+          <h2>Ahead · how much room is left before each one&rsquo;s own limit <b>// reading the record</b></h2>
           <div className="acx-crumb"><b>Whole network</b>
             <em>Every port&rsquo;s and every processor&rsquo;s last fortnight, hour by hour. It is the
               heaviest read this app makes, and the one this page is entirely built from, so the page
