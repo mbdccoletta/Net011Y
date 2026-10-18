@@ -244,6 +244,7 @@ export function App() {
           </nav>
           {page === "causes" ? (
             <LiveMapPage model={model} infos={infos} causeId={url.cause} failed={net.failed} needs={needs} onExample={onExample} onSettings={openSettings} next={nextFor(VIEW_NEEDS.map)} onLive={onLive} onCause={(cause) => setUrl({ cause }, false)}
+              list={url.list} onList={(list) => setUrl({ list }, false)}
               /* The reads the map makes a statement from: who exists, what is alerting on them,
                  and what the ping and the links say. The rest — flows, LLDP, syslog volume —
                  fills detail in panels the reader has to open, so it does not hold the page.

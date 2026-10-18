@@ -46,6 +46,9 @@ interface Props {
   onExample?: () => void;
   /** Opens Settings › Data, where every item says what to send and links to its documentation */
   onSettings?: (key: NeedKey) => void;
+  /** which of the two left lists is open, and how to change it: both live in the URL */
+  list: "causes" | "sites";
+  onList: (list: "causes" | "sites") => void;
   /** the next step to get more from the app in this environment */
   next?: React.ComponentProps<typeof DataNeeds>["next"];
   /** leaves the example data for the environment's own */
@@ -69,7 +72,7 @@ function causeMeta(c: Cause) {
   ].filter(Boolean).join(" · ");
 }
 
-export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onSite, onDevice, onSites, onExample, onSettings, next, onLive, selectedSite, ready = true }: Props) {
+export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onSite, onDevice, onSites, onExample, onSettings, next, onLive, selectedSite, list, onList, ready = true }: Props) {
   /* The discard cause is the platform's finding, not this app's: the page asks which ports
      changed and the causes are rebuilt when the answer lands. */
   const families = useMemo(() => [...new Set(model.devices
@@ -297,8 +300,10 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   const { levels } = useSiteHierarchy();
   // until levels are chosen in Settings, group by the region the app already knows
   const defaultLevels = useMemo(() => (infos.some((i) => i.site.region) ? ["site.region"] : []), [infos]);
-  const [leftTab, setLeftTab] = useState<"causes" | "sites">(() => { try { return window.localStorage.getItem("network-pulse.left-tab") === "sites" ? "sites" : "causes"; } catch { return "causes"; } });
-  const chooseTab = (t: "causes" | "sites") => { setLeftTab(t); try { window.localStorage.setItem("network-pulse.left-tab", t); } catch { /* per session only */ } };
+  /* Which of the two lists is open is navigation, so it lives in the URL with the rest of it —
+     and not in this browser, where it was one reader's copy and could not be sent to anybody. */
+  const leftTab = list;
+  const chooseTab = (t: "causes" | "sites") => onList(t);
   const [group, setGroup] = useState<{ id: string; codes: Set<string> } | null>(null);
   /**
    * A default is not a selection, and only a selection moves the map.

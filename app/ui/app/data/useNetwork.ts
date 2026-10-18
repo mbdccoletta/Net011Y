@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDql } from "@dynatrace-sdk/react-hooks";
 import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
+import { clearSourceMemory, setAbsent as rememberAbsent, setBarren as rememberBarren, setPresent as rememberPresent, sourceMemory, useSourceMemory, type Stamps } from "./sourceMemory";
 import type { NetworkModel } from "../model/types";
 import { DETAIL_MAX_DEVICES, QUERIES } from "./queries";
 import { familyOfToken } from "./formats";
@@ -72,23 +73,17 @@ export const SOURCE_GROUPS = {
 export type SourceGroup = keyof typeof SOURCE_GROUPS;
 export const SOURCE_RECHECK_MS = 12 * 3600 * 1000;
 const groupOf = (name: string) => (Object.keys(SOURCE_GROUPS) as SourceGroup[]).find((g) => (SOURCE_GROUPS[g].probes as readonly string[]).includes(name) || (SOURCE_GROUPS[g].then as readonly string[]).includes(name));
-const ABSENT_KEY = () => { try { return `net-o11y.absent@${new URL(getEnvironmentUrl()).hostname}`; } catch { return "net-o11y.absent"; } };
 /**
  * The other half of the same memory. A source found empty is not read again for a while; a source found
  * sending is not made to prove it again either. Without this the companions of a probe wait a whole
- * round trip for an answer this browser already had — on Traffic that was the probe's ten seconds
- * before the bandwidth read could even start. Same horizon as the absence, and Check again clears both.
+ * round trip for an answer somebody already had — on Traffic that was the probe's ten seconds before
+ * the bandwidth read could even start. Same horizon as the absence, and Check again clears both.
+ *
+ * All three notes live in `sourceMemory`, which keeps them in the environment rather than in this
+ * browser: what this environment sends is not one reader's opinion.
  */
-const PRESENT_KEY = () => `${ABSENT_KEY()}.present`;
-function readPresent(): Partial<Record<SourceGroup, number>> {
-  try {
-    const v = JSON.parse(window.localStorage.getItem(PRESENT_KEY()) ?? "{}") as Record<string, number>;
-    return Object.fromEntries(Object.entries(v).filter(([, t]) => Date.now() - t < SOURCE_RECHECK_MS)) as Partial<Record<SourceGroup, number>>;
-  } catch { return {}; }
-}
-function writePresent(v: Partial<Record<SourceGroup, number>>) {
-  try { window.localStorage.setItem(PRESENT_KEY(), JSON.stringify(v)); } catch { /* per session only */ }
-}
+const fresh = (v: Stamps, within: number): Stamps =>
+  Object.fromEntries(Object.entries(v).filter(([, t]) => Date.now() - t < within));
 /**
  * Which family publishes which metric, remembered between loads.
  *
@@ -103,28 +98,10 @@ function writePresent(v: Partial<Record<SourceGroup, number>>) {
  * and not for ever, because an extension deployed this afternoon must appear by tomorrow
  * without anyone clearing anything — and Refresh clears it now, for anyone who will not wait.
  */
-const BARREN_KEY = () => `${ABSENT_KEY()}.barren`;
 const BARREN_MS = 24 * 60 * 60 * 1000;
 /* Only the questions where "nothing" means "this family does not publish this". A query whose
    emptiness is news — no reboots, no alerts — must keep being asked. */
 const BARREN_MEASURES = /^(ifHourly|ifHourlyUp|cpuHourly|memHourly|ifSummary|errSummary|ifTraffic|ifErrors|cpu|memory|uptime):/;
-function readBarren(): Record<string, number> {
-  try { return JSON.parse(window.localStorage.getItem(BARREN_KEY()) ?? "{}") as Record<string, number>; }
-  catch { return {}; }
-}
-function writeBarren(v: Record<string, number>) {
-  try { window.localStorage.setItem(BARREN_KEY(), JSON.stringify(v)); } catch { /* per session only */ }
-}
-
-function readAbsent(): Partial<Record<SourceGroup, number>> {
-  try {
-    const v = JSON.parse(window.localStorage.getItem(ABSENT_KEY()) ?? "{}") as Record<string, number>;
-    return Object.fromEntries(Object.entries(v).filter(([, t]) => Date.now() - t < SOURCE_RECHECK_MS)) as Partial<Record<SourceGroup, number>>;
-  } catch { return {}; }
-}
-function writeAbsent(v: Partial<Record<SourceGroup, number>>) {
-  try { window.localStorage.setItem(ABSENT_KEY(), JSON.stringify(v)); } catch { /* per session only */ }
-}
 
 /**
  * How long the query service may hold a request open before answering with a token instead.
@@ -276,11 +253,12 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   const [done2, setDone2] = useState(0);
 
   const buckets = useLogBuckets();
-  const [absent, setAbsent] = useState(readAbsent);
-  const [barren, setBarren] = useState(readBarren);
+  const remembered = useSourceMemory();
+  const absent = fresh(remembered.absent, SOURCE_RECHECK_MS);
+  const barren = remembered.barren;
   const isBarren = (name: string) => BARREN_MEASURES.test(name)
     && !REQUIRED.includes(name) && Date.now() - (barren[name] ?? 0) < BARREN_MS;
-  const [answered, setAnswered] = useState(readPresent);
+  const answered = fresh(remembered.present, SOURCE_RECHECK_MS);
   // probe results decide the companions, so they are looked up by name before the hooks run
   const probeRows = useProbeRows();
   // the families the environment sends: a family query waits for this answer and runs only for a family
@@ -339,8 +317,8 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   const probeStamp = (Object.keys(SOURCE_GROUPS) as SourceGroup[]).map((g) => SOURCE_GROUPS[g].probes.map((p) => { const r = results[NAMES.indexOf(p)]; return r.isSuccess ? ((r.data?.records ?? []).length ? "1" : "0") : "-"; }).join("")).join("|");
   useEffect(() => {
     if (!live) return;
-    const next = { ...readAbsent() };
-    const yes = { ...readPresent() };
+    const next = { ...fresh(sourceMemory().absent, SOURCE_RECHECK_MS) };
+    const yes = { ...fresh(sourceMemory().present, SOURCE_RECHECK_MS) };
     let changed = false, alsoChanged = false;
     (Object.keys(SOURCE_GROUPS) as SourceGroup[]).forEach((g) => {
       const rs = SOURCE_GROUPS[g].probes.map((p) => results[NAMES.indexOf(p)]);
@@ -351,8 +329,8 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
       if (!empty && yes[g] == null) { yes[g] = Date.now(); alsoChanged = true; }
       if (empty && yes[g] != null) { delete yes[g]; alsoChanged = true; }
     });
-    if (changed) { writeAbsent(next); setAbsent(next); }
-    if (alsoChanged) { writePresent(yes); setAnswered(yes); }
+    if (changed) rememberAbsent(next);
+    if (alsoChanged) rememberPresent(yes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, probeStamp]);
   /* an empty answer is written down, a full one rubs the note out */
@@ -360,7 +338,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     ? ((results[i].data?.records ?? []).length ? "1" : "0") : "-")).join("");
   useEffect(() => {
     if (!live) return;
-    const next = { ...readBarren() };
+    const next = { ...sourceMemory().barren };
     let changed = false;
     NAMES.forEach((n, i) => {
       if (!BARREN_MEASURES.test(n) || !results[i].isSuccess) return;
@@ -368,7 +346,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
       if (empty && next[n] == null) { next[n] = Date.now(); changed = true; }
       if (!empty && next[n] != null) { delete next[n]; changed = true; }
     });
-    if (changed) { writeBarren(next); setBarren(next); }
+    if (changed) rememberBarren(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, barrenStamp]);
   const skippedSource = (i: number) => { const g = groupOf(NAMES[i]); return !!g && absent[g] != null; };
@@ -520,11 +498,11 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
         if (skipped(i) || (inc && planFor(n, inBuckets(QUERIES[n].query, buckets), inc).query !== plans[n]?.query)) return;
         r.forceRefetch();
       });
-      writeBarren({}); setBarren({});
+      rememberBarren({});
       setGen((g) => g + 1);
     },
     absent,
-    recheck: () => { writeAbsent({}); setAbsent({}); writePresent({}); setAnswered({}); writeBarren({}); setBarren({}); },
+    recheck: () => clearSourceMemory(),
     cost,
   };
 }

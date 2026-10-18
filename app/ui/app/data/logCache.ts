@@ -5,10 +5,14 @@
 // full query gives: series are cut in clock-aligned buckets, so a bucket read now replaces the same bucket
 // read before; the latest-seen and newest-records queries merge by their keys.
 //
-// Only the viewer's own browser keeps it (the records can carry log content, and another user may not be
-// allowed to read that bucket). Anything unexpected — no storage, a changed query, a cache older than the
-// window — runs the full query, as before.
-import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
+// It is kept for as long as the app is open and nowhere else. It used to be written to
+// `window.localStorage`, which is the one kind of state this app does not keep: everything it remembers
+// belongs to the environment and lives in app state, where the whole team works from the same copy. These
+// rows cannot go there — they can carry log content, and another user of the same app may not be allowed
+// to read that bucket — so they are held in memory for this session and the next open reads the full
+// window. Within a session the saving is unchanged: Refresh, a view opening, a bucket changing all ask
+// Grail only for what came after what is already here. Anything unexpected — a changed query, a kept part
+// older than the window — runs the full query, as before.
 
 type Row = Record<string, unknown>;
 
@@ -38,8 +42,6 @@ export interface Plan {
   from: number | null;
 }
 
-const host = () => { try { return new URL(getEnvironmentUrl()).hostname; } catch { return "env"; } };
-const keyOf = (name: string) => `net-o11y.cache@${host()}:${name}`;
 const toMs = (v: unknown) => {
   const s = String(v ?? "");
   const base = Date.parse(s.slice(0, 19) + "Z");
@@ -49,18 +51,17 @@ const toMs = (v: unknown) => {
 const iso = (ms: number) => new Date(ms).toISOString();
 const floor = (ms: number, step: number) => Math.floor(ms / step) * step;
 
+/** This session's kept parts, by query name. */
+const held = new Map<string, Entry>();
+
 function read(name: string): Entry | null {
-  try {
-    const e = JSON.parse(window.localStorage.getItem(keyOf(name)) ?? "null") as Entry | null;
-    return e && e.v === VERSION && Array.isArray(e.rows) ? e : null;
-  } catch { return null; }
+  const e = held.get(name);
+  return e && e.v === VERSION && Array.isArray(e.rows) ? e : null;
 }
 function write(name: string, e: Entry) {
-  try {
-    const s = JSON.stringify(e);
-    if (s.length > MAX_CHARS) { window.localStorage.removeItem(keyOf(name)); return; }
-    window.localStorage.setItem(keyOf(name), s);
-  } catch { /* no storage: the next open reads the full window */ }
+  // the ceiling stays: a window of logs can be enormous and holding all of it helps nobody
+  if (JSON.stringify(e).length > MAX_CHARS) { held.delete(name); return; }
+  held.set(name, e);
 }
 
 /** The query to run now for `name`: from where the kept part ends, or the full window. */
