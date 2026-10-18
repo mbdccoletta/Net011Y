@@ -182,10 +182,23 @@ function Dots({ sites, colour }: { sites: MapSite[]; colour: Record<Verdict, str
       name: name ?? s.name, code: s.code, latitude: s.lat, longitude: s.lon, verdict: s.verdict, dc: !!s.dc, of,
     });
     if (!map || sites.length <= CLUSTER_ABOVE) { setDots(sites.map((s) => one(s, 1))); return; }
+    /**
+     * Only what is on screen is clustered, and that is not an optimisation.
+     *
+     * The absorption works in projected pixels, and a site far outside the viewport projects
+     * to a pixel far outside it — or, past the antimeridian, to one that is not far outside at
+     * all. Clustering the whole estate let an off-screen lead absorb a site the reader was
+     * looking at, and the mark was then drawn at the lead's place: labels on screen with no
+     * dot under them, which is exactly what it looked like.
+     */
+    const b = map.getMap().getBounds();
+    const pad = 2;
+    const inView = sites.filter((s) => s.lon >= b.getWest() - pad && s.lon <= b.getEast() + pad
+      && s.lat >= b.getSouth() - pad && s.lat <= b.getNorth() + pad);
     /* the order decides which site a group is named after and where its mark sits: a data
        centre first, then whatever is worst, so a cluster never hides the reason to look at it */
-    const order = sites.slice().sort((a, b) =>
-      Number(!!b.dc) - Number(!!a.dc) || RANKED.indexOf(a.verdict) - RANKED.indexOf(b.verdict));
+    const order = inView.sort((a, b2) =>
+      Number(!!b2.dc) - Number(!!a.dc) || RANKED.indexOf(a.verdict) - RANKED.indexOf(b2.verdict));
     const marks: { lead: MapSite; x: number; y: number; n: number; v: Verdict[] }[] = [];
     const r2 = MARK_PX * MARK_PX;
     for (const s of order) {
@@ -214,12 +227,12 @@ function Dots({ sites, colour }: { sites: MapSite[]; colour: Record<Verdict, str
      mark honest — the number itself is in the tooltip, where it is exact. */
   const band = (lo: number, hi: number) => dots.filter((d) => d.of >= lo && d.of <= hi);
   const layer = (data: (Dot & { of: number })[], size: number, key: string) => (data.length ? (
+    /* No tooltip. The platform's own lists every dot near the pointer by its latitude and
+       longitude — "36.245820895522364, -93.73683582089551" ten times over — which is the one
+       fact about a site a network engineer never needs. The names are already drawn on the
+       map, and the click opens what the mark stands for. */
     <DotLayer<Dot & { of: number }> key={key} data={data} shape="circle" shapeSize={size}
-      color={(d) => colour[d.verdict]}>
-      <DotLayer.Tooltip>
-        {(dot) => <span>{String((dot.data as { name?: string })?.name ?? "")}</span>}
-      </DotLayer.Tooltip>
-    </DotLayer>
+      color={(d) => colour[d.verdict]} />
   ) : null);
 
   return <>{layer(band(1, 1), 14, "one")}{layer(band(2, 9), 20, "few")}{layer(band(10, Infinity), 28, "many")}</>;
@@ -467,11 +480,31 @@ function Motion({ routes, hit: hitRegions, all, focus, focusKey, refit, colour, 
     if (!map) return;
     const m = map.getMap();
     const hit = (e: { point: { x: number; y: number }; lngLat: { lng: number; lat: number } }) => {
+      /**
+       * A click on a mark opens what the mark stands for.
+       *
+       * One site under the pointer is that site, and the panel opens on it. Several — which is
+       * what a cluster is — cannot be one drill-down without the app choosing for the reader,
+       * and choosing silently is how a click lands on a site nobody asked for. So the camera
+       * goes to them instead: the cluster splits into its own sites at the new zoom, and the
+       * next click is unambiguous. It is the same answer the canvas layout gives.
+       */
+      const under: MapSite[] = [];
       let best: MapSite | null = null, dist = 14;
       for (const s of sites) {
         const p = m.project([s.lon, s.lat]);
         const d = Math.hypot(p.x - e.point.x, p.y - e.point.y);
+        if (d < MARK_PX) under.push(s);
         if (d < dist) { dist = d; best = s; }
+      }
+      /* only where the marks are actually clustered: below that threshold every site has its
+         own dot, two of them close together are still two dots, and a click on one of them
+         means that one — zooming instead would take the panel away from a reader who hit it */
+      if (sites.length > CLUSTER_ABOVE && under.length > 1) {
+        const lons = under.map((s) => s.lon), lats = under.map((s) => s.lat);
+        m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
+          { padding: 120, maxZoom: 11, duration: reduce ? 0 : 700 });
+        return;
       }
       if (best) { onSite(best.code); return; }
       if (!onRegion) return;
@@ -481,7 +514,7 @@ function Motion({ routes, hit: hitRegions, all, focus, focusKey, refit, colour, 
     };
     m.on("click", hit);
     return () => { m.off("click", hit); };
-  }, [map, sites, onSite, onRegion]);
+  }, [map, sites, onSite, onRegion, reduce]);
 
   /**
    * Packets, and the marching ants, on one frame loop.
