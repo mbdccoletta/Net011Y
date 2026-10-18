@@ -2,7 +2,8 @@
 // already computed (cause, impact, evidence, timeline) as supplementary context.
 import { publicClient } from "@dynatrace-sdk/client-davis-copilot";
 import { CHANGE_LABEL, changesOf } from "../model/changes";
-import { aheadSubjects, aheadCensus, clusterChanges } from "../model/ahead";
+import { aheadSubjects, aheadCensus, clusterChanges, type Subject } from "../model/ahead";
+import type { DavisForecast } from "../hooks/useDavisForecast";
 import type { DeviceProblem, NetworkModel } from "../model/types";
 import type { Cause } from "../model/causes";
 import { trafficDrop, type Suspicion } from "../model/suspicion";
@@ -511,14 +512,36 @@ export function carrierContext(model: NetworkModel, carrier: string | null, circ
  * state of a healthy thing and not a gap in the data. Those distinctions were paragraphs on the
  * screen, and a paragraph nobody asked for is a paragraph nobody reads.
  */
-export function aheadContext(model: NetworkModel) {
+export function aheadContext(model: NetworkModel, forecasts: Map<string, DavisForecast> = new Map()) {
   const subjects = aheadSubjects(model);
   const { counts, why, total } = aheadCensus(subjects);
   const { events, singles } = clusterChanges(subjects.filter((s) => s.reading.state === "changed"));
-  const say = (s: { name: string; site: string; limit: string; reading: { now: number; fit: { lo: number; hi: number; mid: number | null; points: number } | null; step: { ago: number; from: number; to: number } | null; drops: number } }) => ({
+  /**
+   * When the analyzer's forecast reaches the limit, and how wide its own band leaves that date.
+   *
+   * The date here used to come from a least-squares line this app fitted — the same line the
+   * page was freed from when it started drawing the platform's forecast, still being quoted to
+   * Assist as "between 9 and 14 days". The band is the analyzer's: the soonest date is where
+   * its upper bound crosses, the latest where its lower bound does, and a forecast that stays
+   * under the limit for its whole horizon says that instead of naming a day.
+   */
+  const dayAt = (series: number[] | undefined) => {
+    const i = series?.findIndex((v) => v >= 100) ?? -1;
+    return i < 0 ? null : Math.max(1, Math.ceil((i + 1) / 24));
+  };
+  const reachesIn = (key: string): string => {
+    const f = forecasts.get(key);
+    if (!f || !f.point.length) return "the analyzer has no forecast for this one";
+    const mid = dayAt(f.point), soon = dayAt(f.upper), late = dayAt(f.lower);
+    if (mid == null && soon == null) return "the forecast stays under the limit for its whole horizon";
+    if (mid == null) return `the forecast stays under the limit, its upper bound reaches it in ${soon} days`;
+    return soon != null && late != null && soon !== late ? `between ${soon} and ${late} days`
+      : `in ${mid} days`;
+  };
+  const say = (s: Subject) => ({
     what: s.name, site: s.site || "untagged", against: s.limit,
     nowPctOfLimit: Math.round(s.reading.now),
-    reaches: s.reading.fit?.mid != null ? `between ${s.reading.fit.lo} and ${s.reading.fit.hi} days` : "no date the record supports",
+    reaches: reachesIn(s.key),
     steppedDaysAgo: s.reading.step ? s.reading.step.ago : null,
     stepPoints: s.reading.step ? Math.round(s.reading.step.to - s.reading.step.from) : null,
     discardsRisenBy: s.reading.drops || null,
@@ -565,7 +588,8 @@ export function aheadContext(model: NetworkModel) {
       pointsOfRoomLeft: Math.round(x.room!.pts * 10) / 10,
       biggestRiseItHasShown: Math.round(x.reading.jump * 10) / 10,
       roomSmallerThanItsOwnJump: x.room!.pts < x.reading.jump,
-      pointsPerDay: x.reading.fit ? Math.round((x.reading.fit.at(24) - x.reading.fit.at(0)) * 100) / 100 : null,
+      /* the analyzer's own rise over its first day, not a slope of this app's */
+      pointsPerDay: (() => { const f = forecasts.get(x.key); return f && f.point.length > 23 ? Math.round((f.point[23] - f.point[0]) * 100) / 100 : null; })(),
     })),
     roomCovers: subjects.filter((x) => x.room).length,
     /**

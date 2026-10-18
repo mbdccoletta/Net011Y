@@ -106,13 +106,15 @@ export interface NfData {
   /** the subject's own record, hour by hour, in per cent of its limit — what it actually measured */
   histFor: (key: ScenarioKey) => number[];
   /**
-   * This app's own fitted line, projected hour by hour, for when the platform has no answer.
+   * The analyzer's forecast for one subject, cut to the hours the chart draws.
    *
-   * A processor publishes no port series, so Dynatrace cannot be asked about it, and nothing
-   * can be asked at all until the analyzer replies. The hourly rewrite dropped the old daily
-   * fallback and left those charts with no forward half while the legend still advertised one.
+   * It was this app's own fitted line, offered "for when the platform has no answer" — which
+   * is the substitution the page exists to prevent, under a legend reading "Dynatrace
+   * forecast". A subject the analyzer has not answered for has no line.
    */
   ownLineFor: (key: ScenarioKey, aheadHours: number) => { point: number[]; lower: number[]; upper: number[] } | null;
+  /** the analyzer's answers, by subject key: what any statement about the future is made from */
+  FORECASTS: Map<string, DavisForecast>;
   REGIONS: Region[];
   HEAT_MONTHS: string[];
   /** days between one heat column and the next, so the matrix can draw an honest iso-line */
@@ -442,19 +444,21 @@ export function buildNf(model: NetworkModel, subjects: Subject[], forecasts: Map
    * for hour and nothing has to be resampled into anything */
   const histFor = (key: ScenarioKey) => LEADERS.find((m) => m.key === key)?.reading.hist ?? [];
 
+  /**
+   * The forecast drawn against the record is the analyzer's, or there is none.
+   *
+   * This built the line from the least-squares fit the app made itself whenever it was asked —
+   * the same substitution the rise above was freed from, and the more visible one, because it
+   * is the line the reader looks at under a chart headed by the platform's name. A subject the
+   * analyzer has not answered for now draws no line at all, and the panel says so.
+   */
   const ownLineFor = (key: ScenarioKey, aheadHours: number) => {
     const x = LEADERS.find((m) => m.key === key);
-    const f = x?.reading.fit;
-    if (!x || !f) return null;
-    const n = x.reading.hist.length;
-    const at: number[] = [], lo: number[] = [], up: number[] = [];
-    for (let k = 1; k <= aheadHours; k++) {
-      const v = f.at(n + k), b = Math.abs(f.band(k));
-      at.push(Math.round(v * 10) / 10);
-      lo.push(Math.round(Math.max(0, v - b) * 10) / 10);
-      up.push(Math.round((v + b) * 10) / 10);
-    }
-    return { point: at, lower: lo, upper: up };
+    const f = x && fc(x);
+    if (!x || !f || !f.point.length) return null;
+    const n = Math.min(aheadHours, f.point.length);
+    const cut = <T,>(a: T[]) => a.slice(0, n);
+    return { point: cut(f.point), lower: cut(f.lower.length === f.point.length ? f.lower : f.point), upper: cut(f.upper.length === f.point.length ? f.upper : f.point) };
   };
 
   const seriesCache = new Map<ScenarioKey, ScenarioSeries>();
@@ -474,10 +478,9 @@ export function buildNf(model: NetworkModel, subjects: Subject[], forecasts: Map
   const REGIONS: Region[] = [...bySite.entries()].map(([code, list]) => {
     const cap = list.reduce((a, s) => a + (s.iface!.speed as number) / 1000, 0);
     const now = list.reduce((a, s) => a + (gbps(s.room?.busy ?? s.reading.now, s.iface!.speed) ?? 0), 0);
-    const rise = list.reduce((a, s) => {
-      const f = s.reading.fit;
-      return a + (f ? gbps(f.at(24) - f.at(0), s.iface!.speed) ?? 0 : 0);
-    }, 0);
+    /* the site's rise is the sum of the analyzer's risings on its ports; a port it has not
+       answered for contributes nothing, rather than a slope of this app's own */
+    const rise = list.reduce((a, s) => a + (gbps(risePerDay(s), s.iface!.speed) ?? 0), 0);
     return {
       id: code, name: model.sites[code]?.name || code,
       currentGbps: r1(now), capacityGbps: r1(cap),
@@ -554,10 +557,9 @@ export function buildNf(model: NetworkModel, subjects: Subject[], forecasts: Map
       obs.push(cap > 0 ? r1((carried / cap) * 100) : 0);
     }
     const capAll = rated.reduce((a, s) => a + ((s.iface?.speed as number) || 1), 0);
-    const risen = rated.reduce((a, s) => {
-      const f = s.reading.fit;
-      return a + (f ? ((f.at(24) - f.at(0)) / 100) * ((s.iface?.speed as number) || 1) : 0);
-    }, 0);
+    /* same rule for the estate line: the analyzer's rising per port, weighted by the line rate,
+       and nothing at all for a port it has not answered for */
+    const risen = rated.reduce((a, s) => a + (risePerDay(s) / 100) * ((s.iface?.speed as number) || 1), 0);
     return { rated, obs, labels, days, rise: capAll > 0 ? (risen / capAll) * 100 : 0 };
   };
 
@@ -655,7 +657,7 @@ export function buildNf(model: NetworkModel, subjects: Subject[], forecasts: Map
       mark: null, members: [x], ...aggregate([x]), rise: sc.monthlyGrowth };
   };
 
-  return { CAPACITY_GBPS, LABELS, OBSERVED, SCENARIOS, seriesFor, LEAD_KEY: lead.key, askFor, histFor, ownLineFor, REGIONS, HEAT_MONTHS, HEAT_STRIDE: stride, buildHeatmap, ALL: subjects,
+  return { CAPACITY_GBPS, LABELS, OBSERVED, SCENARIOS, seriesFor, LEAD_KEY: lead.key, askFor, histFor, ownLineFor, FORECASTS: forecasts, REGIONS, HEAT_MONTHS, HEAT_STRIDE: stride, buildHeatmap, ALL: subjects,
     resolve, seriesOf: aggregate };
 }
 

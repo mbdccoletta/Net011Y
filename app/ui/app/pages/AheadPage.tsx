@@ -17,7 +17,7 @@ import { Tile } from "../components/Visual";
 import { PageEmpty } from "../components/PageEmpty";
 import { Skeleton, SkeletonText } from "@dynatrace/strato-components/content";
 import { AheadConsole } from "../components/AheadConsole";
-import { NfProvider, type Pick } from "../components/nf/source";
+import { NfProvider, useNf, type Pick } from "../components/nf/source";
 import RoomComb from "../components/nf/RoomComb";
 import NfDetail from "../components/nf/NfDetail";
 import NetworkDemand from "../components/nf/NetworkDemand";
@@ -40,6 +40,17 @@ import type { Need, NeedKey } from "../data/requirements";
 
 /* `Section` drew a claim row per app state. The rows it drew are the platform's now, and
    nothing renders it. */
+
+/**
+ * The questions are answered from the analyzer's forecasts, so the panel has to be inside the
+ * provider that holds them: a component rendering a provider cannot read it, and the context
+ * handed over used to carry dates from a line this app fitted for itself.
+ */
+function AheadAssist({ model }: { model: NetworkModel }) {
+  const { FORECASTS } = useNf();
+  return <AssistPanel subject="ahead" object="forecast" questions={aheadQuestions()}
+    context={() => aheadContext(model, FORECASTS)} />;
+}
 
 export function AheadPage({ model, needs, onSettings, onDevice, onExample, hourlyReady = true }: {
   model: NetworkModel;
@@ -203,8 +214,7 @@ export function AheadPage({ model, needs, onSettings, onDevice, onExample, hourl
         right={<span className="ahead-note">{scope
           ? `Scoped to ${model.sites[scope]?.name || scope} · ${fmtInt(inScope.length)} of ${fmtInt(subjects.length)} ports and processors`
           : `Answers are drawn from these ${fmtInt(inScope.length)} ports and processors only, never from outside the page`}</span>}>
-        <AssistPanel subject="ahead" object="forecast" questions={aheadQuestions()}
-          context={() => aheadContext(model)} />
+        <AheadAssist model={model} />
       </Tile>
 
       {/* Macro to micro, and the unit changes once.

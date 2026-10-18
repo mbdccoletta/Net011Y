@@ -277,8 +277,12 @@ export default function NfDetail() {
               <span><b>{r1(sc.room ?? 0)} pts</b>room left</span>
               <span><b>{Math.abs(move) < 0.05 ? "flat" : `${move > 0 ? "+" : "−"}${Math.abs(r1(move))} pts`}</b>
                 by the horizon{sc.firm || Math.abs(move) < 0.05 ? "" : ", inside its noise"}</span>
+              {/* "stays below it" is a claim about a forecast, so it is only made where there is
+                  one: the analyzer answers for what it can hold a horizon over, and the rest of
+                  this panel is the record, which stands on its own. */}
               <span className={crossing ? "is-over" : ""}><b>{crossing ?? "—"}</b>
-                {crossing ? "the forecast meets the ceiling" : "the forecast stays below it"}</span>
+                {!fwd ? "the analyzer has no forecast for this one"
+                  : crossing ? "the forecast meets the ceiling" : "the forecast stays below it"}</span>
               {sc.dropsAt != null && (
                 <span className="is-over"><b>{r1(sc.dropsAt)}%</b>
                   where it drops packets{sc.speed ? ` · ${bits(sc.dropsAt * sc.speed / 100)}` : ""} — a fault, not its capacity</span>
