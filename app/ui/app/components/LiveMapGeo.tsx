@@ -157,7 +157,17 @@ const LABEL_BUDGET = 160;
  * was hiding, which is the only honest way to make that mark disappear.
  */
 const CLUSTER_ABOVE = 300;
-const CELL_PX = 26;
+/**
+ * How far apart two marks have to be to be two marks.
+ *
+ * A grid was tried here first and it is the wrong shape for the problem: sites cluster around
+ * a city, cities do not line up with a lattice, and a tight group straddling a cell boundary
+ * comes out as two marks a few pixels apart — which is what made a city of twenty stores read
+ * as a spray of green confetti rather than as one place. This absorbs by distance instead: a
+ * mark is placed, and anything within the width of a mark belongs to it. Nothing can overlap,
+ * at any zoom, whatever the data does.
+ */
+const MARK_PX = 34;
 
 type Dot = { name: string; code: string; latitude: number; longitude: number; verdict: Verdict; dc: boolean };
 
@@ -172,18 +182,21 @@ function Dots({ sites, colour }: { sites: MapSite[]; colour: Record<Verdict, str
       name: name ?? s.name, code: s.code, latitude: s.lat, longitude: s.lon, verdict: s.verdict, dc: !!s.dc, of,
     });
     if (!map || sites.length <= CLUSTER_ABOVE) { setDots(sites.map((s) => one(s, 1))); return; }
-    const cells = new Map<string, { lead: MapSite; n: number; v: Verdict[] }>();
-    for (const s of sites) {
+    /* the order decides which site a group is named after and where its mark sits: a data
+       centre first, then whatever is worst, so a cluster never hides the reason to look at it */
+    const order = sites.slice().sort((a, b) =>
+      Number(!!b.dc) - Number(!!a.dc) || RANKED.indexOf(a.verdict) - RANKED.indexOf(b.verdict));
+    const marks: { lead: MapSite; x: number; y: number; n: number; v: Verdict[] }[] = [];
+    const r2 = MARK_PX * MARK_PX;
+    for (const s of order) {
       const p = map.project([s.lon, s.lat]);
-      const k = `${Math.round(p.x / CELL_PX)}|${Math.round(p.y / CELL_PX)}`;
-      const c = cells.get(k);
-      /* a data centre is never folded into the cluster that surrounds it: it is the end of
-         every line on the map and it keeps its own mark */
-      if (s.dc) { cells.set(`dc:${s.code}`, { lead: s, n: 1, v: [s.verdict] }); continue; }
-      if (c) { c.n++; c.v.push(s.verdict); if (isWorse(s.verdict, c.lead.verdict)) c.lead = s; }
-      else cells.set(k, { lead: s, n: 1, v: [s.verdict] });
+      /* a data centre is never absorbed: it is the end of every line on the map */
+      const near = s.dc ? undefined
+        : marks.find((m) => !m.lead.dc && (m.x - p.x) ** 2 + (m.y - p.y) ** 2 < r2);
+      if (near) { near.n++; near.v.push(s.verdict); }
+      else marks.push({ lead: s, x: p.x, y: p.y, n: 1, v: [s.verdict] });
     }
-    setDots([...cells.values()].map(({ lead, n, v }) => ({
+    setDots(marks.map(({ lead, n, v }) => ({
       ...one(lead, n, n > 1 ? `${n} sites · worst ${worst(v)}` : lead.name), verdict: worst(v),
     })));
   }, [map, sites]);
@@ -824,7 +837,7 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
         {/* thinner as there are more of them: three points is right for a dozen arcs and a
             smear for a hundred, and the line is there to be followed, not to be loud */}
         <ConnectionLayer<Conn> data={conns} curve="linear"
-          thickness={routes.length > 60 ? 1 : routes.length > 24 ? 2 : 3}
+          thickness={routes.length > 24 ? 1 : routes.length > 8 ? 2 : 3}
           color={(c) => colour[c.verdict]} />
         <Motion routes={routes} hit={regions ?? []} all={all} focus={frame} focusKey={focusKey} refit={refit} colour={colour}
           sites={sites} onSite={onSite} onRegion={onRegion} pad={insets} />
