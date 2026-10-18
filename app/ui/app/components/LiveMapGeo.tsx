@@ -173,9 +173,9 @@ type Dot = { name: string; code: string; latitude: number; longitude: number; ve
 
 /* `DotLayer` carries no click of its own — opening a site is `Motion`'s hit test, which
    works off the site list and is unchanged by the clustering. */
-function Dots({ sites, colour }: { sites: MapSite[]; colour: Record<Verdict, string> }) {
+function Dots({ sites, onDots }: { sites: MapSite[]; onDots: (d: (Dot & { of: number })[]) => void }) {
   const { current: map } = useMap();
-  const [dots, setDots] = useState<(Dot & { of: number })[]>([]);
+  const setDots = onDots;
 
   const build = useCallback(() => {
     const one = (s: MapSite, of: number, name?: string) => ({
@@ -222,20 +222,16 @@ function Dots({ sites, colour }: { sites: MapSite[]; colour: Record<Verdict, str
     return () => { clearTimeout(t); m.off("moveend", build); m.off("zoomend", build); };
   }, [map, build]);
 
-  /* `shapeSize` is one number for the whole layer, so the three sizes are three layers: a
-     site, a handful and a crowd. Three buckets is enough to tell them apart and keeps the
-     mark honest — the number itself is in the tooltip, where it is exact. */
-  const band = (lo: number, hi: number) => dots.filter((d) => d.of >= lo && d.of <= hi);
-  const layer = (data: (Dot & { of: number })[], size: number, key: string) => (data.length ? (
-    /* No tooltip. The platform's own lists every dot near the pointer by its latitude and
-       longitude — "36.245820895522364, -93.73683582089551" ten times over — which is the one
-       fact about a site a network engineer never needs. The names are already drawn on the
-       map, and the click opens what the mark stands for. */
-    <DotLayer<Dot & { of: number }> key={key} data={data} shape="circle" shapeSize={size}
-      color={(d) => colour[d.verdict]} />
-  ) : null);
-
-  return <>{layer(band(1, 1), 14, "one")}{layer(band(2, 9), 20, "few")}{layer(band(10, Infinity), 28, "many")}</>;
+  /**
+   * This renders nothing, and that is the point.
+   *
+   * `DotLayer` is the platform's own and `MapView` finds its layers among its direct
+   * children; wrapped inside a component of ours it was passed through as an unknown child
+   * and never drew at all — labels on the map with no marks under them, at every zoom. So the
+   * clustering lives here, where `useMap` gives it the projection, and hands the result up to
+   * be rendered where the map expects it.
+   */
+  return null;
 }
 
 function Labels({ labels }: { labels: Label[] }) {
@@ -664,6 +660,8 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
   const box = useRef<HTMLDivElement | null>(null);
   const [H, setH] = useState(440);
   const [refit, setRefit] = useState(0);
+  /* what `Dots` worked out for the camera as it stands */
+  const [clustered, setClustered] = useState<(Dot & { of: number })[]>([]);
   /* full screen, the same two ways the canvas offered it: the real one where the frame allows
      it, and the app's own viewport where it does not. Escape leaves either. */
   const [full, setFull] = useState(false);
@@ -874,8 +872,33 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
           color={(c) => colour[c.verdict]} />
         <Motion routes={routes} hit={regions ?? []} all={all} focus={frame} focusKey={focusKey} refit={refit} colour={colour}
           sites={sites} onSite={onSite} onRegion={onRegion} pad={insets} />
-        {/* the sites, clustered where several land on the same pixel */}
-        <Dots sites={sites} colour={colour} />
+        {/* the sites, clustered where several land on the same pixel: the clustering is a child
+            of the map because it needs the projection, the layers are children of the map
+            because that is where it looks for them */}
+        <Dots sites={sites} onDots={setClustered} />
+        {/**
+          * The mark says what it is, not only where it is.
+          *
+          * A data centre is a square: it is the end of every line on the map, the thing the
+          * sites depend on, and drawing it as one more circle made the reader count labels to
+          * find it. A site is a circle. A cluster is the same circle, larger — it is sites,
+          * so it is their shape. The canvas layout has always drawn the two apart; the
+          * platform's map was the one place where everything looked alike.
+          *
+          * `shapeSize` and `shape` are one value per layer, so each mark is a layer of its own.
+          */}
+        {([
+          ["dc", (d: Dot & { of: number }) => d.dc, "square" as const, 15],
+          ["one", (d: Dot & { of: number }) => !d.dc && d.of === 1, "circle" as const, 13],
+          ["few", (d: Dot & { of: number }) => !d.dc && d.of > 1 && d.of < 10, "circle" as const, 19],
+          ["many", (d: Dot & { of: number }) => !d.dc && d.of >= 10, "circle" as const, 27],
+        ] as const).map(([key, keep, shape, size]) => {
+          const data = clustered.filter(keep);
+          return data.length ? (
+            <DotLayer<Dot & { of: number }> key={key} data={data} shape={shape} shapeSize={size}
+              color={(d) => colour[d.verdict]} />
+          ) : null;
+        })}
         <Labels labels={labels} />
       </MapView>
       {/* The three buttons the canvas drew itself, in the place it drew them.
