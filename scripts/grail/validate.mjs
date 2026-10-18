@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES } from "./out/queries.mjs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -872,6 +872,137 @@ check("A tag path narrows the set and nothing else",
 check("A site with no value for a level is counted, not dropped",
   branchesAt(all.concat(mk("zz")), ["country"], [], resolve).some((b) => b.value === "Not tagged"),
   branchesAt(all.concat(mk("zz")), ["country"], [], resolve).map((b) => b.value).join(" "));
+
+// ── Ahead, over the estate the generator builds ──────────────────────────────────────────────
+//
+// Everything above this line is the module read on arrays written by hand. That is how it was
+// tested until now, and it was not enough: over the generated estate `aheadSubjects` returned
+// zero subjects, so the page those arrays stand for — the states, the census, the silences, the
+// clustering of changes, the room and the context Assist is given — ran against nothing at all.
+// A suite can be green on a module and blind to the page it builds.
+//
+// The generator now carries the hourly record the page reads, and `scenario.ahead` names the
+// subject it built for each state, so these checks say what the estate must come out as.
+const subjects = aheadSubjects(model);
+const ah = scenario.ahead;
+const portOf = (n) => subjects.find((s) => s.key === `port:${ah[n].device}:${ah[n].port}`);
+const census = aheadCensus(subjects);
+
+check("The estate reaches the Ahead page, in every state the page can report",
+  subjects.length > 0 && STATES.every((st) => census.counts[st] > 0)
+  && ["port", "device", "memory"].every((k) => subjects.some((s) => s.kind === k)),
+  `${subjects.length} subjects · ${STATES.map((st) => `${st} ${census.counts[st]}`).join(" · ")}`);
+
+// Each state was generated on purpose, from a shape a live environment actually produces. If a
+// port generated as a level change arrives as a forecast, one of the two is wrong and the suite
+// has to say which.
+const WANT = { changedA: "changed", changedB: "changed", changedC: "changed", changedAlone: "changed",
+  climbing: "climbing", oneJump: "onejump", dropping: "dropping", beyondHorizon: "quiet",
+  insideNoise: "quiet", falling: "quiet", tooShort: "quiet", showsCeiling: "quiet", dropsEarly: "quiet" };
+const miscast = Object.entries(WANT).filter(([n, st]) => portOf(n)?.reading.state !== st);
+check("Every generated subject arrives in the state it was generated for",
+  miscast.length === 0 && subjects.find((s) => s.key === `cpu:${ah.cpuStep}`)?.reading.state === "changed"
+  && subjects.find((s) => s.key === `mem:${ah.memClimb}`)?.reading.state === "climbing",
+  miscast.map(([n, st]) => `${n}: wanted ${st}, got ${portOf(n)?.reading.state ?? "no subject"}`).join(" · ") || "all 13 ports, the processor and the memory");
+
+// The census is the page's own account of what it measured, so it has to add up to what it has.
+const nothingToSay = subjects.filter((s) => s.reading.state === "quiet");
+check("The census states partition the subjects, with nothing counted twice and nothing left out",
+  census.total === subjects.length
+  && STATES.reduce((a, st) => a + census.counts[st], 0) === subjects.length
+  && STATES.every((st) => census.counts[st] === subjects.filter((x) => x.reading.state === st).length),
+  `${STATES.reduce((a, st) => a + census.counts[st], 0)} counted of ${subjects.length}`);
+
+// A subject with nothing to say is not a gap in the page: it is a reading, and the reason is the
+// reading. Every one of the four reasons the module can give is reached by this estate.
+check("Every silent subject carries a reason, and the reasons add up to the silence",
+  nothingToSay.length > 0 && nothingToSay.every((s) => !!silence(s.reading))
+  && nothingToSay.every((s) => census.why[silence(s.reading)] > 0)
+  && Object.values(census.why).reduce((a, b) => a + b, 0) === nothingToSay.length
+  && ["too little record", "flat or falling", "the rise is inside the noise",
+    "reaches the limit beyond what the record can see"].every((w) => census.why[w] > 0),
+  Object.entries(census.why).map(([w, n]) => `${w}: ${n}`).join(" · "));
+
+// Measured on one environment: sixteen changes fell on seven days with six of them on a single
+// day. Three ports at three sites step within the same hour here, and one steps ten days later.
+const estate = clusterChanges(subjects.filter((s) => s.reading.state === "changed"));
+const migration = estate.events.find((e) => ["changedA", "changedB", "changedC"]
+  .every((n) => e.members.some((m) => m.key === portOf(n)?.key)));
+check("Ports that changed together are one event across their sites, and one that changed alone is a single",
+  !!migration && migration.members.length === 3 && migration.spread === 0 && migration.sites === 3
+  && Math.abs(migration.ago - ah.changedAgo) <= 24
+  && estate.singles.some((s) => s.key === portOf("changedAlone")?.key),
+  migration ? `${migration.members.length} members · ${migration.sites} sites · ${migration.ago} h ago · ${estate.singles.length} singles`
+    : `no event holds the three: ${estate.events.map((e) => `${e.members.length}@${e.ago}`).join(" ")}`);
+
+// The left half of the runway is the record and not a projection, and a tag path has to carry it
+// without losing a subject. A port cannot reach this state — an hour over the line rate is
+// dropped as impossible — so the one that has is the processor with a runaway process on it.
+const tagOf = (site, key) => (key === "region" ? model.sites[site]?.region : model.sites[site]?.uf);
+const branches = branchesAt(subjects, ["region", "uf"], [], tagOf);
+const over = subjects.filter((s) => crossedAgo(s.reading.hist) != null);
+check("A tag cut keeps every subject and counts the ones the record already shows over a limit",
+  branches.reduce((a, b) => a + b.subjects.length, 0) === subjects.length
+  && branches.reduce((a, b) => a + b.past, 0) === over.length
+  && over.some((s) => s.key === `cpu:${ah.cpuPegged}`),
+  `${branches.length} branches · ${over.length} already over a limit · ${over.map((s) => s.key).slice(0, 3).join(", ")}`);
+
+// ── Ahead: every forward number is the analyzer's ────────────────────────────────────────────
+//
+// The page draws the Dynatrace forecast and says so in its legend. The three numbers behind it
+// that were still a least-squares line of this app's own are gone, and the last of them was the
+// one Assist was given: "reaches: between 9 and 14 days", from arithmetic of ours, in the one
+// place a reader cannot see where a number came from.
+//
+// So the check is not that the context carries a date. It is that it carries one *only* when the
+// analyzer answered, for exactly the subjects it answered for — while the app's own fit still has
+// a date for the climbing port and must not be allowed to speak it. The analyzer is an API and
+// not a Grail store, so its answer is built here rather than generated: one value an hour, per
+// cent of the subject's own limit, with the band a forecast comes back with.
+const DAVIS_HRS = 240;
+const reaching = (start, at) => Array.from({ length: DAVIS_HRS }, (_, h) => start + ((100 - start) * h) / at);
+/* upper crosses in hour 47, the point forecast in 119, lower in 215: day 2 to day 9 */
+const answer = { point: reaching(80, 119), upper: reaching(90, 47), lower: reaching(70, 215), quality: "VALID" };
+const climber = portOf("climbing");
+const ownDays = Math.round((climber?.reading.fit?.mid ?? 0) / 24);
+const forward = (ctx) => [...ctx.dropping, ...ctx.oneJumpAway, ...ctx.climbing];
+
+const unanswered = aheadContext(model);
+check("With nothing from the analyzer, the context names no day — not even for the subject the app's own line has a date for",
+  climber?.reading.fit?.mid != null && forward(unanswered).length > 0
+  && forward(unanswered).every((x) => x.reaches === "the analyzer has no forecast for this one")
+  && unanswered.room.length > 0 && unanswered.room.every((x) => x.pointsPerDay === null)
+  && !/\d+ days/.test(JSON.stringify(forward(unanswered))),
+  `${forward(unanswered).length} subjects, none dated · the app's own line puts ${climber?.name} at the limit in ${ownDays} days`);
+
+// Every subject but one is answered for, so the one left out is the whole difference between the
+// two sentences the context may say.
+const answered = new Map(subjects.filter((s) => s.key !== climber?.key).map((s) => [s.key, answer]));
+const partly = aheadContext(model, answered);
+const silentOnes = forward(partly).filter((x) => x.reaches === "the analyzer has no forecast for this one");
+check("A subject the analyzer answered for is dated from its band, and the one it did not says so",
+  silentOnes.length === 1
+  && forward(partly).filter((x) => x.reaches !== silentOnes[0].reaches).every((x) => x.reaches === "between 2 and 9 days")
+  && ownDays !== 2 && ownDays !== 9,
+  `${forward(partly).map((x) => x.reaches).join(" | ")} · the app's own line would have said ${ownDays} days`);
+
+// The rise beside each room is the analyzer's own over its first day, not a slope of this app's.
+const fully = aheadContext(model, new Map(subjects.map((s) => [s.key, answer])));
+check("The rise per day beside a room is the analyzer's first day, not a slope of the app's",
+  fully.room.length > 0 && fully.room.every((x) => x.pointsPerDay === 3.87),
+  [...new Set(fully.room.map((x) => String(x.pointsPerDay)))].join(", "));
+
+// The reading that exists where a date does not, measured over the estate rather than one array:
+// a room for nearly every subject, against a ceiling the port demonstrated where the record
+// separates and against the rate on its label everywhere else.
+const shownRooms = subjects.filter((s) => s.room?.source === "shown");
+check("Room is measured for the estate, against a demonstrated ceiling only where the record separates",
+  subjects.filter((s) => s.room).length >= subjects.length - 1
+  && shownRooms.length > 0 && shownRooms.every((s) => s.room.ceiling >= 50)
+  && shownRooms.some((s) => s.key === portOf("showsCeiling")?.key)
+  && portOf("dropsEarly")?.room?.source === "stated" && portOf("dropsEarly")?.room?.dropsAt < 50,
+  `${subjects.filter((s) => s.room).length}/${subjects.length} with a room · ${shownRooms.length} against a ceiling they showed`
+  + ` · the policed port drops at ${portOf("dropsEarly")?.room?.dropsAt} and keeps its stated limit`);
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 

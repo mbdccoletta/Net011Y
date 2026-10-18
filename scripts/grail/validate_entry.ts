@@ -8,7 +8,7 @@ export { portCounts, portsDown } from "../../app/ui/app/model/ports";
 export { suspicionFor, outsideCounts, trafficDrop, DEFAULT_DROP_PCT, appRise } from "../../app/ui/app/model/suspicion";
 export { environmentFindings, portUsers, busyPortFindings, pathFindings } from "../../app/ui/app/model/traffic";
 export * as Prompts from "../../app/ui/app/utils/prompts";
-export { INSTRUCTION, INSTRUCTION_LIMIT } from "../../app/ui/app/utils/assist";
+export { INSTRUCTION, INSTRUCTION_LIMIT, aheadContext } from "../../app/ui/app/utils/assist";
 export { nextSteps, coverage } from "../../app/ui/app/model/nextSteps";
 export { pageCoverage } from "../../app/ui/app/model/coverage";
 export { changesOf, CHANGE_LABEL } from "../../app/ui/app/model/changes";

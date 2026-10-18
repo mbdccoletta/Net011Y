@@ -522,8 +522,222 @@ results.sessionNets = [
   { ip: "172.30.9.0", sessions: S(61) },
 ];
 
+// ---------------- sixty days of hours: the record the Ahead page reads ----------------
+//
+// formats.ts asks every family for RECORD_DAYS of hourly buckets — one series per port, one per
+// processor, one per memory — and the Ahead page is the only reader. None of it was generated, so
+// `aheadSubjects` returned nothing over this estate: the states, the census, the silences, the
+// clustering of changes and the whole capacity model were exercised on hand-written arrays and
+// never once on a network.
+//
+// Two decisions about the shape, both of them about being able to believe the result:
+//
+//   · the day's curve is counted back from the last sample, not off the wall clock. The state a
+//     subject is in turns on the mean of its last three hours, so a series phased to the clock
+//     puts a port one jump from its limit at nine in the morning and leaves it quiet at three.
+//     A check that flips with the hour is a check nobody believes.
+//   · `ifHourlyUp` answers for every uplink, `cpuHourly` and `memHourly` for the devices that
+//     publish them, and the unfiltered `ifHourly` only for the devices a scenario names. The page
+//     ranks one uplink per device and reaches the rest only when a reader opens one in the detail
+//     panel; answering the full read for all 4,640 ports of this estate would be another hundred
+//     and thirty megabytes of octets for ports no check looks at.
+const AHEAD_DAYS = 60;                        // RECORD_DAYS in formats.ts
+const AHEAD_HRS = AHEAD_DAYS * 24;
+/** hours before the end of the record: 0 is the last sample, so every phase is the same each run */
+const back = (k) => AHEAD_HRS - 1 - k;
+/**
+ * A working day inside a quieter week, as a multiplier on the level.
+ *
+ * Both cycles are smooth, and that is a measurement rather than a preference. The first version
+ * dropped the weekend to 55% of a weekday in one step, which put a rise of thirty points between
+ * Sunday night and Monday morning into every busy port — and the largest rise a series has shown
+ * is exactly what the page measures "one jump from its limit" against, so most of the estate
+ * arrived in that state for no reason but the shape of the fixture. Real traffic ramps over
+ * hours; so does this.
+ *
+ * Both are zero-phase at the last sample, so "now" — the mean of the last three hours — sits on
+ * the level the scenario asked for rather than wherever the curve happened to be.
+ */
+const daily = (k, amp) => (1 + amp * Math.sin((2 * Math.PI * (back(k) % 24)) / 24))
+  * (0.8 + 0.2 * Math.cos((2 * Math.PI * back(k)) / (7 * 24)));
+/**
+ * Per cent of the limit, hour by hour: a level, a daily shape, and noise that is the same each run.
+ *
+ * The ceiling is a port's line rate by default, because the model drops an hour that claims to
+ * have carried more than one — a wrapped counter or a poll gap — and a fixture should not be
+ * testing that rule by accident. A processor can genuinely sit at its limit, and one of them does.
+ */
+const hourly = (level, amp, noise, spikes = {}, cap = 99) => Array.from({ length: AHEAD_HRS }, (_, k) => {
+  const v = spikes[k] ?? level(k) * daily(k, amp) + uni(-noise, noise);
+  return Math.max(0, Math.min(cap, Math.round(v * 10) / 10));
+});
+const flat = (v) => () => v;
+const rise = (a, b) => (k) => a + ((b - a) * k) / (AHEAD_HRS - 1);
+/** a level change `at` hours before the end, which is how the app reports its age */
+const stepAt = (at, a, b) => (k) => (back(k) >= at ? a : b);
+
+/**
+ * The subjects the Ahead page is meant to find, one per switch and each at its own site.
+ *
+ * Every state the module can reach is represented, and so is every reason it gives for having
+ * nothing to say. The ports that carry them are the first uplink of a store switch; the second
+ * uplink of the same switch is left near idle, so the ranking that keeps one port per device
+ * keeps the one the scenario is about.
+ */
+const CHANGED_AGO = 240, SINGLE_AGO = 480, CPU_STEP_AGO = 336, PEG_AGO = 264;
+const aheadHosts = [];
+for (const d of devices) {
+  if (d.role !== "SWT" || d.site.dc || outage.includes(d.site.code)) continue;
+  if (aheadHosts.some((x) => x.site.code === d.site.code)) continue;
+  aheadHosts.push(d);
+}
+const PLOTS = [
+  // the three that changed on the same day — a migration, which the page has to report as one event
+  ["changedA", stepAt(CHANGED_AGO, 29, 53), 0.1, 1.2, {}],
+  ["changedB", stepAt(CHANGED_AGO, 34, 58), 0.1, 1.2, {}],
+  ["changedC", stepAt(CHANGED_AGO, 26, 47), 0.1, 1.2, {}],
+  // and one that changed on a day of its own, which is a single and not an estate-wide event
+  ["changedAlone", stepAt(SINGLE_AGO, 31, 55), 0.1, 1.2, {}],
+  // a climb the record can carry: 40 to 70 over the two months, reaching the line rate inside
+  // twice the record it rests on
+  ["climbing", rise(40, 70), 0.08, 1, {}],
+  // a port that has already shown an hour it could not survive twice: it carries 62 now and once
+  // took 96 in a single hour, so its own largest rise would put it over
+  ["oneJump", rise(30, 62), 0.08, 1, { 300: 96 }],
+  // a rise that is real, confident and arrives long after anything this record may speak for
+  ["beyondHorizon", rise(20, 29), 0.08, 1, {}],
+  // a rise smaller than the noise it sits in, which is not a rise
+  ["insideNoise", rise(44, 45), 0.3, 9, {}],
+  // a port whose traffic moved somewhere else
+  ["falling", rise(56, 34), 0.1, 1.2, {}],
+  // a port that only started answering yesterday: below the floor for a line, and the page counts
+  // it under "too little record" rather than leaving it out
+  ["tooShort", flat(46), 0.1, 1.2, {}],
+  // discards that have started rising. 40% of the interfaces on one environment carry a counter
+  // that has been non-zero for months, so what makes this one urgent is the rate, not the count.
+  ["dropping", flat(58), 0.12, 1.5, {}],
+  // A port that discards only when it is loaded, which is the one case where a ceiling it has
+  // demonstrated is worth more than the rate on its label. The split has to be wide and not
+  // merely present: a demonstrated ceiling under half the line rate is kept as a fact about the
+  // port and never used as the limit its room is measured against, and a busy hour at 71% of the
+  // rate — the first value tried here — lands under that half once the weekly cycle is averaged
+  // into it.
+  ["showsCeiling", (k) => (k % 24 < 2 ? 86 : 30), 0.04, 0.8, {}],
+  // and one that drops packets at a third of a gigabit, which is a policer, a shaper or bad
+  // optics and not a capacity: the level is kept as a fact about the port and the room is still
+  // measured against the rate on its label
+  ["dropsEarly", (k) => (k % 24 < 2 ? 36 : 14), 0.04, 0.6, {}],
+];
+const plot = new Map();
+PLOTS.forEach(([name, level, amp, noise, spikes], n) => {
+  const d = aheadHosts[n];
+  if (!d) return;
+  const port = ifaces.find((f) => f.d === d && /^TenGig/.test(f.name));
+  const mate = ifaces.find((f) => f.d === d && /^TenGig/.test(f.name) && f !== port);
+  if (!port) return;
+  plot.set(port, { name, hist: hourly(level, amp, noise, spikes) });
+  if (mate) plot.set(mate, { name: `${name}Mate`, hist: hourly(flat(7), 0.2, 0.8) });
+});
+const named = Object.fromEntries([...plot].filter(([, v]) => !v.name.endsWith("Mate"))
+  .map(([f, v]) => [v.name, { device: f.d.name, port: f.name, site: f.d.site.code }]));
+
+/** the discard counter beside a port's traffic, per hour */
+const discardsFor = (f, hist) => {
+  const p = plot.get(f);
+  // the one whose rate is rising: nothing for the first half of the record, then a counter that
+  // climbs, because what makes a discard urgent is the rate and not the count
+  if (p?.name === "dropping") return hist.map((_, k) => (back(k) > AHEAD_HRS / 2 ? 0
+    : int(0, 3 + Math.floor((AHEAD_HRS / 2 - back(k)) / 90))));
+  // the one that separates: it drops packets in its two busy hours and in none of the others, so
+  // the record says where its trouble starts. A fixed count, because a rate that drifts upward by
+  // accident would make it urgent for the wrong reason.
+  if (p?.name === "showsCeiling" || p?.name === "dropsEarly") return hist.map((_, k) => (k % 24 < 2 ? 12 : 0));
+  // 40% of a real estate carries a counter that has been non-zero for months: a policer, a duplex
+  // mismatch, a QoS drop. Steady, so nothing downstream may call it a deterioration.
+  return hist.map(() => (f.i % 5 === 2 ? 3 : 0));
+};
+
+/** octets in and out of a port for an hour that carried `pct` of its line rate, split 62/38 */
+const octets = (pct, speed) => {
+  const total = Math.round((pct / 100) * speed * 1e6 * 3600 / 8);
+  const i = Math.round(total * 0.62);
+  return [i, total - i];
+};
+/**
+ * The uplinks, which is what `ifHourlyUp` answers with: the UPLINK filter in formats.ts, written
+ * as a predicate — at or above ten gigabits, or a name the rule recognises. Every other port of
+ * this estate is an access port, and the unfiltered read is the one that reaches those.
+ */
+const isUp = (f) => f.speed >= 10000 || /^(te|xe-|et-|po|lc-)/i.test(f.name);
+const hourlyRow = (f) => {
+  const p = plot.get(f);
+  // An ordinary port drifts, and it drifts both ways. Levelling them all made 547 of 550 silent
+  // subjects silent for the same reason — the residual slope of the fixture's own weekly cycle,
+  // reported as "the rise is inside the noise" across the whole estate — which says nothing about
+  // whether the page can tell one reason from another.
+  const lvl = f.speed >= 10000 ? 14 + (f.i % 4) * 5 : 6 + (f.i % 3) * 3;
+  const base = p ? p.hist : hourly(rise(lvl, lvl + ((f.i % 5) - 2) * 1.5), 0.45, 2.5);
+  // a port that only came up yesterday has nulls where it was not yet answering, exactly as Grail
+  // returns a series that starts inside the timeframe
+  const hist = p?.name === "tooShort" ? base.map((v, k) => (back(k) >= 18 ? null : v)) : base;
+  const io = hist.map((v) => (v == null ? [null, null] : octets(v, f.speed)));
+  const row = { "dt.smartscape.ext_network_device": f.d.id, "dt.smartscape.ext_network_interface": f.id,
+    "if.name": f.name, ...tf(B1H, AHEAD_HRS), i: io.map((x) => x[0]), o: io.map((x) => x[1]) };
+  // Juniper publishes no speed metric and the hourly reads drop `if.speed` from the grouping, so
+  // its rows carry neither and the model falls back to the speed on the Smartscape node.
+  if (f.d.vendor !== "juniper") row.s = hist.map((v) => (v == null ? null : f.speed));
+  row.d = discardsFor(f, hist).map((v, k) => (hist[k] == null ? null : v));
+  return { ...row, family: f.d.vendor === "juniper" ? "juniper" : f.d.vendor === "generic" ? "generic" : "cisco" };
+};
+const measured = ifaces.filter((f) => EXT[f.d.vendor].q && f.up && f.speed > 0);
+results.ifHourlyUp = measured.filter(isUp).map(hourlyRow);
+// The unfiltered read, for the access ports of the devices a scenario names. In a real
+// environment it answers for the uplinks too and the model keeps whichever series arrived first;
+// here it carries only what `ifHourlyUp` did not, so no port's record is written twice.
+const plotted = new Set([...plot.keys()].map((f) => f.d));
+results.ifHourly = measured.filter((f) => !isUp(f) && plotted.has(f.d)).map(hourlyRow);
+
+/**
+ * Processors and memories, hour by hour.
+ *
+ * Counted on one live environment: 150 devices report the memory they are using and 147 the memory
+ * they have free, against 169 processors — so Ahead saw 169 processors and 135 memories. A fixture
+ * where every device answers for both would never exercise the subject the page cannot build.
+ */
+const hotFw = devices.find((d) => d.name === fwName);
+/**
+ * One processor that is not approaching its limit but sitting on it.
+ *
+ * The left half of the runway is the record, not a forecast, and `crossedAgo` reads it: how long
+ * ago this first reached its limit and stayed there. Nothing in the estate had ever reached one —
+ * a port cannot, since an hour over the line rate is dropped as impossible — so that half of the
+ * chart, and the count of subjects already past a limit under every branch of the tag tree, were
+ * measured on nothing. A switch with a runaway process is the ordinary way it happens.
+ */
+const pegged = devices.find((d) => d.role === "SWT" && d !== hotFw && !d.site.dc && !outage.includes(d.site.code)
+  && !aheadHosts.includes(d));
+const cpuOf = (d) => d === hotFw
+  // the firewall the alert is about: it stepped to where it sits now ten days ago and stayed there,
+  // which is a change that happened and not a forecast
+  ? hourly(stepAt(CPU_STEP_AGO, 32, 93), 0.04, 1.2)
+  : d === pegged ? hourly(stepAt(PEG_AGO, 44, 100.4), 0.02, 0.3, {}, 100)
+  : hourly(flat(d.role === "FWL" ? 34 : d.role === "CON" ? 26 : 13 + (d.ip.length % 7)), 0.3, 2);
+const memClimber = devices.find((d) => d.role === "CON" && d.site.dc);
+const memOf = (d) => d === memClimber
+  // memory is the third thing a device runs out of, and the only one of the three with a record
+  // this page can read: this one has been filling for two months
+  ? hourly(rise(54, 86), 0.03, 0.8)
+  : hourly(flat(41 + (d.name.length % 11) * 2), 0.06, 1.5);
+const polled = devices.filter((d) => d.vendor !== "generic" && d !== PA);
+results.cpuHourly = polled.map((d) => ({ "dt.smartscape.ext_network_device": d.id, ...tf(B1H, AHEAD_HRS), c: cpuOf(d), family: "network_device" }));
+results.cpuHourly.push({ "device.address": PA.ip, "sys.name": PA.name, ...tf(B1H, AHEAD_HRS), c: hourly(flat(37), 0.08, 1.5), family: "paloalto" });
+results.memHourly = polled.filter((d, n) => n % 5 !== 0 || d === memClimber).map((d) => ({ "dt.smartscape.ext_network_device": d.id, ...tf(B1H, AHEAD_HRS), m: memOf(d), family: "network_device" }));
+results.memHourly.push({ "device.address": PA.ip, "sys.name": PA.name, ...tf(B1H, AHEAD_HRS), m: hourly(flat(64), 0.05, 1.2), family: "paloalto" });
+
 writeFileSync(`${OUT}results.json`, JSON.stringify(results));
 writeFileSync(`${OUT}scenario.json`, JSON.stringify({ generatedFor: iso(NOW), outage: { carrier: "Carrier B", sites: outage, since: iso(OUTAGE_SINCE) },
+ ahead: { ...named, cpuStep: fwName, memClimb: memClimber.name, cpuPegged: pegged.name, records: AHEAD_HRS,
+   changedAgo: CHANGED_AGO, singleAgo: SINGLE_AGO, cpuStepAgo: CPU_STEP_AGO },
  firewallCpu: fwName, paloAlto: PA.name, vlanDevice: VL.name, uplinkSaturation: SAT_SITE, crcErrors: CRC_SITE, slowCircuit: SLOW_SITE, silentCircuit: SILENT_SITE,
  alerts: { satDevice: satDevice.name, satInterface: satIface.name, crcDevice: crcDevice.name, mutedDevice: mutedDevice.name, dupDevice: dupDevice.name, downMonitors: downMonitors.length } }, null, 1));
 console.log(JSON.stringify({ sites: sites.length, devices: devices.length, interfaces: ifaces.length, circuits: circuits.length, syslog: syslog.length, traps: traps.length, netflow: netflow.length, oneagentFlows: flowsOA.length, rows: Object.fromEntries(Object.entries(results).map(([k, v]) => [k, v.length])), outage }, null, 1));
