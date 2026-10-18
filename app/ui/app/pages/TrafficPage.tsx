@@ -66,7 +66,10 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
   // what a click selects: the conversations on that band or through that node, heaviest first
   const selected: Conversation[] = !pick ? [] : J.scope.filter((c) => {
     const [a, b, z] = J.keyOf(c);
-    return pick.kind === "node" ? [a, b, z].includes(pick.id) : (a === pick.from && b === pick.to) || (b === pick.from && z === pick.to);
+    if (pick.kind === "node") return [a, b, z].includes(pick.id);
+    /* a path names all three of its nodes; a band names the two it joins */
+    if (pick.via != null) return a === pick.from && b === pick.via && z === pick.to;
+    return (a === pick.from && b === pick.to) || (b === pick.from && z === pick.to);
   }).sort((x, y) => y.bytes - x.bytes);
   const nameOf = (code?: string) => (code ? model.sites[code]?.name ?? code : "");
   const endLabel = (kind: Conversation["fromKind"], label: string, code?: string, net?: string) =>
@@ -132,8 +135,10 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
         </p>
       </Tile>}
 
+      {/* the title names what was clicked: a node, a band of two, or a path of three */}
       {f && J.scope.length > 0 && (
-        <Tile title={pick ? (pick.kind === "node" ? nodeOf(pick.id)?.label ?? "Selection" : `${nodeOf(pick.from)?.label ?? "?"} → ${nodeOf(pick.to)?.label ?? "?"}`) : "Top conversations · last hour"}
+        <Tile title={pick ? (pick.kind === "node" ? nodeOf(pick.id)?.label ?? "Selection"
+          : [pick.from, pick.via, pick.to].filter(Boolean).map((id) => nodeOf(id!)?.label ?? "?").join(" → ")) : "Top conversations · last hour"}
           right={`${fmtBytes(listed.reduce((a, c) => a + c.bytes, 0))} · ${fmtInt(listed.length)} groups${pick ? "" : " · heaviest first"}`}>
           {pick && <div className="tr-picked"><button type="button" className="tf-link" onClick={() => setPick(null)}>Show every conversation</button></div>}
           <div className="tr-table" role="table">

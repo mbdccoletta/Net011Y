@@ -354,8 +354,10 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
 }
 
 /**
- * Ports in the three states an operator tells apart: carrying traffic, meant to and not, and shut or
- * empty. One number over a total made a switch with thirty unpatched ports look half broken.
+ * Ports in the three states an operator tells apart: carrying traffic, meant to and not, and shut,
+ * empty or not a cable at all. One number over a total made a switch with thirty unpatched ports look
+ * half broken. The middle figure is the same test as the list of links further down the panel, so the
+ * two cannot disagree.
  */
 function PortLine({ d }: { d: Device }) {
   const p = portCounts(d);
@@ -367,7 +369,7 @@ function PortLine({ d }: { d: Device }) {
     /* "unknown" is drawn only when there is one, so a device whose ports all report keeps the
        three states it had; where there are some, they are shown as what they are rather than
        added to the failures. */
-    <span className="vz-ports" title={`${p.up} up · ${p.down} down with the port enabled · ${p.unused} shut or empty${p.unknown ? ` · ${p.unknown} reporting no state` : ""}`}>
+    <span className="vz-ports" title={`${p.up} up · ${p.down} physical link${p.down === 1 ? "" : "s"} enabled and not carrying traffic · ${p.unused} shut, empty or not a link${p.unknown ? ` · ${p.unknown} reporting no state` : ""}`}>
       {([["up", p.up, "up"], ["down", p.down, "down"], ["off", p.unused, "unused"],
         ...(p.unknown ? [["na", p.unknown, "no state"] as const] : [])] as const).map(([k, n, label]) => (
         <span className="vz-ports__one" key={k}>

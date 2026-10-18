@@ -145,12 +145,12 @@ type DeviceRow = Device & Record<string, unknown>;
 /** The trend cell sorts on the last reading; the curve itself is drawn by <Spark />. */
 const cpuLast = (d: Device) => (d.cpu.length ? d.cpu[d.cpu.length - 1] : -1);
 
-/** up · enabled but not up · shut or empty: the device's own two status fields, kept apart. */
+/** up · enabled physical links not up · shut, empty or not a link: the device's own two status fields, kept apart. */
 function Ports({ d }: { d: Device }) {
   const p = portCounts(d);
   if (!p.known) return <span className="np-mono np-muted">{p.total ? `${p.total} ports` : "—"}</span>;
   return (
-    <span className="np-mono vz-ports" title={`${p.up} up · ${p.down} down with the port enabled · ${p.unused} shut or empty`}>
+    <span className="np-mono vz-ports" title={`${p.up} up · ${p.down} physical link${p.down === 1 ? "" : "s"} enabled and not carrying traffic · ${p.unused} shut, empty or not a link${p.unknown ? ` · ${p.unknown} reporting no state` : ""}`}>
       <i className="vz-port vz-port--up" />{p.up}
       <i className="vz-port vz-port--down" />{p.down}
       <i className="vz-port vz-port--off" />{p.unused}

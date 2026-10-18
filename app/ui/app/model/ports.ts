@@ -37,19 +37,6 @@ export const isUnused = (i: Iface) => i.admin.startsWith("down") || i.oper.start
 /** no readable operational status: neither up, nor down, nor deliberately off */
 export const isUnknownState = (i: Pick<Iface, "oper">) => !i.oper || i.oper.startsWith("unknown");
 
-export function portCounts(d: Device): PortCounts {
-  if (!d.interfaces.length) {
-    return { up: 0, down: 0, unused: 0, unknown: 0, total: d.ifStats?.interfaces ?? 0, known: false };
-  }
-  let up = 0, unused = 0, unknown = 0;
-  for (const i of d.interfaces) {
-    if (isUp(i)) up++;
-    else if (isUnused(i)) unused++;
-    else if (isUnknownState(i)) unknown++;
-  }
-  return { up, down: d.interfaces.length - up - unused - unknown, unused, unknown, total: d.interfaces.length, known: true };
-}
-
 /**
  * A port that carries a cable, as against a logical interface the device invents.
  *
@@ -62,6 +49,56 @@ export function portCounts(d: Device): PortCounts {
 const PHYSICAL = /^(ethernetCsmacd|ieee8023adLag|fastEther|gigabitEthernet|infiniband|sonet|opticalChannel)/i;
 export const isPhysical = (i: Iface) => !i.type || PHYSICAL.test(i.type);
 
+/**
+ * Enabled is a reading, not the absence of one.
+ *
+ * This asked only that the port was not administratively down, and `buildRealModel` writes
+ * "unknown" where the Smartscape node did not match — so an oper-down link whose admin status
+ * nobody could read was reported as "admin up · oper down", which is a claim about a setting
+ * the app never saw. It is the same mistake one line up from where it was just fixed for the
+ * operational status. The admin status has to say up.
+ */
+const isAdminUp = (i: Iface) => i.admin.startsWith("up");
+
+export function portCounts(d: Device): PortCounts {
+  if (!d.interfaces.length) {
+    return { up: 0, down: 0, unused: 0, unknown: 0, total: d.ifStats?.interfaces ?? 0, known: false };
+  }
+  /**
+   * `down` is counted, not subtracted.
+   *
+   * It used to be everything left over — total less up, less unused, less unknown — and the
+   * list underneath it is `portsDown`, which also asks that the port be a physical link and
+   * that its admin status actually read up. So the same device panel said "5 down" over a
+   * list of two: the three missing ones were a loopback and two tunnels, oper-down as a
+   * matter of course. A number a reader cannot reconcile with the list beside it is worse
+   * than no number. The two now come from the same test.
+   */
+  let up = 0, down = 0, unused = 0, unknown = 0;
+  for (const i of d.interfaces) {
+    if (isUp(i)) up++;
+    else if (isUnused(i)) unused++;
+    // an operational or admin status the app could not read is not a failure it can claim
+    else if (isUnknownState(i) || !isAdminUp(i)) unknown++;
+    // a tunnel with no peer or a loopback is not a link somebody expects to carry traffic
+    else if (!isPhysical(i)) unused++;
+    else down++;
+  }
+  return { up, down, unused, unknown, total: d.interfaces.length, known: true };
+}
+
+
 /** The links that are enabled and not carrying traffic: the ones somebody expected to be up. */
+
+/**
+ * An empty slot is not a port somebody expected to be working.
+ *
+ * This asked only that the admin status read up, and a slot with no module in it reports exactly
+ * that: admin up(1), oper notPresent(6). The panel then listed it under "enabled and not carrying
+ * traffic" — four of them on one twenty-four port switch — which sends a reader to look for a
+ * cable that was never there. `isUnused` is the one test that already separates a port nobody
+ * expects to be carrying traffic from one that is failing to, and it is the same test the count
+ * beside this list uses.
+ */
 export const portsDown = (d: Device): Iface[] =>
-  d.interfaces.filter((i) => !isUp(i) && !isUnused(i) && !isUnknownState(i) && isPhysical(i));
+  d.interfaces.filter((i) => !isUp(i) && isAdminUp(i) && !isUnused(i) && !isUnknownState(i) && isPhysical(i));

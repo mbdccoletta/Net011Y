@@ -32,8 +32,19 @@ export const isPrivate = (ip: string) => { const v = toInt(ip); return v != null
 
 export function buildAddressing(tagged: { site: string; cidr: string }[], devices: { site: string; ips: string[] }[]) {
   const blocks = tagged.flatMap(({ site, cidr }) => cidr.split(/[,;\s]+/).filter(Boolean).flatMap((c) => {
+    /**
+     * A prefix has to be a prefix.
+     *
+     * `Number("")` is zero, so the tag `10.20.0.0/` became `/0` — a block that matches every
+     * IPv4 address there is. The list is sorted widest-last, so it did not shadow the real
+     * ranges; it quietly swept up every address none of them claimed and attributed that
+     * site's flows and sessions to it. `Number("8.5")` passed too, and the bit shift then
+     * truncated it to 8 without saying so. A malformed range is not a range: it is dropped,
+     * and the site is left with whatever its well-formed tags claim.
+     */
     const [addr, len] = c.split("/");
-    const base = toInt(addr), bits = len == null ? 24 : Number(len);
+    const base = toInt(addr);
+    const bits = len == null ? 24 : /^\d{1,2}$/.test(len) ? Number(len) : NaN;
     return base == null || !(bits >= 0 && bits <= 32) ? [] : [{ site, base, bits }];
   })).sort((a, b) => b.bits - a.bits);
   const by24 = new Map<number, string | null>();

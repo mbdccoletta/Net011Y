@@ -29,12 +29,12 @@ export function RouteStrip({ nodes, routes, pick, onPick, alerting }: {
     <div className="rs">
       <ol className="rs-list">
         {shown.map((r) => {
-          const on = pick?.kind === "link" && pick.from === r.via && pick.to === r.to;
+          const on = pick?.kind === "link" && pick.from === r.from && pick.via === r.via && pick.to === r.to;
           const mark = alerting?.get(r.via);
           return (
             <li key={`${r.from}|${r.via}|${r.to}`}>
               <button type="button" className={`rs-row${on ? " is-on" : ""}`} aria-pressed={on}
-                onClick={() => onPick(on ? null : { kind: "link", from: r.via, to: r.to })}>
+                onClick={() => onPick(on ? null : { kind: "link", from: r.from, via: r.via, to: r.to })}>
                 <span className="rs-bar" style={{ width: `${Math.max(1.5, (100 * r.bytes) / total)}%` }} />
                 <span className="rs-path">
                   <b>{label(r.from)}</b>

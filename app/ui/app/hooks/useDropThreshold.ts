@@ -11,6 +11,15 @@ const listeners = new Set<() => void>();
 
 let pct = DEFAULT_DROP_PCT;
 let loaded = false;
+/**
+ * Whether somebody has set it here since the page opened.
+ *
+ * The first read and a save can be in flight together: set 60 while the initial read of 30 is
+ * still on the wire, and the read lands second and puts 30 back on the screen while the tenant
+ * holds 60. The screen then disagrees with the store until the next load. A read that was
+ * asked for before anyone touched the value has nothing to say once they have.
+ */
+let touched = false;
 
 const notify = () => listeners.forEach((l) => l());
 const clamp = (v: number) => Math.min(95, Math.max(5, Math.round(v)));
@@ -20,12 +29,13 @@ function load() {
   if (loaded) return;
   loaded = true;
   stateClient.getAppState({ key: KEY })
-    .then((s) => { pct = parse(s.value); notify(); })
+    .then((s) => { if (touched) return; pct = parse(s.value); notify(); })
     .catch(() => { /* not set, or no permission: the default stands */ });
 }
 
 export async function setDropThreshold(next: number) {
   pct = clamp(next);
+  touched = true;
   notify();
   try { await stateClient.setAppState({ key: KEY, body: { value: JSON.stringify(pct) } }); } catch { /* the tenant refused it: the screen shows the new value, the next load shows the stored one */ }
 }

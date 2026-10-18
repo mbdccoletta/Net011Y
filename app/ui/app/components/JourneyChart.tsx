@@ -5,7 +5,19 @@ import React, { useMemo } from "react";
 import type { JourneyLink, JourneyNode } from "../model/types";
 import { fmtBytes, fmtInt } from "../utils/format";
 
-export type JourneyPick = { kind: "node"; id: string } | { kind: "link"; from: string; to: string } | null;
+/**
+ * A selection on the diagram, or on the ranked list that replaces it.
+ *
+ * A band of the diagram joins two nodes, so `from` and `to` name it. A row of the ranked list
+ * is a whole path — source, exporter, destination — and naming it by its last two legs made
+ * every row through the same exporter to the same destination the same selection: clicking
+ * one lit all of them and the table below listed their traffic added together. `via` is the
+ * middle of a path and is absent for a band, which has none.
+ */
+export type JourneyPick =
+  | { kind: "node"; id: string }
+  | { kind: "link"; from: string; via?: string; to: string }
+  | null;
 
 /**
  * Traffic is one colour and only its weight changes, so a band never turns into another colour halfway

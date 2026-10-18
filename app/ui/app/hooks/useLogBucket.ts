@@ -11,6 +11,8 @@ const listeners = new Set<() => void>();
 
 let buckets: string[] = [];
 let loaded = false;
+/** set here since the page opened: an initial read that lands later must not undo it */
+let touched = false;
 
 const notify = () => listeners.forEach((l) => l());
 /** Bucket names are lower case letters, digits, dashes and underscores; anything else is dropped. */
@@ -21,13 +23,17 @@ const parse = (value: string): string[] => { try { const v = JSON.parse(value); 
 function load() {
   if (loaded) return;
   loaded = true;
+  /* a read asked for before anyone set the list has nothing to say once they have: the two
+     can be in flight together, and the older answer was overwriting the newer setting —
+     leaving the screen on the old buckets, or on none, while the tenant held the new ones */
   stateClient.getAppState({ key: KEY })
-    .then((s) => { buckets = parse(s.value); notify(); })
+    .then((s) => { if (touched) return; buckets = parse(s.value); notify(); })
     .catch(() => { /* not set, or no permission: every bucket is read */ });
 }
 
 export async function setLogBuckets(next: string[]) {
   buckets = parseBuckets(next.join(","));
+  touched = true;
   notify();
   try { await stateClient.setAppState({ key: KEY, body: { value: JSON.stringify(buckets) } }); } catch { /* stays local */ }
 }

@@ -19,7 +19,11 @@ export function EventsList({ devices, limit = 80, onDevice }: Props) {
     // "nothing arrived" and "this device's lines are not among the ones read" are different statements,
     // and saying the first when the second is true contradicts the counters drawn right above: the text
     // comes from the newest lines of the whole environment, the counts from a per-device series.
-    const sys = devices.reduce((a, d) => a + d.syslog.ERROR + d.syslog.WARN + d.syslog.INFO, 0);
+    /* NONE counts. A pipeline that carries the line without classifying it writes every
+       message at that level — an environment reading its syslog server's files through a
+       OneAgent has nothing else — so leaving it out said "no syslog messages or traps" over a
+       device with thousands. The needs panel has always counted it; this now agrees. */
+    const sys = devices.reduce((a, d) => a + d.syslog.ERROR + d.syslog.WARN + d.syslog.INFO + d.syslog.NONE, 0);
     const errors = devices.reduce((a, d) => a + d.syslog.ERROR, 0);
     const traps = devices.reduce((a, d) => a + d.traps, 0);
     const whose = devices.length === 1 ? "this device" : "these devices";

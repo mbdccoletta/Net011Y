@@ -67,7 +67,7 @@ export function DeviceMetrics({ device: d }: { device: Device }) {
       { id: "loss", metric: "Packet loss", value: d.icmp?.loss != null ? `${fmtNum(d.icmp.loss, 1)}%` : null,
         window: d.icmp?.sent ? `of ${fmtInt(d.icmp.sent)} sent` : "synthetic monitor", series: null, step: HOUR, unit: "%" },
       { id: "ports", metric: "Interfaces up", value: ports.known ? `${ports.up}/${ports.total}` : null,
-        window: `${ports.down} enabled and down · ${ports.unused} shut or empty`, series: null, step: HOUR, unit: "count" },
+        window: `${ports.down} enabled and down · ${ports.unused} shut, empty or not a link`, series: null, step: HOUR, unit: "count" },
       { id: "util", metric: "Busiest interface", value: d.ifStats?.maxUtil != null ? `${fmtNum(d.ifStats.maxUtil, 1)}%` : null,
         window: "of its own line rate", series: null, step: HOUR, unit: "%" },
       { id: "syslog", metric: "Syslog errors", value: `${fmtInt(d.syslog.ERROR)}`,
