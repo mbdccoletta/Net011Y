@@ -912,13 +912,30 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
           ["one", (d: Dot & { of: number }) => !d.dc && d.of === 1, "circle" as const, 13],
           ["few", (d: Dot & { of: number }) => !d.dc && d.of > 1 && d.of < 10, "circle" as const, 19],
           ["many", (d: Dot & { of: number }) => !d.dc && d.of >= 10, "circle" as const, 27],
-        ] as const).map(([key, keep, shape, size]) => {
-          const data = clustered.filter(keep);
-          return data.length ? (
-            <DotLayer<Dot & { of: number }> key={key} data={data} shape={shape} shapeSize={size}
-              color={(d) => colour[d.verdict]} />
-          ) : null;
-        })}
+          /**
+           * All four are always mounted, empty ones included, and that is not tidiness.
+           *
+           * `MapView` names its layers by counting: `setLayersId` walks its children, skips
+           * everything that is not one of the platform's four layer types, and hands the nth
+           * survivor `layerId` = `<prefix>-<n>` — from which `ConnectionLayer` and `DotLayer`
+           * build their maplibre source id. The count is over the layers *present*, so a
+           * bucket returning null renumbered every layer after it.
+           *
+           * React keeps the instances apart by key, so "few" stays the same mounted component
+           * and simply receives a different `layerId` on the next render — and its `<Source>`
+           * is then asked to change its own id, which `@vis.gl/react-maplibre` asserts against:
+           * `An error occurred: source id changed`, and the map is gone for the rest of the
+           * session. Reproduced on the extra-large example by zooming in three steps: the
+           * clusters re-form, the bucket of ten-or-more empties, and the two layers under it
+           * slide up one.
+           *
+           * An empty layer draws nothing, so the only cost of keeping it is the layer itself,
+           * and what it buys is an id per bucket that does not depend on the other three.
+           */
+        ] as const).map(([key, keep, shape, size]) => (
+          <DotLayer<Dot & { of: number }> key={key} data={clustered.filter(keep)}
+            shape={shape} shapeSize={size} color={(d) => colour[d.verdict]} />
+        ))}
         <Labels labels={labels} />
       </MapView>
       {/* The three buttons the canvas drew itself, in the place it drew them.
