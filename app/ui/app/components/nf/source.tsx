@@ -21,7 +21,7 @@
 import React, { createContext, useContext, useMemo, useState } from "react";
 import type { NetworkModel } from "../../model/types";
 import { deviceSubjects, type Subject } from "../../model/ahead";
-import { askForSubject, type Ask } from "../../hooks/useDavisForecast";
+import { askForSubject, portKey, usePortsForecast, type Ask, type DavisForecast } from "../../hooks/useDavisForecast";
 import type { HeatCell, Region, ScenarioConfig, ScenarioKey, ScenarioSeries, TrafficPoint } from "./types";
 
 /**
@@ -173,7 +173,23 @@ const r1 = (v: number) => Math.round(v * 10) / 10;
 const gbps = (pct: number, speedMbps: number | null | undefined) =>
   speedMbps && speedMbps > 0 ? (pct / 100) * (speedMbps / 1000) : null;
 
-export function buildNf(model: NetworkModel, subjects: Subject[]): NfData | null {
+/** The analyzer takes fifty series in one call; the ranking that feeds it stops there. */
+export const FORECASTABLE = 50;
+
+/**
+ * The subjects the page will forecast, named once.
+ *
+ * The ranking is by room, which is measured — the busy hour against a ceiling — so it needs no
+ * forecast to exist. The provider uses this to ask the analyzer for exactly the subjects the
+ * page is going to draw, and hands the answers back in; nothing here invents a trend of its
+ * own while it waits.
+ */
+export const leadersOf = (subjects: Subject[]): Subject[] =>
+  subjects.filter((x) => x.room).slice()
+    .sort((a, b) => ((a.room?.pts ?? 100) - (b.room?.pts ?? 100)))
+    .slice(0, FORECASTABLE);
+
+export function buildNf(model: NetworkModel, subjects: Subject[], forecasts: Map<string, DavisForecast> = new Map()): NfData | null {
 
   const withRate = subjects.filter((s) => (s.iface?.speed ?? 0) > 0 && s.reading.hist.length >= 24);
   if (withRate.length < 2) return null;
@@ -263,8 +279,7 @@ export function buildNf(model: NetworkModel, subjects: Subject[]): NfData | null
    * drew in the data. The full ranking over every subject is still the `Ranked by room` row,
    * which needs no forecast at all: room is the busy hour against a ceiling, measured.
    */
-  const FORECASTABLE = 50;
-  const LEADERS = byRoom.filter((x) => x.room).slice(0, FORECASTABLE);
+  const LEADERS = byRoom.slice(0, FORECASTABLE);
   /**
    * The unit is per cent of each subject's own limit, and the capacity is a hundred.
    *
@@ -312,9 +327,19 @@ export function buildNf(model: NetworkModel, subjects: Subject[]): NfData | null
    * eight of fifty rows read flat for that reason. Rounding belongs where the number is
    * printed, not where it is multiplied.
    */
+  /**
+   * Points of its limit a day, from the platform's forecast and from nothing else.
+   *
+   * This was the slope of a least-squares line the app fitted itself, and that line was what
+   * the ranking, the scenarios and every date on this page were built on — so the page said
+   * "forecast by Dynatrace" over its chart while the numbers beside it came from arithmetic of
+   * ours. A subject the analyzer has not answered for has no rise: not a line of our own
+   * standing in for one, which is the substitution this page exists to prevent.
+   */
+  const fc = (x: Subject) => forecasts.get(x.key);
   const risePerDay = (x: Subject) => {
-    const f = x.reading.fit;
-    return f ? f.at(24) - f.at(0) : 0;
+    const f = fc(x);
+    return f && f.point.length > 23 ? f.point[23] - f.point[0] : 0;
   };
   /**
    * A bar needs three numbers, not a series. Building the full points array for every subject
@@ -344,7 +369,8 @@ export function buildNf(model: NetworkModel, subjects: Subject[]): NfData | null
        * hour the bar draws its circle at, and cut where the quantity ends.
        */
       move: Math.max(0, (x.room?.busy ?? here) + rise * ahead) - (x.room?.busy ?? here),
-      firm: x.reading.fit?.rising ?? false,
+      /* rising is the analyzer's answer: where its forecast ends against where it starts */
+      firm: (() => { const f = fc(x); return !!f && f.point.length > 1 && f.point[f.point.length - 1] > f.point[0]; })(),
       shown: x.room?.source === "shown", device: x.device?.name,
       kind: x.kind === "link" ? "port" : x.kind,
       speed: x.iface?.speed ?? null, dropsAt: x.room?.dropsAt ?? null,
@@ -361,10 +387,12 @@ export function buildNf(model: NetworkModel, subjects: Subject[]): NfData | null
   const buildSeries = (sc: ScenarioConfig, x: Subject): ScenarioSeries => {
     const obs = dailyBusy(x, days);
     const here = obs[obs.length - 1] ?? 0;
-    const f = x.reading.fit;
+    const f = fc(x);
     const rise = sc.monthlyGrowth;
-    // the band is this subject's own 95% envelope, widening with distance as its standard error does
-    const halfDay = f ? Math.abs((f.band(24) - f.band(0))) : 0;
+    /* the band is the analyzer's own interval, which widens with distance because it says so —
+       not because a standard error of ours was extrapolated */
+    const halfDay = f && f.upper.length > 24 && f.lower.length > 24
+      ? Math.abs(((f.upper[23] - f.lower[23]) - (f.upper[0] - f.lower[0])) / 2) : 0;
     const points: TrafficPoint[] = LABELS.map((label, i) => {
       if (i < days - 1) {
         return { label, observed: obs[i], forecast: null, upper: null, lower: null, capacity: CAPACITY_GBPS };
@@ -644,7 +672,28 @@ export function NfProvider({ model, subjects, onDevice, pick, onPick, children }
   model: NetworkModel; subjects: Subject[]; onDevice: (name: string) => void;
   pick: Pick | null; onPick: (p: Pick | null) => void; children: React.ReactNode;
 }) {
-  const value = useMemo(() => buildNf(model, subjects), [model, subjects]);
+  /**
+   * The forecasts the page will draw, asked for before it is built.
+   *
+   * `buildNf` is pure and was therefore forecastless: it computed every forward-looking number
+   * from a line of the app's own while the analyzer's answers arrived separately, for the
+   * chart alone. The ranking it feeds is by room, which is measured and needs no forecast, so
+   * the leaders can be named first, asked about, and the answers handed in.
+   */
+  const leaders = useMemo(() => leadersOf(subjects), [subjects]);
+  const asks = useMemo(() => leaders.map((x) => askForSubject(x).ask).filter((a): a is Ask => !!a), [leaders]);
+  const { data: byAsk } = usePortsForecast(asks);
+  /* the hook answers by the analyzer's own key for a port; the page thinks in subjects */
+  const forecasts = useMemo(() => {
+    const out = new Map<string, DavisForecast>();
+    leaders.forEach((x) => {
+      const a = askForSubject(x).ask;
+      const f = a ? byAsk.get(portKey(a)) : undefined;
+      if (f) out.set(x.key, f);
+    });
+    return out;
+  }, [leaders, byAsk]);
+  const value = useMemo(() => buildNf(model, subjects, forecasts), [model, subjects, forecasts]);
   const [drawn, setDrawn] = useState<string | null>(null);
   const sel = useMemo(() => ({ pick, setPick: onPick, onDevice, drawn, setDrawn }),
     [pick, onPick, onDevice, drawn]);
