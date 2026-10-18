@@ -113,14 +113,26 @@ export function findStep(hist: number[]): Step | null {
   const last = pts[n - 1][0];
   let best: Step | null = null;
   let bestRss = Infinity;
+  /**
+   * Every split in one pass, not one pass per split.
+   *
+   * This sliced the series in two and summed both halves for each of the n candidate cuts:
+   * O(n²), with four allocations an iteration. It cost nothing while the record was a
+   * fortnight — 336 points — and lengthening it to sixty days put one task of 5.2 seconds on
+   * the main thread for twenty-seven subjects, measured, which is the page freezing in front
+   * of the reader. Running sums of the values and of their squares give each half's mean and
+   * residual sum in constant time, so the loop is linear and allocates nothing. The arithmetic
+   * is the same arithmetic: sum((x-m)²) = sum(x²) - sum(x)²/count.
+   */
+  const sum = new Float64Array(n + 1), sq = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) { sum[i + 1] = sum[i] + y[i]; sq[i + 1] = sq[i] + y[i] * y[i]; }
+  const dev = (s: number, q: number, c: number) => Math.max(0, q - (s * s) / c);
   for (let k = 12; k <= n - 12; k++) {
-    const a = y.slice(0, k);
-    const b = y.slice(k);
-    const ma = a.reduce((p, c) => p + c, 0) / a.length;
-    const mb = b.reduce((p, c) => p + c, 0) / b.length;
-    const ss = a.reduce((p, c) => p + (c - ma) ** 2, 0) + b.reduce((p, c) => p + (c - mb) ** 2, 0);
+    const sa = sum[k], sb = sum[n] - sum[k];
+    const ma = sa / k, mb = sb / (n - k);
+    const ss = dev(sa, sq[k], k) + dev(sb, sq[n] - sq[k], n - k);
     const sd = Math.sqrt(ss / (n - 2)) || 1e-9;
-    const t = Math.abs(mb - ma) / (sd * Math.sqrt(1 / a.length + 1 / b.length));
+    const t = Math.abs(mb - ma) / (sd * Math.sqrt(1 / k + 1 / (n - k)));
     if (!best || t > best.t) { best = { t, at: k, ago: last - pts[k][0], from: ma, to: mb }; bestRss = ss; }
   }
   if (!best || best.t <= STEP_T) return null;
