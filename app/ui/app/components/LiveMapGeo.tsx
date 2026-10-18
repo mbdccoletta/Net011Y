@@ -130,12 +130,44 @@ type Label = { key: string; kind: "site" | "region"; lon: number; lat: number; t
  * It runs on `moveend` rather than per frame because it reads layout, and a label that
  * reappears mid-drag is worse than one that waits for the camera to stop.
  */
+/**
+ * How many names can be on the map at once.
+ *
+ * The collision pass can seat perhaps forty before they touch; this is several times that, so
+ * the cap never decides what the reader sees — the pass still does. It decides how many DOM
+ * nodes exist to be measured. On the four-thousand-site estate the component mounted a marker
+ * per site, 4,170 of them, and then read `offsetWidth` on each one: a forced reflow per label,
+ * measured as a single task of six seconds with the page frozen inside it.
+ */
+const LABEL_BUDGET = 160;
+
 function Labels({ labels }: { labels: Label[] }) {
   const { current: map } = useMap();
   const els = useRef(new Map<string, HTMLElement>());
+  /**
+   * The names worth mounting, for where the camera is now.
+   *
+   * Only what is inside the viewport can be read, and only a few of those will survive the
+   * collision pass, so the rest are not rendered at all. The set is recomputed when the camera
+   * stops, which is also when the pass runs, so a reader who zooms into a corner of a large
+   * estate gets that corner's names — the cap is per view, never per estate.
+   */
+  const [shown, setShown] = useState<Label[]>([]);
   const hold = useCallback((key: string) => (el: HTMLElement | null) => {
     if (el) els.current.set(key, el); else els.current.delete(key);
   }, []);
+
+  /* what is in view, worst and most specific first, capped — run before the pass that hides
+     the ones that collide */
+  const pick = useCallback(() => {
+    if (!map) return;
+    const b = map.getMap().getBounds();
+    const inView = labels.filter((l) => l.lon >= b.getWest() && l.lon <= b.getEast()
+      && l.lat >= b.getSouth() && l.lat <= b.getNorth());
+    const rank = (l: Label) => (l.picked ? 0 : l.dc ? 1 : l.bad ? 2 : l.kind === "region" ? 3 : 4);
+    const next = inView.sort((x, y) => rank(x) - rank(y) || (y.rank ?? 0) - (x.rank ?? 0)).slice(0, LABEL_BUDGET);
+    setShown((prev) => (prev.length === next.length && prev.every((p, i) => p.key === next[i].key) ? prev : next));
+  }, [map, labels]);
 
   const lay = useCallback(() => {
     if (!map) return;
@@ -150,10 +182,10 @@ function Labels({ labels }: { labels: Label[] }) {
          out first: the ring sat on one dot and the only name on screen belonged to the other.
          A label is dropped when it collides, and the one that must never be the casualty is
          the site the selection is about. */
-      ...labels.filter((l) => l.picked),
-      ...labels.filter((l) => !l.picked && l.kind === "region" && l.rank > 1).sort((a, b) => b.rank - a.rank),
-      ...labels.filter((l) => !l.picked && l.kind === "site").sort((a, b) => Number(b.dc) - Number(a.dc)),
-      ...labels.filter((l) => !l.picked && l.kind === "region" && l.rank <= 1),
+      ...shown.filter((l) => l.picked),
+      ...shown.filter((l) => !l.picked && l.kind === "region" && l.rank > 1).sort((a, b) => b.rank - a.rank),
+      ...shown.filter((l) => !l.picked && l.kind === "site").sort((a, b) => Number(b.dc) - Number(a.dc)),
+      ...shown.filter((l) => !l.picked && l.kind === "region" && l.rank <= 1),
     ];
     for (const l of order) {
       const el = els.current.get(l.key);
@@ -170,8 +202,19 @@ function Labels({ labels }: { labels: Label[] }) {
       el.style.visibility = hit ? "hidden" : "visible";
       if (!hit) taken.push({ x0: x, y0: y, x1: x + w, y1: y + h });
     }
-  }, [map, labels]);
+  }, [map, shown]);
 
+  /* which names exist, recomputed where the camera stops */
+  useEffect(() => {
+    if (!map) return;
+    const m = map.getMap();
+    const t = setTimeout(pick, 0);
+    m.on("moveend", pick);
+    m.on("zoomend", pick);
+    return () => { clearTimeout(t); m.off("moveend", pick); m.off("zoomend", pick); };
+  }, [map, pick]);
+
+  /* and which of them fit, once they are mounted */
   useEffect(() => {
     if (!map) return;
     const m = map.getMap();
@@ -183,7 +226,7 @@ function Labels({ labels }: { labels: Label[] }) {
 
   return (
     <>
-      {labels.map((l) => (
+      {shown.map((l) => (
         <Marker key={l.key} longitude={l.lon} latitude={l.lat}
           anchor={l.kind === "site" ? "left" : "center"} offset={l.kind === "site" ? [10, 0] : [0, 0]}>
           <span ref={hold(l.key)}
@@ -516,27 +559,55 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
    * the other way. Two lines bulging apart read as two circuits, which is a thing this
    * estate does not have.
    */
+  /**
+   * Above this many links the line stops standing for a site.
+   *
+   * Four thousand sites each drawn to their data centre is four thousand arcs converging on
+   * five points: a solid mass that answers nothing, and an animation the browser cannot keep
+   * up with. The estate already learned this lesson for its dots — past a couple of dozen the
+   * unit becomes the region — and a line is the same question. Below the threshold nothing
+   * changes and every site keeps its own line.
+   */
+  const ROUTE_BUDGET = 120;
+
   const routes = useMemo(() => {
-    const by = new Map<string, { id: string; verdict: Verdict; vol: number; path: Pt[] }>();
+    const by = new Map<string, { id: string; verdict: Verdict; vol: number; path: Pt[]; of: number }>();
+    /* one line per region and data centre, when there are too many to read one per site: the
+       region's end is the mean of the sites it stands for, and the line carries the worst of
+       their verdicts and the largest volume measured on any of them */
+    const group = links.length > ROUTE_BUDGET;
+    const home = new Map<string, { lon: number; lat: number; n: number }>();
+    if (group) {
+      for (const sIt of sites) {
+        const k = sIt.region || "—";
+        const h = home.get(k);
+        if (h) { h.lon += sIt.lon; h.lat += sIt.lat; h.n++; } else home.set(k, { lon: sIt.lon, lat: sIt.lat, n: 1 });
+      }
+      home.forEach((h) => { h.lon /= h.n; h.lat /= h.n; });
+    }
     for (const l of links) {
-      const a = byCode.get(l.a), b = byCode.get(l.b);
-      if (!a || !b) continue;
+      const a0 = byCode.get(l.a), b = byCode.get(l.b);
+      if (!a0 || !b) continue;
+      /* the far end keeps its own place — it is the data centre, and there are few of them */
+      const h = group ? home.get(a0.region || "—") : null;
+      const a = h ? { ...a0, lon: h.lon, lat: h.lat, code: a0.region || "—" } : a0;
       const vol = Math.max(0, Math.min(1, (l.bps ?? 0) / 2e9));
-      const key = [l.a, l.b].sort().join("|");
+      const key = [a.code, b.code].sort().join("|");
       const had = by.get(key);
       if (had) {
         /* the pair carries the worse of what was said about it, and the traffic actually
            measured on it, which is the larger of the two readings */
         had.verdict = worst([had.verdict, l.verdict]);
         had.vol = Math.max(had.vol, vol);
+        had.of++;
         continue;
       }
       /* the ends in a fixed order, so the same pair always bends the same way */
-      const [p, q] = l.a < l.b ? [a, b] : [b, a];
-      by.set(key, { id: key, verdict: l.verdict, vol, path: curve([p.lon, p.lat], [q.lon, q.lat]) });
+      const [p, q] = a.code < b.code ? [a, b] : [b, a];
+      by.set(key, { id: key, verdict: l.verdict, vol, of: 1, path: curve([p.lon, p.lat], [q.lon, q.lat]) });
     }
     return [...by.values()];
-  }, [links, byCode]);
+  }, [links, byCode, sites]);
 
   /**
    * What the camera has to hold: the focus, the data centres it talks to, and a floor.
@@ -652,7 +723,10 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
             against each other into a shadow alongside the line. One path, drawn straight
             through the samples, is smooth at this density and is the same path for all
             three layers. */}
-        <ConnectionLayer<Conn> data={conns} curve="linear" thickness={3}
+        {/* thinner as there are more of them: three points is right for a dozen arcs and a
+            smear for a hundred, and the line is there to be followed, not to be loud */}
+        <ConnectionLayer<Conn> data={conns} curve="linear"
+          thickness={routes.length > 60 ? 1 : routes.length > 24 ? 2 : 3}
           color={(c) => colour[c.verdict]} />
         <Motion routes={routes} hit={regions ?? []} all={all} focus={frame} focusKey={focusKey} refit={refit} colour={colour}
           sites={sites} onSite={onSite} onRegion={onRegion} pad={insets} />
