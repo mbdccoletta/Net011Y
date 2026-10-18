@@ -452,21 +452,39 @@ function Motion({ routes, hit: hitRegions, all, focus, focusKey, refit, colour, 
     const [left, right] = fit(pad.left + 32, pad.right + 32, cw);
     const [top, bottom] = fit(pad.top + 32, pad.bottom + 32, ch);
     const pad4 = { top, right, bottom, left };
-    const to = (b: Box, duration: number) => map.fitBounds([[b.west, b.south], [b.east, b.north]], {
-      padding: pad4, duration,
-      easing: (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
-    });
+    /**
+     * The flight, timed by how far it is going.
+     *
+     * Every move took the same 1100 ms on the same cubic ease, which reads as a slide: a hop
+     * between two neighbouring sites crawled, and a jump from Brazil to the estate's whole
+     * extent arrived before the eye had followed it. `fitBounds` flies rather than slides when
+     * it is left to — the arc that pulls back, travels and comes down is maplibre's own, and
+     * supplying an easing of ours replaced it with a straight interpolation. So the easing is
+     * given back, the curve is opened a little for a long jump so the pull-back reads as
+     * distance covered, and the duration follows the distance between where the camera is and
+     * where it is going: a short move is quick, a continental one is given the time to be
+     * seen. Reduced motion still arrives instantly, as it did.
+     */
+    const to = (b: Box, scale = 1) => {
+      const c = map.getMap().getCenter();
+      const away = Math.hypot(b.lon - c.lng, b.lat - c.lat);
+      /* degrees of separation into milliseconds: 400 at arm's length, 1600 across the world */
+      const duration = reduce ? 0 : Math.round(Math.min(1600, 400 + away * 14) * scale);
+      map.fitBounds([[b.west, b.south], [b.east, b.north]], {
+        padding: pad4, duration, curve: away > 25 ? 1.6 : 1.42,
+      });
+    };
     const key = `${focusKey}|${refit}`;
     if (!anchored.current) {
       /* the estate, kept in frame as it arrives; when it stops growing the camera stops
          following it and takes the focus of that moment as read, unflown */
       if (settled) { anchored.current = true; was.current = key; return; }
-      if (all) to(all, 0);
+      if (all) map.fitBounds([[all.west, all.south], [all.east, all.north]], { padding: pad4, duration: 0 });
       return;
     }
     if (!focus || was.current === key) return;
     was.current = key;
-    to(focus, reduce ? 0 : 1100);
+    to(focus);
   }, [map, all, focus, focusKey, refit, settled, reduce, pad]);
 
   /* the two callbacks the page passes: a click near a site opens it, a click inside a state
@@ -498,8 +516,10 @@ function Motion({ routes, hit: hitRegions, all, focus, focusKey, refit, colour, 
          means that one — zooming instead would take the panel away from a reader who hit it */
       if (sites.length > CLUSTER_ABOVE && under.length > 1) {
         const lons = under.map((s) => s.lon), lats = under.map((s) => s.lat);
+        /* splitting a cluster is a local move and reads best as one: a short, shallow flight
+           that lands on the group rather than a tour of the way there */
         m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
-          { padding: 120, maxZoom: 11, duration: reduce ? 0 : 700 });
+          { padding: 120, maxZoom: 11, duration: reduce ? 0 : 650, curve: 1.2 });
         return;
       }
       if (best) { onSite(best.code); return; }

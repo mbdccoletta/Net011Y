@@ -919,7 +919,11 @@
    solid, brighter one says it, and the teal it used to wear did not. */
 .tr-src.is-on { border-style: solid; border-color: var(--lm-ink-3); color: var(--lm-ink-hi); }
 .tr-src b { font-weight: 500; color: var(--lm-ink-3); font-variant-numeric: tabular-nums; }
-.tr-set { background: none; border: 0; padding: 0; font: inherit; color: var(--lm-accent); cursor: pointer; text-decoration: underline; }
+/* "set up" beside a source that is not reporting. It is an action, not a state, so it is not
+   told in the app's accent: the underline already says it can be pressed, and the ink is the
+   same ink as the words around it. Same rule as the pills and the recommended tile. */
+.tr-set { background: none; border: 0; padding: 0; font: inherit; color: var(--lm-ink-hi); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.tr-set:hover { text-decoration-thickness: 2px; }
 .tr-filter { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--lm-ink-3); }
 .tr-filter select { font: inherit; color: var(--lm-ink); background: var(--lm-bg); border: 1px solid var(--lm-line-2); border-radius: 6px; padding: 4px 8px; max-width: 260px; }
 .tr-chart { overflow-x: auto; }
