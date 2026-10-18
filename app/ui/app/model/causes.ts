@@ -163,8 +163,8 @@ export function buildCauses(model: NetworkModel, infos: SiteInfo[], rising: Nove
    *
    * It was one entry per device first, and measuring that is what settled the shape: this
    * estate has seventeen such devices, so the landing page went from two causes to nineteen and
-   * the two that were alerting disappeared into the middle of a list. On `gru` it would be far
-   * worse — discards there are a condition rather than an event (a median of 62% of a
+   * the two that were alerting disappeared into the middle of a list. On another environment it
+   * would be far worse — discards there are a condition rather than an event (a median of 62% of a
    * discarding port's hours, none below 5%, none above 75%), which is hundreds of devices. One
    * entry, with every device on it, is the only grouping that survives an estate that discards
    * everywhere.
