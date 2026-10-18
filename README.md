@@ -67,12 +67,18 @@ filter. The app keeps that low without changing what it shows:
 
 ## Running it
 
-The local-dev link only resolves on port 3000, and `environmentUrl` in `app/app.config.json` must point at
-the environment being opened.
+The local-dev link only resolves on port 3000.
+
+`environmentUrl` in `app/app.config.json` is committed as the placeholder
+`https://ENVIRONMENTID.apps.dynatrace.com`, because no environment this app was built or tested against
+belongs in a shared repository. Point `dt-app` at yours with the flag, which leaves the file alone:
 
 ```bash
-cd app && npm install && npm start
+cd app && npm install
+npx dt-app dev --environment-url https://<your-environment>.apps.dynatrace.com
 ```
+
+Editing the file works too, and then the edit must not travel in a commit.
 
 ## Deploying
 
@@ -86,9 +92,9 @@ npm run build                                                        # optimised
 npx dt-app deploy --skip-build --environment-url https://<env>.apps.dynatrace.com
 ```
 
-Repeat the last line once per environment. `environmentUrl` in `app/app.config.json` is the default
-target: switch environments with the flag rather than by editing the file, so a local switch never travels
-in a commit.
+Repeat the last line once per environment. The `--environment-url` flag is the only place an environment
+is named: the committed `environmentUrl` is a placeholder, so nothing in this repository says which
+environments the app runs in.
 
 Green before deploying — the suites take seconds and have caught every serious bug in this app:
 
