@@ -167,7 +167,7 @@ export interface Icmp {
  * One address of a device, and what the ping of it returns.
  *
  * A device answers on several addresses and a monitoring configuration pings all of them.
- * Measured on this environment: CTR-007 carries four, two of which answer every packet and
+ * Measured on this environment: CORE-001 carries four, two of which answer every packet and
  * two of which answer none — and the alert raised on the monitor is about the second pair.
  * The app held one reading per device, keyed on its primary address, so the two that fail
  * were nowhere on the screen and the alert read as a fault on a device that was answering.
@@ -512,7 +512,7 @@ export interface NetworkModel {
    * What the devices reported as having changed, already counted in Grail.
    *
    * One row per facility, mnemonic, device and port over the window: `LINK-UPDOWN` on
-   * `GigabitEthernet1/0/17` of 10.171.126.132, 437 times, last at 21:59. The panel groups
+   * `GigabitEthernet1/0/17` of 203.0.113.132, 437 times, last at 21:59. The panel groups
    * these into kinds; it does not see the lines they were counted from.
    */
   /**

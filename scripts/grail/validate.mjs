@@ -164,7 +164,7 @@ check("Without user sessions, the traffic reading falls back to service requests
 }
 
 // a busy environment always has network alerts and other alerts open at once: without a time link it is
-// coincidence, not a cause (fxz0998d: 1879 interfaces down and unrelated database outages hours apart)
+// coincidence, not a cause (a large environment: 1879 interfaces down and unrelated database outages hours apart)
 {
   const shift = (list) => (list ?? []).map((p) => ({ ...p, start: new Date(Date.parse(p.start) - 6 * 3600e3).toISOString() }));
   const old = { ...model, devices: model.devices.map((d) => ({ ...d, problems: shift(d.problems) })), circuits: (model.circuits ?? []).map((c) => ({ ...c, problems: shift(c.problems) })) };

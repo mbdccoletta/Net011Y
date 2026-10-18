@@ -17,7 +17,7 @@ const r1 = (v: number) => Math.round(v * 10) / 10;
  * A reading's name says what is being read.
  *
  * A port carries its own name and its line rate; a processor and a memory are named after the
- * device they sit in, so a row read "BR-BA-LEM1-SWI-001 · 11 points of room" and nothing said
+ * device they sit in, so a row read "BR-PR-CWB1-SWI-001 · 11 points of room" and nothing said
  * whether those points were traffic, CPU or memory. The kind goes first where the name does
  * not already carry it.
  */

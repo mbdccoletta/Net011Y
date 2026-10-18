@@ -320,7 +320,7 @@ service:
     ],
     steps: [
       "Enable Real User Monitoring on the applications people use at the sites.",
-      "Add the primary tag site_cidr to each site's monitoring configuration with the user subnets of that site, comma separated (for example 10.174.48.0/24,10.174.56.0/24). Without it, the app only attributes a session to a site when a device at the site sits in the same /24 as the users, and everything else is counted for the environment.",
+      "Add the primary tag site_cidr to each site's monitoring configuration with the user subnets of that site, comma separated (for example 192.0.2.0/24,198.51.100.0/24). Without it, the app only attributes a session to a site when a device at the site sits in the same /24 as the users, and everything else is counted for the environment.",
       "In the application settings, keep anomaly detection for traffic enabled, so Dynatrace raises Unexpected low traffic itself. Without it the app still measures the drop, but says so — it reports a suspicion, not a problem.",
     ],
     snippets: [{

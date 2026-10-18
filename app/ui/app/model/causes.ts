@@ -114,7 +114,7 @@ export function buildCauses(model: NetworkModel, infos: SiteInfo[], rising: Nove
 
   // 1. One scope per open Davis problem, from the entities it affects. Events that never became a problem
   // are grouped by what they are and where they are: an environment whose ports flap raises thousands of
-  // "Interface operationally going down" events (fxz0998d: about 4000), and one entry each made a list of
+  // "Interface operationally going down" events (a large environment: about 4000), and one entry each made a list of
   // four thousand identical lines.
   const groups = new Map<string, { p: DeviceProblem; devices: Device[]; circuits: Circuit[]; events: Set<string>; start: string }>();
   const put = (p: DeviceProblem, owner: string) => {

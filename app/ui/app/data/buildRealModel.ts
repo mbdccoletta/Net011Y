@@ -39,7 +39,7 @@ const deadSince = (row: Rec, values: unknown[], dead: (i: number) => boolean): s
   return Number.isFinite(start) && Number.isFinite(step) ? new Date(start + i * step).toISOString() : null;
 };
 
-// COUNTRY-UF-SITE-ROLE[NNN | -NNN], with or without the DNS domain (BR-PI-URU1-SWA-001.corp.example.com)
+// COUNTRY-UF-SITE-ROLE[NNN | -NNN], with or without the DNS domain (BR-SC-FLN1-SWA-001.corp.example.com)
 const CONVENTION = /^([A-Z]{2})-([A-Z]{2})-([A-Z0-9]{3,5})-([A-Z]{2,5})(?:-?\d+)?$/;
 const ROLE_CODES: Record<string, string> = {
   RTR: "edge", RTC: "edge", RTP: "edge", L2L: "edge", CON: "core", COR: "core", SWT: "switch", DISP: "switch", APW: "ap", WLC: "wlc", FWL: "firewall", LBL: "lb",
@@ -60,7 +60,7 @@ const BR_UF: Record<string, [string, number, number]> = {
 /** "City - CODE - Area" in the SNMP sysLocation: the city of a site, when the code in it matches. */
 /** sysLocation left at its default ("n/a", "unknown", "-") says nothing about where the device is. */
 // A data centre names itself at either end of its code: DCT1, DCG1 — and, once the site's identity
-// became the customer's tag rather than the short code in sysLocation, transamerica-dc and gaspar-dc.
+// became the customer's tag rather than the short code in sysLocation, sao-dc and poa-dc.
 const DC_NAME = /^DC|[-_ ]dc$|data ?cent(er|re)/i;
 const PLACEHOLDER = /^(n\/?a|none|null|unknown|not ?set|default|sys ?location|-+)?$/i;
 const realLocation = (v: unknown) => { const t = String(v ?? "").trim(); return PLACEHOLDER.test(t) ? null : t; };
@@ -145,7 +145,7 @@ function entitiesOf(r: Rec): { ids: string[]; names: string[]; types: string[] }
  * An hourly count against what each of those hours usually holds, read from a week of the same count.
  * `settle` is how many hours back the reading is taken: the hour still filling is always skipped, and a
  * session is only recorded when it ends, so the hour that has just closed keeps growing for a while
- * (fxz0998d: the same hour went from 1479 to 1968 sessions in forty minutes) and read too early it
+ * (a large environment: the same hour went from 1479 to 1968 sessions in forty minutes) and read too early it
  * always looks like a drop. Sessions settle one hour later than requests, which are metrics.
  */
 function hourly(day: (number | null)[], week: (number | null)[], settle = 1) {
@@ -322,8 +322,8 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     const code = derived.matched ? derived.site : loc?.code ?? null;
     const tagSite = tag(d, "site");
     // A site tag is the customer's own word and wins; when it names the same place as the code the
-    // device already carries (the tag "currais-de-laranjeiras" on devices whose sysLocation is
-    // "Currais de Laranjeiras - LRJ1 - …"), the short code is kept so the site is not split in two.
+    // device already carries (the tag "lake-town" on devices whose sysLocation is
+    // "Lake Town - LKT1 - …"), the short code is kept so the site is not split in two.
     // The tag is the customer's own statement of where the device stands, so it is the identity;
     // sysLocation only names the place. It used to be the other way round whenever the two agreed —
     // the short code from sysLocation became the site — and that made the code a per-device fact.
@@ -373,8 +373,8 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
  *
  * A router answers on four addresses and the ping targets all of them; syslog arrives from
  * whichever interface the line left by. Keyed on the primary alone, a reading about
- * 172.18.0.27 belonged to nobody — which is how an alert about two silent addresses of
- * CTR-007 came out as "could not be placed on this inventory". The primary is written last
+ * 198.51.100.27 belonged to nobody — which is how an alert about two silent addresses of
+ * CORE-001 came out as "could not be placed on this inventory". The primary is written last
  * so it still wins any address two devices both claim.
  */
   const ipToName = new Map<string, string>();
@@ -705,9 +705,9 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
    * The ping targets that are actually failing, and which monitor pings them.
    *
    * A monitor problem names one entity — the monitor — and the app fans it out to every
-   * device that monitor watches. Measured on this environment, P-26103695 reached forty-seven
+   * device that monitor watches. Measured on this environment, P-1234567 reached forty-seven
    * devices that way, every one of them answering SNMP and answering ping, while the two
-   * addresses the problem is really about — 172.18.0.201 and 172.18.0.202, 407 packets each
+   * addresses the problem is really about — 198.51.100.201 and 198.51.100.202, 407 packets each
    * and nought received over six hours — appeared nowhere at all, because neither is in the
    * inventory.
    *
@@ -715,7 +715,7 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
    * fault; it is what the fan-out should attach to, and what the panel should name.
    */
 /* A device is one of the failing targets when any address it carries is, not only the one
-   SNMP polls it on: CTR-007 answers on 10.175.2.27 and is silent on 172.18.0.27, and the
+   SNMP polls it on: CORE-001 answers on 192.0.2.27 and is silent on 198.51.100.27, and the
    alert is about the second. Matching the primary alone attached the alert to the wrong
    devices and left the right ones out. */
 const pingsFailing = (d: Device, failing: Set<string>) =>
@@ -871,7 +871,7 @@ const pingsFailing = (d: Device, failing: Set<string>) =>
   const NET_ENTITY = /^(EXT_NETWORK_DEVICE|EXT_NETWORK_INTERFACE|MULTIPROTOCOL_MONITOR|NETWORK_AVAILABILITY_MONITOR|SYNTHETIC_LOCATION)-/;
   // What a problem outside this inventory is about. The app shows no detail of these — it only needs to
   // know that something that is NOT the network is alerting, to isolate the network in or out.
-  // classic and Smartscape type names both (measured on fxz0998d: FRONTEND carries the native "Traffic
+  // classic and Smartscape type names both (measured on a large environment: FRONTEND carries the native "Traffic
   // drop", databases are DB_INSTANCE_POSTGRES / DB_INSTANCE_MYSQL, cloud hosts AWS_EC2_INSTANCE)
   const APP_ENTITY = /^(APPLICATION|MOBILE_APPLICATION|CUSTOM_APPLICATION|SYNTHETIC_TEST|HTTP_CHECK|BROWSER_MONITOR|FRONTEND|MOBILE_FRONTEND)-/;
   // databases at any level (instance, database, table, index) and Kubernetes workloads are services here
@@ -944,7 +944,7 @@ const pingsFailing = (d: Device, failing: Set<string>) =>
       if (viaIface) { onDevice.set(viaIface.device, viaIface.iface); named.add(viaIface.device); }
       /* The same narrowing the alert path below already does, and it was missing here.
          A monitor problem names one entity — the monitor — and this fanned it out to every
-         device the monitor pings. Measured on P-26103695: the monitor covers 162 target
+         device the monitor pings. Measured on P-1234567: the monitor covers 162 target
          addresses, 53 of which answer nothing, and the problem was attached to two devices
          that answer every packet. The reader was shown a red fault on two healthy devices
          and no sign of the addresses it is really about. When the record says which targets
@@ -1040,7 +1040,7 @@ const pingsFailing = (d: Device, failing: Set<string>) =>
     const state = hint?.country && hint.country.toUpperCase() !== "BR" ? undefined : uf ? BR_UF[uf] : undefined;
     if (t) {
       const lat = num(tag(t, "geo_lat")), lon = num(tag(t, "geo_lon"));
-      // the name counts as well as the code, as it does for an untagged site: "DC TIVIT Transamerica"
+      // the name counts as well as the code, as it does for an untagged site: "DC SAO Central"
       // says what it is even where the identity the tag gave it does not
       const nm = tag(t, "site_name") ?? city ?? code;
       Object.assign(sites[code], {

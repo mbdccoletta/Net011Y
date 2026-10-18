@@ -60,7 +60,7 @@ export const problemReason = (p: DeviceProblem): Reason => ({
   // happily, used to paint the lot red; the network team read the screen and said the day was normal.
   //
   // The sentence used to open "Reachability is not being measured … the monitor that pings this device
-  // is out". Measured against the record it was false: the monitor of P-26103695 sent twenty-four
+  // is out". Measured against the record it was false: the monitor of P-1234567 sent twenty-four
   // packets to each of its hundred and sixty-two targets in the last interval and got answers from a
   // hundred and thirty-nine of them. Nothing was out. What the alert says is that some address in that
   // monitoring configuration stopped answering, which is a statement about the configuration.

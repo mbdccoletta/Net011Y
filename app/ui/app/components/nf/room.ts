@@ -64,7 +64,7 @@ const peak = (a: number[] | undefined) => {
  * Memory, a processor and a port's share of its line rate are all bounded at a hundred by
  * definition — a switch cannot use more memory than it has. Measured here, the analyzer
  * returned a point forecast of 123% and a band reaching 217% for the memory of
- * BR-BA-LEM1-SWA-017, with `forecastQualityAssessment: VALID`, so quality does not catch it.
+ * BR-PR-CWB1-SWA-017, with `forecastQualityAssessment: VALID`, so quality does not catch it.
  * Clamping that to a hundred is the worst of the three options: it turns an impossible number
  * into a plausible one and rings the device as "could reach 90%" on the strength of it.
  *

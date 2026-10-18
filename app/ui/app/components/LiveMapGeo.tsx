@@ -115,6 +115,9 @@ function shareArcs(rg: MapRegion): Feat[] {
   return out;
 }
 
+/** How much wider than its sites the frame is drawn, matching the canvas layout. */
+const SPAN_MARGIN = 1.35;
+
 type Label = { key: string; kind: "site" | "region"; lon: number; lat: number; text: string; rank: number; dc?: boolean; bad?: boolean; picked?: boolean };
 
 /**
@@ -142,8 +145,8 @@ function Labels({ labels }: { labels: Label[] }) {
        where the site's own name says more than "SC · 1" does */
     const order = [
       /* The name the reader just asked for is placed before anything else, including the
-         states. Picking "placas" in the list flew the camera onto Placas Barreiras and then
-         dropped its name, because Luis Eduardo Magalhães is half a degree away and was laid
+         states. Picking a one-site group in the list flew the camera onto that site and then
+         dropped its name, because a neighbouring site is half a degree away and was laid
          out first: the ring sat on one dot and the only name on screen belonged to the other.
          A label is dropped when it collides, and the one that must never be the casualty is
          the site the selection is about. */
@@ -559,8 +562,18 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
     if (!pts.length) return null;
     const lons = pts.map((s) => s.lon), lats = pts.map((s) => s.lat);
     const cx = (Math.min(...lons) + Math.max(...lons)) / 2, cy = (Math.min(...lats) + Math.max(...lats)) / 2;
-    const dx = Math.max(Math.max(...lons) - Math.min(...lons), 18) / 2;
-    const dy = Math.max(Math.max(...lats) - Math.min(...lats), 10) / 2;
+    /**
+     * The sites sit inside the frame, not on its edge.
+     *
+     * `fitBounds` frames the points it is given, and a site's name hangs ten pixels to the
+     * right of its dot and runs on for the length of the name. Measured on an estate of two
+     * data centres seventy-five degrees apart: the dots landed on the padded edges and "LON
+     * Data Center" ended fifty-five pixels past the end of the canvas. The canvas layout has
+     * always inflated the span by a third before fitting; this is the same margin, applied
+     * to the measured span only, so a single site still gets exactly the floor below it.
+     */
+    const dx = Math.max((Math.max(...lons) - Math.min(...lons)) * SPAN_MARGIN, 18) / 2;
+    const dy = Math.max((Math.max(...lats) - Math.min(...lats)) * SPAN_MARGIN, 10) / 2;
     const next: Box = { lon: cx, lat: cy, west: cx - dx, east: cx + dx, south: cy - dy, north: cy + dy };
     const had = lastBox.current[slot];
     /* the same frame is the same object: `sites` grows all through the load, and a fresh one

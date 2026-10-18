@@ -35,7 +35,7 @@ BRANCHES = [
     ("Rio Verde", "GO", -17.79, -50.93, "L"), ("Jataí", "GO", -17.88, -51.72, "M"), ("Itumbiara", "GO", -18.42, -49.22, "M"), ("Catalão", "GO", -18.17, -47.94, "S"),
     ("Luís Eduardo Magalhães", "BA", -12.09, -45.79, "L"), ("Barreiras", "BA", -12.15, -44.99, "M"), ("Salvador", "BA", -12.97, -38.50, "M"),
     ("Sorriso", "MT", -12.55, -55.72, "L"), ("Lucas do Rio Verde", "MT", -13.05, -55.91, "M"), ("Sinop", "MT", -11.86, -55.50, "M"),
-    ("Rondonópolis", "MT", -16.47, -54.64, "L"), ("Primavera do Leste", "MT", -15.56, -54.30, "S"), ("Nova Mutum", "MT", -13.83, -56.08, "S"),
+    ("Rondonópolis", "MT", -16.47, -54.64, "L"), ("Primavera do Leste", "MT", -15.56, -54.30, "S"), ("Plain Town", "MT", -13.83, -56.08, "S"),
     ("Dourados", "MS", -22.22, -54.81, "M"), ("Maracaju", "MS", -21.61, -55.17, "S"), ("Chapadão do Sul", "MS", -18.79, -52.62, "S"), ("Campo Grande", "MS", -20.46, -54.62, "M"),
     ("Uberlândia", "MG", -18.92, -48.28, "L"), ("Uberaba", "MG", -19.75, -47.93, "M"), ("Patos de Minas", "MG", -18.58, -46.52, "S"), ("Unaí", "MG", -16.36, -46.90, "S"),
     ("Cascavel", "PR", -24.96, -53.46, "L"), ("Ponta Grossa", "PR", -25.10, -50.16, "M"), ("Maringá", "PR", -23.42, -51.94, "M"), ("Guarapuava", "PR", -25.39, -51.46, "S"), ("Paranaguá", "PR", -25.52, -48.51, "L"),

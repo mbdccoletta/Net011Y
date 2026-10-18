@@ -69,9 +69,9 @@ export async function askAssist(question: string, context: unknown, abortSignal?
  * Every panel that can be asked an availability question needs these, and none of them had
  * them. A monitor alert names the monitor, so without the per-address readings the only
  * honest answer Assist could give was the one the app itself used to print — that the
- * monitor was out — which the record contradicts: the monitor of P-26103695 sent 24 packets
+ * monitor was out — which the record contradicts: the monitor of P-1234567 sent 24 packets
  * to each of its 162 targets in the last interval and 139 answered. The fact that decides
- * what to do is that CTR-007 answers on one of the four addresses pinged at it.
+ * what to do is that CORE-001 answers on one of the four addresses pinged at it.
  */
 const pingFacts = (d: { icmpTargets?: { ip: string; monitor: string | null; sent: number; recv: number; since: string | null }[] }) => {
   const seen = new Map<string, { ip: string; monitor: string | null; sent: number; answered: number; silentSince: string | null }>();

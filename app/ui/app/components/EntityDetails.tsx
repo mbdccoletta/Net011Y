@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import type { Circuit, Device, E2EPath, Iface, NetworkModel } from "../model/types";
 import { ownsPath, ROLE_LABEL, type SiteInfo } from "../model/site";
 import { isBad, ORDER } from "../model/verdict";
-import { portCounts } from "../model/ports";
+import { portCounts, portsDown } from "../model/ports";
 import { fmtInt, fmtNum, hhmm, unitOf } from "../utils/format";
 import { deviceContext, isolationContext, siteContext } from "../utils/assist";
 import { deviceQuestions, isolationQuestions, siteQuestions } from "../utils/prompts";
@@ -231,6 +231,9 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
   const [hop, setHop] = useState<number | null>(null);
   useEffect(() => { setHop(null); }, [info.code]);
   const bad = info.devices.filter((d) => isBad(d.verdict)).length;
+  /* the same condition the Fault domain tile is drawn under, named once so the one
+     Intelligence block above can carry its questions too */
+  const hasFaultDomain = !!(model.users || (model.unmappedAlerts ?? []).some((a) => a.scope === "application" || a.scope === "service" || a.scope === "host"));
   const dropPct = useDropThreshold();
   /* the same question the map asks, cached by expression so both panels cost one run */
   const platform = {
@@ -264,6 +267,23 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
           {info.incident && <em>{info.incident}</em>}
         </p>
       )}
+      {/**
+        * The section that answers the red sits with the red, not under the page.
+        *
+        * There were two of these on this screen and both were near the bottom: one inside
+        * Fault domain and one in the last tile, under every reading they are drawn from. A
+        * reader who opens a site because it went red meets the alert first and has to scroll
+        * past eight tiles to reach the thing that can explain it. It is one block now, it
+        * carries the questions of both, and it is directly below the sentence that says what
+        * is wrong.
+        */}
+      <Tile tone={TONE.violet}>
+        <AssistPanel subject={`site|${info.code}`} object="site"
+          questions={[...siteQuestions(info.site.name, info.circuits.some((c) => c.kind === "backup"), !!model.flowMap?.sites[info.code]),
+            ...(hasFaultDomain ? isolationQuestions(info.site.name) : [])]}
+          context={() => ({ ...siteContext(model, info),
+            ...(hasFaultDomain ? { faultDomain: isolationContext(model, suspicion, info, dropPct, platform) } : {}) })} />
+      </Tile>
       <div className="vz-k3">
         <Tile tone={bad ? TONE.bad : TONE.good} title="Devices"><div className="vz-big">{bad}<small>/{info.devices.length}</small></div><div className="vz-cap">with issues</div></Tile>
         {/* a site with no circuit tagged says so, rather than reading "0/0 up" */}
@@ -307,16 +327,12 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
       <SiteTrafficTile model={model} code={info.code} onSite={(c) => onSelect(`site:${c}`)} />
       <SitePathsTile model={model} code={info.code} />
       {/* is what is degraded here explained by the network? A suspicion, and Assist to argue it */}
-      {(model.users || (model.unmappedAlerts ?? []).some((a) => a.scope === "application" || a.scope === "service" || a.scope === "host")) && (
+      {hasFaultDomain && (
         <Tile title="Fault domain" right="this site · network or not">
-          <SuspicionStrip s={suspicion} users={model.users} model={model}
-            assist={<AssistPanel subject={`isolate|${info.code}`} questions={isolationQuestions(info.site.name)} object="impact"
-              context={() => isolationContext(model, suspicion, info, dropPct, platform)} />} />
+          <SuspicionStrip s={suspicion} users={model.users} model={model} />
         </Tile>
       )}
       <Tile tone={TONE.violet}>
-        <AssistPanel subject={`site|${info.code}`} questions={siteQuestions(info.site.name, info.circuits.some((c) => c.kind === "backup"), !!model.flowMap?.sites[info.code])} object="site"
-          context={() => siteContext(model, info)} />
         <NativeDrill devices={info.devices} circuits={info.circuits} since={since} demo={model.demo}
           focus={info.causeDevice ?? info.devices.find((d) => d.role === "edge") ?? null}
           focusCircuit={info.circuits.find((c) => c.status === "down") ?? info.circuits.find((c) => isBad(c.verdict)) ?? info.circuits.find((c) => c.kind === "primary") ?? null} />
@@ -337,8 +353,12 @@ function PortLine({ d }: { d: Device }) {
     /* Each word under its own number. The three counts sat in one row and the three words in
        one sentence below it, so "unused" ran under the second figure and the reader had to
        count positions to know which was which. */
-    <span className="vz-ports" title={`${p.up} up · ${p.down} down with the port enabled · ${p.unused} shut or empty`}>
-      {([["up", p.up, "up"], ["down", p.down, "down"], ["off", p.unused, "unused"]] as const).map(([k, n, label]) => (
+    /* "unknown" is drawn only when there is one, so a device whose ports all report keeps the
+       three states it had; where there are some, they are shown as what they are rather than
+       added to the failures. */
+    <span className="vz-ports" title={`${p.up} up · ${p.down} down with the port enabled · ${p.unused} shut or empty${p.unknown ? ` · ${p.unknown} reporting no state` : ""}`}>
+      {([["up", p.up, "up"], ["down", p.down, "down"], ["off", p.unused, "unused"],
+        ...(p.unknown ? [["na", p.unknown, "no state"] as const] : [])] as const).map(([k, n, label]) => (
         <span className="vz-ports__one" key={k}>
           <b><i className={`vz-port vz-port--${k}`} />{fmtInt(n)}</b>
           <em>{label}</em>
@@ -392,6 +412,38 @@ export function EntityDetails(props: Props) {
               {d.unreachableSince && <p className="vz-why__foot">Not responding since {hhmm(d.unreachableSince)} UTC.</p>}
             </Tile>
           )}
+          {/**
+            * The ports that were meant to be carrying traffic and are not.
+            *
+            * This was three dots in a legend beside the availability dial — "3 up · 5 down ·
+            * 0 unused" — and a reader who clicked a red firewall glanced at it and said "looks
+            * like a port is down", which was the most useful thing on the screen and the
+            * hardest to see. The model already separates the three states, and its own comment
+            * says what the middle one means: admin up, oper not up, a port somebody expects to
+            * be working. That is a measurement, not a verdict, so it is stated and not coloured.
+            */}
+          {(() => {
+            const dead = portsDown(d);
+            if (!dead.length) return null;
+            return (
+              <Tile title={`${fmtInt(dead.length)} ${dead.length === 1 ? "link is" : "links are"} enabled and not carrying traffic`}
+                right="admin up · oper down">
+                <div className="vz-deadports">
+                  {/* two interfaces of a device can carry the same name, so the key is the
+                      Smartscape id where there is one and the position where there is not */}
+                  {dead.slice(0, 12).map((i, k) => (
+                    <span key={i.id ?? `${i.name}|${k}`} className="vz-deadports__one"
+                      title={`${i.name} · ${i.type ?? "type not reported"} · admin ${i.admin} · oper ${i.oper}`}>{i.name}</span>
+                  ))}
+                  {dead.length > 12 && <span className="vz-deadports__more">and {fmtInt(dead.length - 12)} more</span>}
+                </div>
+              </Tile>
+            );
+          })()}
+          {/* the same rule as the site panel: what can answer the red sits with the red */}
+          <Tile tone={TONE.violet}>
+            <AssistPanel subject={`device|${d.name}`} questions={deviceQuestions(d.name, d.verdict === "Healthy")} object="device" context={() => deviceContext(model, d, behind)} />
+          </Tile>
           <Tile tone={verdictTone(d.verdict)} title={model.sites[d.site]?.name ?? d.site}
             right={model.sites[d.site]?.dc && behind === 0 ? "no site points here yet" : `${behind} ${behind === 1 ? "site" : "sites"} depend on it`}>
             <div className="vz-inst-top">
@@ -438,7 +490,6 @@ export function EntityDetails(props: Props) {
               put a question between two halves of the same subject. */}
           <Tile title="Interfaces and events"><div className="vz-legacy"><DeviceDetails model={model} device={d} onDevice={(n) => onSelect(`device:${n}`)} /></div></Tile>
           <Tile tone={TONE.violet}>
-            <AssistPanel subject={`device|${d.name}`} questions={deviceQuestions(d.name, d.verdict === "Healthy")} object="device" context={() => deviceContext(model, d, behind)} />
             <NativeDrill devices={[d]} focus={d} since={d.unreachableSince} demo={model.demo} />
           </Tile>
           <DataNeeds keys={VIEW_NEEDS.device} needs={needs} compact />

@@ -41,7 +41,7 @@ const uniq = (xs: (string | undefined | null)[]) => [...new Set(xs.filter((x): x
  *
  * The column is a fraction of the table's width and the name of a device here is thirty
  * characters — measured with the detail panel open, ninety-five elements on this page were
- * cut off and not one of them carried a tooltip, so `BR-BA-LEM1-SWA-001.bbr.sa.dir…` could
+ * cut off and not one of them carried a tooltip, so `BR-PR-CWB1-SWA-001.core.example…` could
  * be neither read nor copied. The component's own cells get that from `TextEllipsis`; a
  * cell we render ourselves has to say it.
  */

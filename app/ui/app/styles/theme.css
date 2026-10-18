@@ -278,6 +278,11 @@
 /* An address is an identifier, so it wears the identifier face; the chip it sits in is the
    one the devices above already use, hairline and nothing behind it. */
 .lm-ping__ip { font-family: var(--np-mono); }
+/* Port names are identifiers, so they wear the identifier face in the chip the rest of the
+   app uses for a named thing: a hairline and nothing behind it. */
+.vz-deadports { display: flex; flex-wrap: wrap; gap: 6px; }
+.vz-deadports__one { font: 500 12px var(--np-mono); padding: 3px 8px; border-radius: 999px; border: 1px solid var(--lm-line); color: var(--lm-ink); }
+.vz-deadports__more { align-self: center; font: 500 11px var(--lm-label); color: var(--lm-ink-3); }
 .lm-cases__which { color: var(--lm-ink-3); }
 /* Full screen, or as close as a framed app gets to it: over everything the app draws, with its own
    ground so the page behind does not show through the dotted continents. */
@@ -1066,6 +1071,8 @@
 .vz-port:first-child { margin-left: 0; }
 .vz-port--up { background: var(--lm-good-fill); }
 .vz-port--down { background: var(--lm-bad-fill); }
+/* a port that reports no state is neither up nor failing: it wears the neutral, like 'not monitored' */
+.vz-port--na { background: var(--lm-neutral); }
 .vz-port--off { background: color-mix(in srgb, var(--lm-ink) 38%, transparent); }
 .sh-rejected { display: block; margin-top: 6px; color: var(--lm-ink-3); opacity: .85; }
 /* Why a device carries the status it carries: the first thing the panel says, one line per reason. */
@@ -2012,7 +2019,7 @@
  *
  * Padding every cell fixed that and broke something worse: the text columns here are
  * fractions, and in the narrow layout beside an open detail panel they are already down to
- * thirty pixels — twelve more each side turned "BR-BA-LEM1-SWI-001" into "E". So the gap
+ * thirty pixels — twelve more each side turned "BR-PR-CWB1-SWI-001" into "E". So the gap
  * goes only on the right of the columns that are right-aligned, every one of them declared
  * `alignment: "right"` in our own column definitions and fixed-width, where twelve pixels
  * cost nothing.
@@ -2084,7 +2091,7 @@
 .lm .lm-detail__on button:hover { text-decoration: underline; }
 
 /* Nothing in the cause panel may be wider than the cause panel.
-   A device is called BR-RS-RGR-SWI-001.bbr.sa.dir.bunge.com — thirty-eight characters with no
+   A device is called BR-SP-SPO1-SWI-001.core.example.com — thirty-eight characters with no
    space in them, so the default `overflow-wrap: normal` has nowhere to break it. The panel
    scrolls sideways instead (`overflow-x: auto`), which reads as the text being cut off, and it
    is cut off at any text size large enough for one name to outgrow the column. */

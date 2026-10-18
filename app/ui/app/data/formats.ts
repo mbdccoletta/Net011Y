@@ -9,6 +9,22 @@
 //
 // Adding a family is adding an entry: the queries are generated from this list.
 
+/**
+ * How deep the hourly record goes.
+ *
+ * It was a fortnight, and the fortnight was never a limit of the data: measured on a live
+ * tenant, the same metric answers 1441 hourly buckets over sixty days with the first one
+ * filled, and a full year at daily resolution — Grail only coarsens the interval past about
+ * sixty days, returning 2 h buckets for a ninety-day window. Two weeks is two weekly cycles,
+ * which is the least a seasonal detector can work with and the reason the Ahead page can
+ * only offer an order of arrival instead of a date: its horizon is twice its record. Sixty
+ * days is eight cycles and a four-month horizon.
+ *
+ * The ceiling on this number is not licence cost — metric queries carry none — it is how
+ * much series a browser can hold for an estate of ports.
+ */
+export const RECORD_DAYS = 60;
+
 export interface Family {
   id: string;
   label: string;
@@ -167,7 +183,7 @@ const BUILD: Record<Measure, (f: Family) => string | null> = {
          rate the cause draws. */
       + `${f.ifDiscIn ? `, d = sum(${mk(f, f.ifDiscIn)})` : ""}`
       + `${f.ifDiscOut ? `, d2 = sum(${mk(f, f.ifDiscOut)})` : ""}`
-      + `}, by:{${portSteady(f)}}, from:now()-14d, interval:1h`
+      + `}, by:{${portSteady(f)}}, from:now()-${RECORD_DAYS}d, interval:1h`
       + `${f.ifDiscIn && f.ifDiscOut ? " | fieldsAdd d = d[] + d2[] | fieldsRemove d2" : ""}`
       // A fixed order and a ceiling equal to the reader's own cap (queries.ts), so a cut is the
       // same cut on every load and neither side trims below the other. Measured: 13,137 rows for
@@ -191,11 +207,11 @@ const BUILD: Record<Measure, (f: Family) => string | null> = {
    */
   ifHourlyUp: (f) => {
     const q = BUILD.ifHourly(f);
-    return q ? q.replace(", from:now()-14d", `, filter: {${UPLINK}}, from:now()-14d`) : null;
+    return q ? q.replace(`, from:now()-${RECORD_DAYS}d`, `, filter: {${UPLINK}}, from:now()-${RECORD_DAYS}d`) : null;
   },
   // the same fortnight of hours for the processor, whose limit needs no tag and no contract
   cpuHourly: (f) => f.cpu
-    ? `timeseries {c = avg(${mk(f, f.cpu)})}, by:{${dev(f)}}, from:now()-14d, interval:1h`
+    ? `timeseries {c = avg(${mk(f, f.cpu)})}, by:{${dev(f)}}, from:now()-${RECORD_DAYS}d, interval:1h`
       + ` | sort ${firstDim(dev(f))} asc | limit 50000 | ${tag(f)}` : null,
   /**
    * The same fortnight of hours for memory in use.
@@ -210,9 +226,9 @@ const BUILD: Record<Measure, (f: Family) => string | null> = {
    */
   memHourly: (f) => {
     const expr = f.memPct
-      ? `timeseries {m = avg(${mk(f, f.memPct)})}, by:{${dev(f)}}, from:now()-14d, interval:1h`
+      ? `timeseries {m = avg(${mk(f, f.memPct)})}, by:{${dev(f)}}, from:now()-${RECORD_DAYS}d, interval:1h`
       : f.memUsed && (f.memTotal || f.memFree)
-        ? `timeseries {u = avg(${mk(f, f.memUsed)}), t = avg(${mk(f, (f.memTotal ?? f.memFree)!)})}, by:{${dev(f)}}, from:now()-14d, interval:1h`
+        ? `timeseries {u = avg(${mk(f, f.memUsed)}), t = avg(${mk(f, (f.memTotal ?? f.memFree)!)})}, by:{${dev(f)}}, from:now()-${RECORD_DAYS}d, interval:1h`
           + ` | fieldsAdd m = 100 * u[] / ${f.memTotal ? "t[]" : "(u[] + t[])"} | fieldsRemove u, t`
         : null;
     return expr ? `${expr} | sort ${firstDim(dev(f))} asc | limit 50000 | ${tag(f)}` : null;

@@ -19,14 +19,14 @@ export const DEFAULT_DROP_PCT = 50;
 
 /**
  * How long before an impact began a network alert may have opened and still be read as its cause. A
- * busy environment always has both network alerts and alerts elsewhere open (fxz0998d: 1879 interfaces
+ * busy environment always has both network alerts and alerts elsewhere open (a large environment: 1879 interfaces
  * down, and unrelated database outages hours apart); without a time link the reading was "network
  * implicated" by coincidence alone.
  */
 export const LINK_WINDOW_MIN = 30;
 
 /**
- * A network that raises alerts all day long (fxz0998d: about 4000 interface events in 24 h, ports
+ * A network that raises alerts all day long (a large environment: about 4000 interface events in 24 h, ports
  * flapping) always has one in any 30-minute window, so the window alone links everything. A network
  * alert counts as a cause only when the window before the impact holds a burst: at least this many times
  * the usual rate of the six hours before it.
@@ -35,7 +35,7 @@ export const BURST_FACTOR = 3;
 
 /**
  * The applications feel the network before anyone looks at a switch: TCP retransmissions measured by
- * OneAgent. A rise is read against the environment's own usual level (fxz0998d: about 0.016% of packets;
+ * OneAgent. A rise is read against the environment's own usual level (a large environment: about 0.016% of packets;
  * a single AKS cluster: 0.1%), never against a fixed number, and only once enough packets are
  * retransmitted to be more than noise.
  */

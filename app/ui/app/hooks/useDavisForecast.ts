@@ -26,8 +26,21 @@ import { useEffect, useRef, useState } from "react";
 import { FAMILIES, mk } from "../data/formats";
 import type { Subject } from "../model/ahead";
 
+/** How far back "recent" reaches when explaining why a forecast could not be made. */
+const RECENT_HOURS = 24;
+
 /** the furthest the platform's own rule allows: training must be at least twice the horizon */
-export const horizonFor = (recordHours: number) => Math.max(6, Math.floor(recordHours / 2));
+/** The analyzer's own ceiling, from its input schema: forecastHorizon maxValue is 600. */
+export const MAX_HORIZON = 600;
+/**
+ * Half the record, and never more than the analyzer accepts.
+ *
+ * Two of the four callers clamped this to 600 and two did not, which cost nothing while the
+ * record was a fortnight — half of 336 is 168. Lengthening the record to sixty days made the
+ * unclamped pair ask for 648 and the analyzer answered nothing at all: twenty-six subjects
+ * that had forecasts went to zero. The ceiling belongs here, where every caller gets it.
+ */
+export const horizonFor = (recordHours: number) => Math.min(MAX_HORIZON, Math.max(6, Math.floor(recordHours / 2)));
 
 export interface DavisForecast {
   /** per cent of the subject's own limit, one value per hour of the horizon */
@@ -435,7 +448,7 @@ export function useNetworkDemand(families: string[], hours: number): { data: Net
           maxResultRecords: 2, requestTimeoutMilliseconds: 20000 }),
       }).then((r) => r.json()),
       forecast({ timeSeriesData: { expression },
-        forecastHorizon: Math.min(600, horizonFor(hours)),
+        forecastHorizon: horizonFor(hours),
         forecastOffset: 1,
         generalParameters: { timeframe: { startTime: `now-${days}d`, endTime: "now" } } }, ctrl.signal),
     ])
@@ -444,7 +457,28 @@ export function useNetworkDemand(families: string[], hours: number): { data: Net
         const rec = out?.timeSeriesDataWithPredictions?.records?.[0];
         if (!rec || out?.analysisStatus !== "OK") {
           cacheDemand.set(key, null);
-          setError(j?.result?.logs?.[0]?.message ?? "the forecast analyzer returned nothing for the estate");
+          /**
+           * Why it failed, when the record itself says why.
+           *
+           * The analyzer answers `analysisStatus: FAILED` with an empty log for the one case
+           * that happens most on a real estate: the series does not reach the present. Proved
+           * on this environment after it had been deactivated for a few hours — the same
+           * expression over `now-13d .. now` came back FAILED and over `now-13d .. now-2d`
+           * came back OK, the only difference being the empty hours at the end. "The forecast
+           * analyzer returned nothing" sent the reader looking for a fault in the app; the
+           * number of hours missing from the end of their own record is the answer, and it is
+           * already in the history this call fetched beside the forecast.
+           */
+          const hist = (h?.result?.records?.[0]?.total ?? []) as (number | null)[];
+          /* Not only a gap at the very end: measured here, the hole was thirteen hours sitting
+             three hours short of now, and the series resumed before the last bucket. What the
+             analyzer cannot work with is a hole among the recent hours, wherever it stops. */
+            const recent = hist.slice(-RECENT_HOURS);
+          const holes = recent.filter((v) => v == null).length;
+          setError(j?.result?.logs?.[0]?.message
+            ?? (holes > 0
+              ? `the record has ${holes} empty ${holes === 1 ? "hour" : "hours"} in its last ${recent.length}, and the forecast needs an unbroken run up to now — it returns once the ports have been polled through those hours`
+              : "the forecast analyzer returned nothing for the estate"));
           return;
         }
         // octets in an hour to bits per second, which is how a network engineer reads demand
@@ -528,7 +562,7 @@ export function useSiteDemand(families: string[], hours: number): { data: SiteDe
           maxResultRecords: 40, requestTimeoutMilliseconds: 25000 }),
       }).then((r) => r.json()),
       forecast({ timeSeriesData: { expression },
-        forecastHorizon: Math.min(600, horizonFor(hours)), forecastOffset: 1,
+        forecastHorizon: horizonFor(hours), forecastOffset: 1,
         generalParameters: { timeframe: { startTime: `now-${days}d`, endTime: "now" } } }, ctrl.signal),
     ])
       .then(([h, j]) => {

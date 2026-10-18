@@ -408,14 +408,14 @@ function fit(hist, from = 0) {
 
 // ---------------------------------------------------------------- the network
 const SITE_DEFS = [
-  ["Rio Grande", "RS", 11], ["DC TIVIT Transamerica", "SP", 29], ["Rondonópolis", "MT", 43],
+  ["Rio Grande", "RS", 11], ["DC SAO Central", "SP", 29], ["Rondonópolis", "MT", 43],
   ["Urucuí", "PI", 61], ["LEM", "BA", 83], ["Gaspar", "SC", 97],
 ];
 // site, carrier, role, contracted, lead days, SLA ms, bandwidth from→today, latency from→today
 const LINK_DEFS = [
   ["Rio Grande", "Vivo", "primary", "100 Mb/s", 60, 40, 58.6, 78, 54, 61],
   ["Rio Grande", "Claro", "backup", "50 Mb/s", 60, 60, 12, 14, 38, 40],
-  ["DC TIVIT Transamerica", "Claro", "primary", "1 Gb/s", 75, 20, 58.8, 66, 46, 72],
+  ["DC SAO Central", "Claro", "primary", "1 Gb/s", 75, 20, 58.8, 66, 46, 72],
   ["Rondonópolis", "Oi", "primary", "30 Mb/s", 60, 50, 63.0, 74, 51, 55],
   ["Urucuí", "Vivo", "primary", "20 Mb/s", 90, 80, 65.7, 77, 60, 66],
   ["LEM", "Claro", "primary", "50 Mb/s", 60, 45, 52.8, 64, 44, 48],
@@ -488,7 +488,7 @@ function makeDevice(id, name, site, model, seed, hot, tune) {
 const DEVICES = [
   makeDevice(0, "BR-RS-RGR-SWA-013", "Rio Grande", "Catalyst 9300 · 48T-4X", 11, 17),
   makeDevice(1, "BR-RS-RGR-RTR-001", "Rio Grande", "ISR 4451 · edge", 13, 50),
-  makeDevice(2, "BR-SP-DCT1-SPN-001", "DC TIVIT Transamerica", "Nexus 93180YC · 48-6Q", 29, 42),
+  makeDevice(2, "BR-SP-DCT1-SPN-001", "DC SAO Central", "Nexus 93180YC · 48-6Q", 29, 42),
   makeDevice(3, "BR-MT-RON1-SWI-045", "Rondonópolis", "Catalyst 9200 · 48P-4G", 43, 8),
   makeDevice(4, "BR-PI-URU1-SWA-003", "Urucuí", "Catalyst 9300 · 48T-4X", 61, 24),
   makeDevice(5, "BR-BA-LEM1-SWA-022", "LEM", "Catalyst 9300 · 48U-4X", 83, 31),

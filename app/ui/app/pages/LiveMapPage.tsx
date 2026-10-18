@@ -306,7 +306,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
    * The panel opens on the first cause so the page is not blank, and that default was also
    * reaching the map as a focus: the camera flew to the two sites of a cause nobody had
    * clicked and everything else went dim. Measured on this environment at 1440 px — the
-   * schematic opened on Data Center Tivit and Gaspar, with eleven of thirteen sites off the
+   * schematic opened on the data centre and one site, with eleven of thirteen off the
    * frame. The whole network stays in view until the reader picks a cause; `causeId` is only
    * set by a click, so it is the one signal that says somebody asked.
    */

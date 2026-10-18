@@ -1,4 +1,4 @@
-// DQL used by NetworkO11y. Every query was validated on guu84124 (2026-09-14).
+// DQL used by NetworkO11y. Every query was validated on this environment (2026-09-14).
 // Metric keys that contain hyphens must be backticked inside `timeseries`,
 // otherwise Grail answers MANDATORY_PARAMETER_HAS_TO_BE.
 import { familiesQuery, familyQueries, vlanQuery } from "./formats";
@@ -87,7 +87,7 @@ export const QUERIES: Record<string, NetQuery> = {
   },
   // Real user sessions, for the one question this app asks about them: did what the network did reach the
   // people? Robots and synthetic sessions are excluded, because they do not notice an outage.
-  // (validated on eob14444, bwm98081 and guu84124, 2026-09-17: `timeseries` is a metric command and fails
+  // (validated on three environments, 2026-09-17: `timeseries` is a metric command and fails
   // here, the records have to go through makeTimeseries.)
   sessions: {
     complete: true,
@@ -108,7 +108,7 @@ export const QUERIES: Record<string, NetQuery> = {
     maxResultRecords: 200,
   },
   // Requests served, for environments without Real User Monitoring: the same "is anyone still getting
-  // through" question, asked of the services (validated on guu84124 and bwm98081, 2026-09-18).
+  // through" question, asked of the services (validated on two environments, 2026-09-18).
   requests: {
     complete: true,
     query: "timeseries req = sum(dt.service.request.count), from:now()-24h, interval:1h",
@@ -179,7 +179,7 @@ export const QUERIES: Record<string, NetQuery> = {
    * first 25 were the same monitoring outage repeated once per device. The devices were
    * reporting their own and nothing read them: in six hours, 14,169 line-protocol
    * transitions, 1,155 link up/downs and 15 configuration writes — and one port,
-   * GigabitEthernet1/0/26 on 10.172.229.6, flapping 2,195 times, six times a minute, for
+   * GigabitEthernet1/0/26 on 203.0.113.6, flapping 2,195 times, six times a minute, for
    * the whole window.
    *
    * The panel is gone — thirteen thousand transitions a day is something to ask a question
@@ -210,7 +210,7 @@ export const QUERIES: Record<string, NetQuery> = {
   alerts: {
     complete: true,
     query: 'fetch dt.davis.events, from:now()-1h | filter event.status == "ACTIVE" and event.kind == "DAVIS_EVENT" and not(event.type == "PROBLEM_UPDATE" or event.type == "CUSTOM_INFO" or event.type == "CUSTOM_ANNOTATION" or event.type == "CUSTOM_DEPLOYMENT" or event.type == "CUSTOM_CONFIGURATION") | fields event.id, event.kind, event.type, event.name, event.category, event.start, event.severity, maintenance.is_under_maintenance, dt.davis.mute.status, dt.source_entity, dt.smartscape_source.id, smartscape.affected_entities, affected_entity_ids, affected_entity_names, dt.smartscape.ext_network_device, dt.smartscape.ext_network_interface, dt.entity.multiprotocol_monitor | sort event.start desc | limit 5000',
-    // a busy environment holds thousands of open events (fxz0998d: over 2000 interface events): the cap
+    // a busy environment holds thousands of open events (a large environment: over 2000 interface events): the cap
     // matches the query's own limit so none is dropped silently
     maxResultRecords: 5000,
   },
@@ -232,7 +232,7 @@ export const QUERIES: Record<string, NetQuery> = {
    * answers nothing has no round trip at all — so Grail returns no series for it and the
    * target disappears from the result. Measured on this environment: the query above comes
    * back with 569 rows and the one below with 667, and the ninety-eight it is missing are
-   * exactly the addresses with packets sent and nothing received. Three of CTR-007's four
+   * exactly the addresses with packets sent and nothing received. Three of CORE-001's four
    * addresses are among them. Everything the app says about what stopped answering was
    * being read from the one source that cannot see it.
    *

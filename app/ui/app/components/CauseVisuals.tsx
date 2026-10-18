@@ -69,7 +69,7 @@ export function CauseDetail({ cause, onDevice }: { cause: Cause; onDevice: (name
    * One fact is one line, however many devices it was recorded on.
    *
    * A monitoring outage writes the same sentence against every device it covers: on this
-   * environment, forty lines of "Reachability is not being measured … (P-26103695) · since
+   * environment, forty lines of "Reachability is not being measured … (P-1234567) · since
    * 16:49", identical but for the hostname they start with. Forty of them pushed the metrics,
    * the logs and the Assist below the fold of a panel whose whole job is to put those in
    * front of a reader — so the list was the reason the panel looked like it said nothing.
@@ -85,7 +85,7 @@ export function CauseDetail({ cause, onDevice }: { cause: Cause; onDevice: (name
        *
        * Matching on `e.device` is not enough: the line opens with the short name the device
        * calls itself — `FWC-001:` — while the field holds the inventory's full one,
-       * `BR-RS-RGR-FWC-001`. Any leading unspaced token followed by a colon is that prefix,
+       * `BR-SP-SPO1-FWC-001`. Any leading unspaced token followed by a colon is that prefix,
        * which is exactly the part that differs between forty copies of one sentence.
        */
       const body = e.text.replace(/^\S+\s*:\s*/, "");
@@ -185,9 +185,9 @@ export function CauseDetail({ cause, onDevice }: { cause: Cause; onDevice: (name
         *
         * An alert raised on a network availability monitor names the monitor, and the panel
         * used to pass that on as "the monitor that pings this device is out". Measured: the
-        * monitor of P-26103695 sent twenty-four packets to each of its targets in the last
+        * monitor of P-1234567 sent twenty-four packets to each of its targets in the last
         * interval and a hundred and thirty-nine answered. Nothing was out. What is true is
-        * that CTR-007 answers on one of the four addresses pinged at it, and the other three
+        * that CORE-001 answers on one of the four addresses pinged at it, and the other three
         * are the ones somebody has to act on.
         *
         * This was a table of address, device, sent, received and since. Five columns in a

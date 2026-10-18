@@ -264,7 +264,12 @@ export function App() {
                  that errors on an environment would hold the page at "still reading" for ever.
                  A failure is an answer: it settles, the needs panel explains it, and the page
                  draws what did arrive. */
-              hourlyReady={!net.unread.some((q) => (q.startsWith("ifHourlyUp:") || q.startsWith("cpuHourly:")
+              /* The example network has no read to wait for. `unread` lists the queries this
+                 app has not received, and on the example source it never receives any — it
+                 builds the estate locally — so every hourly name sat in that list for ever
+                 and the page stayed on "reading the record" with a skeleton under it. The
+                 example model is whole the moment it exists. */
+              hourlyReady={model.demo || !net.unread.some((q) => (q.startsWith("ifHourlyUp:") || q.startsWith("cpuHourly:")
                 || q.startsWith("memHourly:")) && !net.failed.includes(q))} />
           ) : page === "devices" ? <DevicesVisual {...visualProps} /> : page === "links" ? <LinksVisual {...visualProps} /> : <SitesVisual {...visualProps} />}
         </PageLayout.Content>

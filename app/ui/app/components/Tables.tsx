@@ -14,7 +14,7 @@ function PortCell({ d }: { d: Device }) {
   const p = portCounts(d);
   if (!p.known) return <span className="np-mono">{p.total ? `${p.total} ports` : "—"}</span>;
   return (
-    <span className="np-mono vz-ports" title={`${p.up} up · ${p.down} down with the port enabled · ${p.unused} shut or empty`}>
+    <span className="np-mono vz-ports" title={`${p.up} up · ${p.down} down with the port enabled · ${p.unused} shut or empty${p.unknown ? ` · ${p.unknown} reporting no state` : ""}`}>
       <i className="vz-port vz-port--up" />{p.up}
       <i className="vz-port vz-port--down" />{p.down}
       <i className="vz-port vz-port--off" />{p.unused}

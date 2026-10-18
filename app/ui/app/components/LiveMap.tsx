@@ -644,7 +644,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
       // and a site's name sitting on top of it would be the one that reads as the region
       // A region label summarises a group. Where the group is one site, the site's own name says more
       // than "SC · 1" does, and the region was taking the space first and leaving the name undrawn —
-      // Gaspar only appeared once you had zoomed far enough for the two to come apart. A region with
+      // the site only appeared once you had zoomed far enough for the two to come apart. A region with
       // one site waits until the sites have had their turn and takes what is left.
       const drawRegions = (list: MapRegion[]) => {
         ctx.textAlign = "center";

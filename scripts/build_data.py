@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Turn raw dtctl exports from guu84124 into prototype/data.js.
+"""Turn raw dtctl exports from this environment into prototype/data.js.
 
 Every verdict is decided here (one place), so every screen of the prototype
 agrees: Critical / Warning / Healthy / Not monitored.

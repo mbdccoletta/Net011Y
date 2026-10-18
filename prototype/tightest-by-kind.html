@@ -15,7 +15,7 @@
   per subject instead of four. The bar is gone because the number beside it said the same thing;
   the sparkline stays because it is the only mark here that shows a shape.
 
-  Every value below was read from eob14444 today.
+  Every value below was read from this environment today.
 -->
 <style>
   :root{
@@ -84,7 +84,7 @@
 </div>
 
 <script>
-// Values read from eob14444 today. The series are the shape each subject actually showed —
+// Values read from this environment today. The series are the shape each subject actually showed —
 // a port that spikes, a processor that sits flat, memory that creeps.
 const GROUPS = [
   { id: "g-port", name: "Port traffic", unit: "per cent of its line rate", own: "Device", all: 126,
@@ -98,18 +98,18 @@ const GROUPS = [
     ] },
   { id: "g-cpu", name: "CPU", unit: "per cent of the processor", own: "Site", all: 169,
     rows: [
-      { n: "BR-BA-LEM1-SWA-022", s: "luis-eduardo-magalhaes", busy: 27.5, room: 72.5, move: +0.4, firm: false, shape: "flat" },
-      { n: "BR-BA-LEM1-SWA-005", s: "luis-eduardo-magalhaes", busy: 26.9, room: 73.1, move: +0.6, firm: false, shape: "flat" },
-      { n: "BR-BA-LEM1-SWA-021", s: "luis-eduardo-magalhaes", busy: 26.0, room: 74.0, move: +0.9, firm: true,  shape: "flat" },
-      { n: "FWC-001",            s: "transamerica-dc",        busy: 18.0, room: 82.0, move: 0,    firm: false, shape: "flat" },
+      { n: "BR-BA-LEM1-SWA-022", s: "neighbour-site", busy: 27.5, room: 72.5, move: +0.4, firm: false, shape: "flat" },
+      { n: "BR-BA-LEM1-SWA-005", s: "neighbour-site", busy: 26.9, room: 73.1, move: +0.6, firm: false, shape: "flat" },
+      { n: "BR-BA-LEM1-SWA-021", s: "neighbour-site", busy: 26.0, room: 74.0, move: +0.9, firm: true,  shape: "flat" },
+      { n: "FWC-001",            s: "sao-dc",        busy: 18.0, room: 82.0, move: 0,    firm: false, shape: "flat" },
     ] },
   { id: "g-mem", name: "Memory", unit: "per cent of all it has", own: "Site", all: 135,
     rows: [
-      { n: "BR-BA-LEM1-SWI-001",  s: "luis-eduardo-magalhaes", busy: 89.0, room: 11.0, move: +4.6, firm: true,  shape: "creep" },
+      { n: "BR-BA-LEM1-SWI-001",  s: "neighbour-site", busy: 89.0, room: 11.0, move: +4.6, firm: true,  shape: "creep" },
       { n: "BR-RS-RGR1-SWI-008",  s: "rio-grande",             busy: 84.2, room: 15.8, move: +2.8, firm: true,  shape: "creep" },
       { n: "BR-RS-RGR-SWI-001",   s: "rio-grande",             busy: 84.0, room: 16.0, move: +1.2, firm: false, shape: "creep" },
       { n: "BR-RS-RGR-SWI-014",   s: "rio-grande",             busy: 83.9, room: 16.1, move: +0.2, firm: false, shape: "creep" },
-      { n: "HBBLBIGIP002",        s: "transamerica-dc",        busy: 38.3, room: 61.7, move: -0.1, firm: false, shape: "flat" },
+      { n: "HBBLBIGIP002",        s: "sao-dc",        busy: 38.3, room: 61.7, move: -0.1, firm: false, shape: "flat" },
     ] },
 ];
 
