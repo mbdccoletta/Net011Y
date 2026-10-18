@@ -5,10 +5,8 @@
 // drop threshold, so the whole team shares it.
 import { useSyncExternalStore } from "react";
 import { stateClient } from "@dynatrace-sdk/client-state";
-import { getEnvironmentId } from "@dynatrace-sdk/app-environment";
 
 const KEY = "net-o11y.log-buckets";
-const LOCAL_KEY = (() => { try { return `${KEY}@${getEnvironmentId()}`; } catch { return KEY; } })();
 const listeners = new Set<() => void>();
 
 let buckets: string[] = [];
@@ -23,15 +21,13 @@ const parse = (value: string): string[] => { try { const v = JSON.parse(value); 
 function load() {
   if (loaded) return;
   loaded = true;
-  try { const v = window.localStorage.getItem(LOCAL_KEY); if (v) buckets = parse(v); } catch { /* storage unavailable */ }
   stateClient.getAppState({ key: KEY })
-    .then((s) => { buckets = parse(s.value); try { window.localStorage.setItem(LOCAL_KEY, JSON.stringify(buckets)); } catch { /* ignore */ } notify(); })
+    .then((s) => { buckets = parse(s.value); notify(); })
     .catch(() => { /* not set, or no permission: every bucket is read */ });
 }
 
 export async function setLogBuckets(next: string[]) {
   buckets = parseBuckets(next.join(","));
-  try { window.localStorage.setItem(LOCAL_KEY, JSON.stringify(buckets)); } catch { /* ignore */ }
   notify();
   try { await stateClient.setAppState({ key: KEY, body: { value: JSON.stringify(buckets) } }); } catch { /* stays local */ }
 }

@@ -4,13 +4,11 @@
 // flight or when the user may not write app state.
 import { useSyncExternalStore } from "react";
 import { stateClient } from "@dynatrace-sdk/client-state";
-import { getEnvironmentId } from "@dynatrace-sdk/app-environment";
 import type { NetworkModel, Site } from "../model/types";
 
 const KEY = "net-o11y.site-hierarchy";
 // the browser copy is per environment: in local development every tenant shares the same localhost origin,
 // and one environment's hierarchy must never show up in another
-const LOCAL_KEY = (() => { try { return `${KEY}@${getEnvironmentId()}`; } catch { return KEY; } })();
 const listeners = new Set<() => void>();
 
 export type SaveState = "idle" | "saving" | "saved" | "local-only" | "no-permission";
@@ -20,36 +18,27 @@ let loaded = false;
 let saveState: SaveState = "idle";
 
 const notify = () => listeners.forEach((l) => l());
-const readLocal = (): string[] => {
-  try {
-    const v = JSON.parse(window.localStorage.getItem(LOCAL_KEY) ?? "[]");
-    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
-  } catch { return []; }
-};
-const writeLocal = (v: string[]) => { try { window.localStorage.setItem(LOCAL_KEY, JSON.stringify(v)); } catch { /* storage unavailable */ } };
 const parse = (value: string): string[] => {
   try { const v = JSON.parse(value); return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []; } catch { return []; }
 };
 
-/** Reads the hierarchy from the tenant once; falls back to the copy in this browser. */
+/** Reads the hierarchy from the tenant once. It is the environment's setting, so there is no copy here. */
 function load() {
   if (loaded) return;
   loaded = true;
-  levels = readLocal();
   stateClient.getAppState({ key: KEY })
-    .then((s) => { levels = parse(s.value); writeLocal(levels); notify(); })
+    .then((s) => { levels = parse(s.value); notify(); })
     .catch((e: unknown) => {
       const msg = String((e as { message?: string })?.message ?? e);
       // 403 means this user can't read app state; 404 means nobody has set it in this environment yet,
       // so the app starts unset instead of reusing what the browser kept from another environment
       if (/403|permission|forbidden/i.test(msg)) { saveState = "no-permission"; notify(); }
-      else if (/404|not found/i.test(msg)) { levels = []; writeLocal(levels); notify(); }
+      else if (/404|not found/i.test(msg)) { levels = []; notify(); }
     });
 }
 
 export async function setSiteHierarchy(next: string[]) {
   levels = [...next];
-  writeLocal(levels);
   saveState = "saving";
   notify();
   try {

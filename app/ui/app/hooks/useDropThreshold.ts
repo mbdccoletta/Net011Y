@@ -1,13 +1,12 @@
 // How far below its usual traffic an hour has to fall before the app calls it a suspicion. It is the
 // customer's number, like the SLA on a circuit: stored in the tenant as app state so the whole team works
-// from the same one, with a copy in the browser while the tenant call is in flight.
+// from the same one. Nothing is kept in the browser — a value mirrored there is one user's copy of a
+// setting that belongs to the environment, and it outlives the change that replaced it.
 import { useSyncExternalStore } from "react";
 import { stateClient } from "@dynatrace-sdk/client-state";
-import { getEnvironmentId } from "@dynatrace-sdk/app-environment";
 import { DEFAULT_DROP_PCT } from "../model/suspicion";
 
 const KEY = "net-o11y.drop-threshold";
-const LOCAL_KEY = (() => { try { return `${KEY}@${getEnvironmentId()}`; } catch { return KEY; } })();
 const listeners = new Set<() => void>();
 
 let pct = DEFAULT_DROP_PCT;
@@ -20,17 +19,15 @@ const parse = (value: string): number => { const n = Number(JSON.parse(value)); 
 function load() {
   if (loaded) return;
   loaded = true;
-  try { const v = window.localStorage.getItem(LOCAL_KEY); if (v) pct = parse(v); } catch { /* storage unavailable */ }
   stateClient.getAppState({ key: KEY })
-    .then((s) => { pct = parse(s.value); try { window.localStorage.setItem(LOCAL_KEY, JSON.stringify(pct)); } catch { /* ignore */ } notify(); })
+    .then((s) => { pct = parse(s.value); notify(); })
     .catch(() => { /* not set, or no permission: the default stands */ });
 }
 
 export async function setDropThreshold(next: number) {
   pct = clamp(next);
-  try { window.localStorage.setItem(LOCAL_KEY, JSON.stringify(pct)); } catch { /* ignore */ }
   notify();
-  try { await stateClient.setAppState({ key: KEY, body: { value: JSON.stringify(pct) } }); } catch { /* stays local */ }
+  try { await stateClient.setAppState({ key: KEY, body: { value: JSON.stringify(pct) } }); } catch { /* the tenant refused it: the screen shows the new value, the next load shows the stored one */ }
 }
 
 export function useDropThreshold(): number {
