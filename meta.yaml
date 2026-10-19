@@ -1,0 +1,53 @@
+title: "NetO11y"
+description: >
+  Shows a monitored network the way an operator reads it: sites on a map,
+  devices by role, WAN reachability and circuits, traffic between sites, and
+  the open problems that explain what is wrong - with drill-downs into the
+  native apps for the detail.
+purpose: >
+  A network already monitored by the Dynatrace SNMP extensions is spread across
+  Smartscape, metrics, syslog, SNMP traps and synthetic monitors, and nobody on
+  shift assembles those five into "which sites are down, and why" in the middle
+  of an incident. This app does that assembly: it opens on the sites that are
+  offline and the fault they share - a carrier, a data centre, a circuit - so a
+  reader starts at the cause instead of a device list. It judges nothing itself
+  and holds no thresholds of its own: a site, device, link or interface is red
+  or yellow only because Dynatrace Intelligence has an open problem or alert on
+  it, and everything else is shown as a measurement. It needs no tagging to be
+  useful - any SNMP-monitored estate is enough - and says which optional source
+  (primary tags, circuit tags, NetFlow, OneAgent flows) would add what.
+author: "Marcelo Coletta"
+contact: ""
+asset_type: app
+use_case: infrastructure
+deployment:
+  - SaaS
+tags:
+  - Networking
+  - Infrastructure
+  - Problems
+  - Extensions
+  - Synthetics
+setup_instructions: >
+  1. Clone this folder and run `npm install` in `app/`.
+  2. Set `environmentUrl` in `app/app.config.json` to your tenant - it ships
+     with a placeholder on purpose, so the repository names no environment.
+  3. Raise `version` in `app/app.config.json` before each deploy: the platform
+     refuses a version it already holds.
+  4. Build and deploy:
+     `cd app && npm run build && npx dt-app deploy --skip-build --environment-url https://<your-tenant>.apps.dynatrace.com`
+     Repeat the deploy line once per environment.
+  5. Open "NetO11y" from the app launcher. With no network data yet, Settings >
+     General > Data source opens two simulated networks (about 550 sites, and
+     the same group at 4,200 sites and 20,000 devices) so the app can be
+     explored before anything is sent.
+  Nothing else has to be configured: the app reads what the environment already
+  stores. Primary tags on the SNMP monitoring configurations (site, geo) and on
+  the ICMP monitors (circuit id, carrier, SLA) enrich the map and the WAN page
+  where they exist, and the app says which step adds what where they do not.
+  Required scopes, all declared in app.config.json: storage:smartscape:read,
+  storage:metrics:read, storage:logs:read, storage:events:read,
+  storage:user.sessions:read, storage:buckets:read, storage:system:read,
+  storage settings:objects:read, state:app-states:read/write,
+  davis:analyzers:read/execute and davis-copilot:conversations:execute.
+tenant_url: ""
