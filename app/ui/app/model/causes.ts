@@ -66,6 +66,21 @@ export interface Cause {
 const earliest = (ts: (string | null | undefined)[]) => ts.filter((t): t is string => !!t).sort()[0] ?? null;
 const shortDevice = (name: string) => name.replace(/^BR-[A-Z]{2}-[A-Z0-9]+-/, "");
 
+/**
+ * What an event group was found on, in the width of a title.
+ *
+ * One of anything is named: "on LON-Juniper-EX4500-Switch" is what a reader acts on. Several are
+ * counted, because the alternative is a title listing fifteen device names, and the panel behind
+ * the row holds every one of them anyway.
+ */
+const eventOn = (devices: Device[], cs: Circuit[]): string => {
+  if (devices.length > 1) return `${devices.length} devices`;
+  if (devices.length === 1) return shortDevice(devices[0].name);
+  if (cs.length > 1) return `${cs.length} links`;
+  if (cs.length === 1) return `${cs[0].carrier} ${cs[0].kind} link`;
+  return "network";
+};
+
 const byCarrier = (cs: Circuit[]) => {
   const map = new Map<string, Circuit[]>();
   cs.forEach((c) => { const l = map.get(c.carrier); if (l) l.push(c); else map.set(c.carrier, [c]); });
@@ -116,23 +131,41 @@ export function buildCauses(model: NetworkModel, infos: SiteInfo[], rising: Nove
   // are grouped by what they are and where they are: an environment whose ports flap raises thousands of
   // "Interface operationally going down" events (a large environment: about 4000), and one entry each made a list of
   // four thousand identical lines.
+  /**
+   * One entry per finding, with every element it was found on — not one per element.
+   *
+   * The key used to carry the owner, so an event kind that never became a Davis problem made a
+   * row for every device it touched. Measured on a three-data-centre estate: fifteen devices
+   * raising four kinds between them produced forty rows, which are five findings. The reader
+   * scrolls past "Interface traffic low" eleven times and the two entries that actually alerted
+   * are somewhere in the middle of it.
+   *
+   * This is the same correction the discarding ports got below, and for the same reason it is
+   * written out there: one entry per device took that page from two causes to nineteen. The
+   * event groups were simply never given it. What the owner bought was a title that named the
+   * device, and that is kept where there is one device to name; where there are several the
+   * title counts them and the panel lists them, which is what the reader opens it for.
+   */
   const groups = new Map<string, { p: DeviceProblem; devices: Device[]; circuits: Circuit[]; events: Set<string>; start: string }>();
-  const put = (p: DeviceProblem, owner: string) => {
-    const key = p.eventKind === "DAVIS_PROBLEM" ? `problem:${p.eventId}` : `events:${p.name}|${owner}`;
+  const put = (p: DeviceProblem) => {
+    const key = p.eventKind === "DAVIS_PROBLEM" ? `problem:${p.eventId}` : `events:${p.name}`;
     const g = groups.get(key) ?? { p, devices: [], circuits: [], events: new Set<string>(), start: p.start };
     g.events.add(p.eventId);
     if (p.start && (!g.start || p.start < g.start)) g.start = p.start;
+    /* the group answers for the worst of what it holds: merging a slowdown into an outage must
+       not quietly demote the outage */
+    if (ORDER[problemLevel(p)] < ORDER[problemLevel(g.p)]) g.p = p;
     groups.set(key, g);
     return g;
   };
-  model.devices.forEach((d) => openProblems(d.problems).forEach((p) => { const g = put(p, `d:${d.name}`); if (!g.devices.includes(d)) g.devices.push(d); }));
-  circuits.forEach((c) => openProblems(c.problems).forEach((p) => { const g = put(p, `c:${c.id}`); if (!g.circuits.includes(c)) g.circuits.push(c); }));
+  model.devices.forEach((d) => openProblems(d.problems).forEach((p) => { const g = put(p); if (!g.devices.includes(d)) g.devices.push(d); }));
+  circuits.forEach((c) => openProblems(c.problems).forEach((p) => { const g = put(p); if (!g.circuits.includes(c)) g.circuits.push(c); }));
 
   const scopes: Scope[] = [...groups.entries()].map(([key, { p, devices, circuits: cs, events, start }]) => ({
     id: key.startsWith("problem:") ? `problem:${p.eventId}` : key,
     // an event group names its device (or circuit), or two groups of the same kind read the same
     title: key.startsWith("problem:") ? p.name
-      : `${p.name} · ${devices[0] ? shortDevice(devices[0].name) : cs[0] ? `${cs[0].carrier} ${cs[0].kind} link` : "network"}${events.size > 1 ? ` · ${events.size} alerts` : ""}`,
+      : `${p.name} · ${eventOn(devices, cs)}${events.size > 1 ? ` · ${events.size} alerts` : ""}`,
     category: p.category, start: start || null,
     incident: key.startsWith("problem:") ? p.displayId || null : null, devices, circuits: cs, level: problemLevel(p),
   }));
@@ -231,6 +264,23 @@ export function buildCauses(model: NetworkModel, infos: SiteInfo[], rising: Nove
 }
 
 
+
+/**
+ * The two lists the landing page shows, split by reach.
+ *
+ * It lived in the page, as a filter written inline, which is why nothing checked it: the suite
+ * reads the model and the page is where the rule was. It is a statement about causes, so it
+ * belongs with them — and now the number the heading promises is something a check can hold.
+ *
+ * Shared used to mean the cause's *kind*: a carrier or a data centre counted whatever its reach,
+ * on the grounds that both are shared by what they carry. Measured on the extra-large example,
+ * 46 of the 48 rows under that heading touched one site, while the heading said one action
+ * reaches all of them. On an estate of nothing but data centres it is every row.
+ */
+export function splitCauses(causes: Cause[]): { shared: Cause[]; isolated: Cause[] } {
+  const shared = causes.filter((c) => c.sites.length > 1);
+  return { shared, isolated: causes.filter((c) => !shared.includes(c)) };
+}
 
 function kindOf(model: NetworkModel, scope: Scope): CauseKind {
   if (scope.circuits.length && new Set(scope.circuits.map((c) => c.carrier)).size === 1) return "carrier";

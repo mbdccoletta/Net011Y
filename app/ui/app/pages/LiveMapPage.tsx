@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Device, Iface, NetworkModel, Verdict } from "../model/types";
 import type { SiteInfo } from "../model/site";
 import { isBad, worst } from "../model/verdict";
-import { buildCauses, type Cause } from "../model/causes";
+import { buildCauses, type Cause, splitCauses } from "../model/causes";
 import { LiveMapGeo } from "../components/LiveMapGeo";
 import { LiveMap, MAP_COLORS, type Insets, type MapLink, type MapRegion, type MapSite } from "../components/LiveMap";
 import { countriesOf, loadRegions, regionAt, type RegionShape } from "../data/geo/admin1/load";
@@ -89,8 +89,21 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
     roundTrip: useAnomaly("adaptive", appNetExpressions(model)?.roundTrip ?? null, { condition: "ABOVE", days: 1 }),
   };
   const causes = useMemo(() => buildCauses(model, infos, rising), [model, infos, rising]);
-  const shared = causes.filter((c) => c.sites.length > 1 || c.kind === "carrier" || c.kind === "datacenter");
-  const isolated = causes.filter((c) => !shared.includes(c));
+  /**
+   * Shared means it reaches more than one site. It used to mean the cause's *kind*.
+   *
+   * A carrier or a data centre is shared by what it carries, so the rule admitted them whatever
+   * their reach — and `kindOf` calls a cause "datacenter" whenever every device on it sits at a
+   * site flagged as one. Measured on the extra-large example, 46 of the 48 rows under the
+   * heading touched a single site, and the heading says "one action reaches all of them". On an
+   * estate that is nothing but data centres it is every row: the section stops sorting anything
+   * and the reader has to open rows to find out which ones are worth opening.
+   *
+   * Reach is the thing the two sections are for, so reach is what splits them. A one-site fault
+   * on a carrier is still a carrier fault — the row says so, and the panel behind it still has
+   * the carrier — it just is not a cause that one action clears for several sites.
+   */
+  const { shared, isolated } = splitCauses(causes);
   /**
    * A cause that arrives late does not take the screen from the reader.
    *
@@ -559,10 +572,8 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
             <b><span className="lm-cause__title">Whole network</span><em>{fmtInt(affected.length)}/{fmtInt(infos.length)}</em></b>
           </button>
           {/* The two headings sorted the list and said nothing about why. The rule is in the
-              code right above — more than one site, or a carrier or a data centre, which are
-              shared by what they carry even when one site sits behind them — and it is the
-              whole reason this column is ordered the way it is: one action on a shared cause
-              reaches every site under it. */}
+              code right above — more than one site — and it is the whole reason this column is
+              ordered the way it is: one action on a shared cause reaches every site under it. */}
           {shared.length > 0 && (
             <h3 className="lm-sub">Shared causes · {shared.length}
               <span className="lm-sub__why">one fault under several sites — or on a carrier or a data centre,
@@ -572,7 +583,9 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
           {byRelevance(shared).map(causeButton)}
           {isolated.length > 0 && (
             <h3 className="lm-sub">Isolated faults · {isolated.length}
-              <span className="lm-sub__why">one site each, and nothing else behind them.</span>
+              {/* "and nothing else behind them" was not true of all of them: a carrier or a data
+                  centre reaching one site lands here now, and there is plenty behind it. */}
+              <span className="lm-sub__why">one site each.</span>
             </h3>
           )}
           {byRelevance(isolated).map(causeButton)}

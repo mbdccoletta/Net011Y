@@ -417,6 +417,31 @@ const crcDevice = devices.find((d) => d.site.code === CRC_SITE && d.role === "SW
 alert({ "event.id": evid("crc"), "event.type": "ERROR_EVENT", "event.name": "Interface CRC high rate", "event.category": "ERROR",
   "event.start": iso(NOW - 35 * 60e3), "dt.smartscape.ext_network_device": crcDevice.id });
 
+/**
+ * 4b. One alert kind raised on many devices at once, and never promoted to a problem.
+ *
+ * This is the commonest shape a real estate has and the fixture had none of it: the whole
+ * generated network produced a single event-kind cause, so the page's grouping of them was
+ * measured on one row. Counted on a three-data-centre environment, fifteen devices raising four
+ * kinds between them made forty entries on the landing page — the two that had actually alerted
+ * were somewhere in the middle of that.
+ *
+ * Nine devices across three sites, so the entry has to be one row that names nine and still
+ * reaches more than one site. A second kind on a subset of the same devices keeps the two from
+ * being told apart by their device list alone.
+ */
+/* from the end of the list: every other scenario below picks its device with `find`, so it takes
+   an early one, and a fixture that quietly stole another scenario's device would break its check
+   instead of its own */
+const flapping = devices.filter((d) => d.role === "SWT" && !outage.includes(d.site.code)
+  && d !== crcDevice).slice(-9);
+flapping.forEach((d, n) => alert({ "event.id": evid(`flap${n}`), "event.type": "ERROR_EVENT",
+  "event.name": "Interface operationally going down", "event.category": "ERROR",
+  "event.start": iso(NOW - (20 + n) * 60e3), "dt.smartscape.ext_network_device": d.id }));
+flapping.slice(0, 4).forEach((d, n) => alert({ "event.id": evid(`low${n}`), "event.type": "ERROR_EVENT",
+  "event.name": "Interface traffic low", "event.category": "ERROR",
+  "event.start": iso(NOW - (40 + n) * 60e3), "dt.smartscape.ext_network_device": d.id }));
+
 // 5. a metric event bound to the environment: nothing names a device, so the app must surface it apart
 alert({ "event.id": evid("mem"), "event.type": "CUSTOM_ALERT", "event.name": "Cisco Memory Free critical low", "event.category": "CUSTOM_ALERT",
   "event.start": iso(NOW - 3 * 3600e3), "dt.source_entity": "ENVIRONMENT-0000000000000001", affected_entity_ids: ["ENVIRONMENT-0000000000000001"] });

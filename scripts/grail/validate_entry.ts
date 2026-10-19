@@ -2,7 +2,7 @@ export { buildRealModel } from "../../app/ui/app/data/buildRealModel";
 export { buildExampleNetwork } from "../../app/ui/app/data/exampleNetwork";
 export { evaluateNeeds, VIEW_NEEDS } from "../../app/ui/app/data/requirements";
 export { allSites } from "../../app/ui/app/model/site";
-export { buildCauses } from "../../app/ui/app/model/causes";
+export { buildCauses, splitCauses } from "../../app/ui/app/model/causes";
 export { isBad, appVerdict, deviceVerdict, worst, ORDER } from "../../app/ui/app/model/verdict";
 export { portCounts, portsDown } from "../../app/ui/app/model/ports";
 export { suspicionFor, outsideCounts, trafficDrop, DEFAULT_DROP_PCT, appRise } from "../../app/ui/app/model/suspicion";

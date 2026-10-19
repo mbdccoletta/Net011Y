@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES } from "./out/queries.mjs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -78,6 +78,58 @@ check("Carrier outage problem reaches the circuits through their monitor",
 check("Outage grouped as one entry, not one per circuit",
   causes.filter((c) => /global outage/i.test(c.title)).length === 1,
   causes.map((c) => `${c.kind}: ${c.title} [${c.sites.length}]`).join(" | "));
+
+/**
+ * One entry per finding, not one per device it was found on.
+ *
+ * An alert kind that never becomes a Davis problem used to be keyed by kind *and* device, so a
+ * kind raised across an estate made a row per device. Counted on a three-data-centre
+ * environment: fifteen devices raising four kinds between them produced forty rows on the
+ * landing page, and the two entries that had actually alerted sat in the middle of them. The
+ * fixture had one such row in the whole network, so nothing here could see it.
+ *
+ * The title still names a single device where there is one, because that is what a reader acts
+ * on; where there are several it counts them and the panel behind the row holds every one.
+ */
+{
+  const flap = causes.filter((c) => c.title.startsWith("Interface operationally going down"));
+  const low = causes.filter((c) => c.title.startsWith("Interface traffic low"));
+  const crc = causes.filter((c) => c.title.startsWith("Interface CRC high rate"));
+  check("An alert kind raised on many devices is one entry that holds them all",
+    flap.length === 1 && flap[0].elements.length === 9 && flap[0].sites.length > 1
+    && / · 9 devices · /.test(flap[0].title)
+    && low.length === 1 && low[0].elements.length === 4
+    /* and a kind found on one device is still named after it, which is what a reader acts on */
+    && crc.length === 1 && /SWT/.test(crc[0].title),
+    [...flap, ...low, ...crc].map((c) => `${c.title} [${c.elements.length} el · ${c.sites.length} sites]`).join(" | ") || "none");
+}
+
+/**
+ * The landing page splits its causes by reach, and the heading promises what reach buys.
+ *
+ * "Shared causes · one fault under several sites. One action reaches all of them." The rule
+ * behind it used to be the cause's *kind*: a carrier or a data centre counted whatever it
+ * reached. Measured on the extra-large example, 46 of the 48 rows under that heading touched a
+ * single site — and on an estate of nothing but data centres it is every row, because `kindOf`
+ * calls a cause "datacenter" when every device on it sits at one.
+ *
+ * The split lived in the page as an inline filter, which is why it was never checked. It is a
+ * statement about causes, so it is in the model now and this holds it.
+ */
+{
+  const estates = [["the generated estate", model]];
+  const bad = [];
+  for (const [label, m] of estates) {
+    const { shared, isolated } = splitCauses(buildCauses(m, allSites(m)));
+    const all = buildCauses(m, allSites(m));
+    if (shared.some((c) => c.sites.length < 2)) bad.push(`${label}: a shared cause reaches one site`);
+    if (shared.length + isolated.length !== all.length) bad.push(`${label}: the split loses causes`);
+  }
+  const { shared, isolated } = splitCauses(causes);
+  check("Shared causes are the ones that reach more than one site, and the two lists hold every cause",
+    bad.length === 0 && shared.every((c) => c.sites.length > 1) && shared.length + isolated.length === causes.length,
+    bad.join(" · ") || `${shared.length} shared · ${isolated.length} isolated of ${causes.length}`);
+}
 
 // an extension alert names its own custom device: only the entity name joins it to the inventory
 const fw = dev(scenario.firewallCpu);
@@ -220,10 +272,13 @@ check("Without user sessions, the traffic reading falls back to service requests
 // events that never became a problem are grouped by what they are and where, not listed one by one
 {
   const dev = model.devices.find((d) => d.mode === "Extension") ?? model.devices[0];
-  const flood = Array.from({ length: 200 }, (_, k) => ({ eventId: `flap-${k}`, eventKind: "DAVIS_EVENT", displayId: "", name: "Interface operationally going down", start: new Date(Date.now() - k * 60e3).toISOString(), category: "AVAILABILITY" }));
+  /* a kind of its own: the generated estate now raises "Interface operationally going down" on
+     nine devices, and this check is about two hundred of one kind on *one* device collapsing.
+     Sharing the name merged the two and the check started measuring the fixture. */
+  const flood = Array.from({ length: 200 }, (_, k) => ({ eventId: `flap-${k}`, eventKind: "DAVIS_EVENT", displayId: "", name: "Interface receive errors burst", start: new Date(Date.now() - k * 60e3).toISOString(), category: "AVAILABILITY" }));
   const m3 = { ...model, devices: model.devices.map((d) => (d === dev ? { ...d, problems: [...(d.problems ?? []), ...flood] } : d)) };
   const c3 = buildCauses(m3, allSites(m3));
-  const flap = c3.filter((c) => /Interface operationally going down/.test(c.title));
+  const flap = c3.filter((c) => /Interface receive errors burst/.test(c.title));
   check("Two hundred events of one kind on one device are one cause", flap.length === 1 && /· 200 alerts$/.test(flap[0].title) && flap[0].title.includes(" · "),
     `${flap.length} cause(s) · ${flap[0]?.title ?? "-"}`);
 }
