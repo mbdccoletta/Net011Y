@@ -11,7 +11,7 @@ import { APP_PERMISSIONS, DATA_GROUPS, NETWORK_BUCKET_MATCHER, NETWORK_BUCKET_ST
 import { openNative, openNotebook } from "../utils/drilldown";
 import { useDropThresholdState, setDropThreshold, retryDropThreshold } from "../hooks/useDropThreshold";
 import { DEFAULT_DROP_PCT } from "../model/suspicion";
-import { parseBuckets, setLogBuckets, retryLogBuckets, useLogBucketState } from "../hooks/useLogBucket";
+import { allowUnrestrictedLogs, parseBuckets, setLogBuckets, retryLogBuckets, retryLogBucketRead, useLogBucketGate, useLogBucketState } from "../hooks/useLogBucket";
 import { SOURCE_RECHECK_MS, type LoadCost, type SourceGroup } from "../data/useNetwork";
 import { FAMILIES } from "../data/formats";
 import type { Step } from "../model/nextSteps";
@@ -129,6 +129,7 @@ function LoadMeter({ cost, buckets, onHow }: { cost: LoadCost; buckets: string[]
 
 export function QueryCostSection({ absent, onRecheck, cost, onHow }: { absent: Partial<Record<SourceGroup, number>>; onRecheck: () => void; cost?: LoadCost | null; onHow?: () => void }) {
   const bucketState = useLogBucketState();
+  const bucketGate = useLogBucketGate();
   const buckets = bucketState.value;
   const [draft, setDraft] = React.useState(buckets.join(", "));
   React.useEffect(() => { setDraft(buckets.join(", ")); }, [buckets]);
@@ -162,8 +163,23 @@ export function QueryCostSection({ absent, onRecheck, cost, onHow }: { absent: P
         <Button variant="emphasized" disabled={parsed.join(",") === buckets.join(",")} onClick={() => setLogBuckets(parsed)}>Save</Button>
       </div>
       {draft.trim() && parsed.length === 0 && <Text textStyle="small">Bucket names use lower-case letters, digits, dashes and underscores.</Text>}
-      <SettingTrouble what="The bucket list" onRetry={retryLogBuckets} unreadable={bucketState.unreadable}
+      <SettingTrouble what="The bucket list" onRetry={retryLogBuckets} unreadable={false}
         unsaved={bucketState.unsaved ? (bucketState.unsaved.join(", ") || "an empty list") : null} />
+      {/* A list the app could not read is the one case where it holds the log queries back. Reading
+          every log in the environment to find out what it should have been reading is the most
+          expensive thing this app can do, and it is not something to do by accident — so it is
+          offered, in those words, next to the button that tries the setting again. */}
+      {bucketGate.held && (
+        <div className="ds-row" role="alert">
+          <Text textStyle="small">
+            The bucket list could not be read from this environment, so the log queries are not
+            running: without it the app would read every log bucket, which is what this setting
+            exists to avoid. A permission on app state, or a failed request.
+          </Text>
+          <Button variant="emphasized" onClick={retryLogBucketRead}>Try reading it again</Button>
+          <Button onClick={allowUnrestrictedLogs}>Read every bucket anyway</Button>
+        </div>
+      )}
     </section>
   );
 }

@@ -41,8 +41,10 @@ export function PageEmpty({ title, detail, keys, needs, configure, onSettings, o
       <EmptyState>
         <EmptyState.VisualPreset context="generic" type="something-missing" />
         <EmptyState.Title>{broken.length ? "This view could not be read" : title}</EmptyState.Title>
+        {/* the need says why in its own words: a read that errored and a read the app is holding
+            back are both "could not be read", and they are not the same thing to do something about */}
         <EmptyState.Details>{broken.length
-          ? `${broken.map((k) => needs[k]?.label ?? k).join(", ")}: the query did not come back, so the app cannot say whether this environment sends it. Reload, or open Settings to see what it reads.`
+          ? `${broken.map((k) => `${needs[k]?.label ?? k} — ${needs[k]?.detail ?? "could not be read"}`).join(" · ")}. The app cannot say whether this environment sends it.`
           : detail}</EmptyState.Details>
         <EmptyState.Actions>
           {onSettings && target && (

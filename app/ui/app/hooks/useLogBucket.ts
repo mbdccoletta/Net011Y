@@ -36,14 +36,41 @@ export function useLogBuckets(): string[] {
 }
 
 /**
- * Whether the tenant has answered about the buckets.
+ * An unread setting releases nothing.
  *
- * A log query asked before this is true reads every bucket in the environment, so the queries that
- * carry a bucket filter wait for it. The wait is one app-state read — measured at 165 ms on this
- * environment — against a scan of every log in the window.
+ * This asked only whether the read had finished, and a read that *failed* finishes too: two failed
+ * attempts leave the fallback empty list, and the empty list means "read every bucket". So the one
+ * case the gate exists for — the app not knowing what the tenant restricted — was the case that
+ * opened it, and a tenant with a bucket list in place would scan every log it has because the state
+ * service blinked or the reader lacks permission on it.
+ *
+ * Held, then, until the setting is actually known: a value, or a 404 that says nobody ever set one.
+ * Nothing is held for ever against the reader's will — Settings offers the read again, and offers to
+ * read every bucket anyway, which is the only way this app scans everything without being told to.
  */
-export function useLogBucketsResolved(): boolean {
-  return useSyncExternalStore(setting.subscribe, setting.snapshot).resolved;
+let allowedAnyway = false;
+const anywayListeners = new Set<() => void>();
+export function allowUnrestrictedLogs() {
+  allowedAnyway = true;
+  anywayListeners.forEach((l) => l());
+}
+/** ask the tenant again for a bucket list it could not give */
+export const retryLogBucketRead = () => setting.retryRead();
+
+export interface LogBucketGate {
+  /** the log queries may run: the tenant's list is known, or the reader said to read everything */
+  released: boolean;
+  /** they are not running and will not start on their own: the setting could not be read */
+  held: boolean;
+}
+
+export function useLogBucketGate(): LogBucketGate {
+  const key = useSyncExternalStore(
+    (l) => { anywayListeners.add(l); const off = setting.subscribe(l); return () => { anywayListeners.delete(l); off(); }; },
+    () => `${setting.snapshot().resolved}|${setting.snapshot().unreadable}|${allowedAnyway}`,
+  );
+  const [resolved, unreadable, anyway] = key.split("|").map((v) => v === "true");
+  return { released: resolved && (!unreadable || anyway), held: resolved && unreadable && !anyway };
 }
 
 /** the list and what the tenant has done with it, for the screen that lets it be changed */

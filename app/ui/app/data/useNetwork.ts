@@ -9,7 +9,7 @@ import type { NetworkModel } from "../model/types";
 import { DETAIL_MAX_DEVICES, QUERIES } from "./queries";
 import { familyOfToken } from "./formats";
 import { keep, mergeRows, planFor, type Plan } from "./logCache";
-import { inBuckets, useLogBuckets, useLogBucketsResolved } from "../hooks/useLogBucket";
+import { inBuckets, useLogBuckets, useLogBucketGate } from "../hooks/useLogBucket";
 import { buildRealModel, type QueryResults } from "./buildRealModel";
 
 export type Source = "live" | "example";
@@ -24,6 +24,8 @@ export interface NetworkState {
   counts: Record<string, number | null>;
   /** queries no open view draws, so they have not been read: an empty count here measured nothing */
   unread: string[];
+  /** reads the app is deliberately not making, and why a view that needs them says so */
+  blocked: string[];
   /** Devices in the environment, as soon as the inventory answers */
   estate: number | null;
   /** false in a large estate, where interface detail is fetched per device instead */
@@ -260,8 +262,12 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
    * with the setting in place that is the whole window scanned for nothing, and then scanned again
    * when the answer landed and the plan changed. The wait is one app-state read.
    */
-  const bucketsKnown = useLogBucketsResolved();
-  const waitsForBuckets = (name: string) => !bucketsKnown && /^fetch logs\b/.test(QUERIES[name].query);
+  const bucketGate = useLogBucketGate();
+  const readsLogs = (name: string) => /^fetch logs\b/.test(QUERIES[name].query);
+  const waitsForBuckets = (name: string) => !bucketGate.released && readsLogs(name);
+  /* held, not pending: a view that draws from these has to say so instead of waiting for a read
+     that is not going to be made */
+  const blocked = bucketGate.held ? NAMES.filter(readsLogs) : [];
   const remembered = useSourceMemory();
   const absent = fresh(remembered.absent, SOURCE_RECHECK_MS);
   const barren = remembered.barren;
@@ -482,6 +488,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     model,
     counts,
     unread,
+    blocked,
     estate,
     detailLoaded: detailOk,
     loading: live ? settled < NAMES.length : !demo,

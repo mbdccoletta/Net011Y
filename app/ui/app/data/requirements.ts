@@ -74,7 +74,7 @@ const ABSENT_FEEDS: Partial<Record<NeedKey, string>> = { netflow: "netflow", sys
  * so between the first screen and the last wave a model exists while a source has not been read yet —
  * and a source nobody has read is not a source that is missing.
  */
-export function evaluateNeeds(counts: Record<string, number | null>, model: NetworkModel | null, source: "live" | "example", absent: Record<string, number | undefined> = {}, loading = false, unread: readonly string[] = [], failed: readonly string[] = []): Record<NeedKey, Need> {
+export function evaluateNeeds(counts: Record<string, number | null>, model: NetworkModel | null, source: "live" | "example", absent: Record<string, number | undefined> = {}, loading = false, unread: readonly string[] = [], failed: readonly string[] = [], blocked: readonly string[] = []): Record<NeedKey, Need> {
   const out = {} as Record<NeedKey, Need>;
   (Object.keys(CATALOG) as NeedKey[]).forEach((key) => {
     const { label, how, queries = [] } = CATALOG[key];
@@ -114,6 +114,13 @@ export function evaluateNeeds(counts: Record<string, number | null>, model: Netw
       // query answers in under two seconds from the browser's own cache while the conversations take
       // nine; in between, one answer in hand was enough for the page to announce that nothing arrives.
       const outstanding = loading && queries.some((q) => counts[q] == null && !unread.includes(q));
+      // the app is not making these reads and is not going to: it could not find out which buckets
+      // hold the network's logs, and reading every log in the environment to find out is the one
+      // thing it will not do without being told to
+      if (queries.length > 0 && queries.every((q) => blocked.includes(q))) {
+        out[key] = { key, label, how, status: "failed", detail: "not read: the bucket setting could not be read from this environment · Settings › Data" };
+        return;
+      }
       // every read behind it came back as an error: the environment was asked and the answer never
       // arrived, which is a different sentence from either "still reading" or "nothing is sent here"
       if (queries.length > 0 && queries.every((q) => failed.includes(q))) {

@@ -38,6 +38,8 @@ const RETRY_MS = 1200;
 export function envSetting<T>(key: string, fallback: T, parse: (raw: string) => T) {
   let state: SettingState<T> = { value: fallback, resolved: false, unreadable: false, unsaved: null };
   let asked = false;
+  /** a read is on the wire: asking again while it is would only duplicate it */
+  let reading = false;
   /** set here since the page opened: an initial read that lands later must not undo it */
   let touched = false;
   const listeners = new Set<() => void>();
@@ -45,24 +47,40 @@ export function envSetting<T>(key: string, fallback: T, parse: (raw: string) => 
   const set = (patch: Partial<SettingState<T>>) => { state = { ...state, ...patch }; notify(); };
 
   const read = (attempt: number): void => {
+    reading = true;
     stateClient.getAppState({ key })
-      .then((s) => set(touched ? { resolved: true } : { value: parse(s.value), resolved: true, unreadable: false }))
+      .then((s) => { reading = false; set(touched ? { resolved: true, unreadable: false } : { value: parse(s.value), resolved: true, unreadable: false }); })
       .catch((e) => {
         // never written is an answer; anything else is the environment failing to answer, and one
         // retry separates a lost request from a permission the app does not have
-        if (missing(e)) return set({ resolved: true, unreadable: false });
+        if (missing(e)) { reading = false; return set({ resolved: true, unreadable: false }); }
         if (attempt === 0) { setTimeout(() => read(1), RETRY_MS); return; }
+        reading = false;
         set({ resolved: true, unreadable: true });
       });
   };
   const load = () => { if (asked) return; asked = true; read(0); };
 
+  /**
+   * Saves go out one at a time, and only the last one issued may speak for the setting.
+   *
+   * They were sent as they came. Pick 30 and then 70 quickly: both are in the air, and if 70 lands
+   * while 30 is still failing, the screen holds 70, `unsaved` holds 30, and "Save again" writes the
+   * older number over the newer one everybody else already has. Two requests can also arrive at the
+   * tenant in the other order and leave it holding the one the reader changed their mind about.
+   * Chaining them fixes the order; the sequence number fixes who is allowed to report.
+   */
+  let issued = 0;
+  let queue: Promise<unknown> = Promise.resolve();
   const store = (next: T): Promise<void> => {
     touched = true;
+    const mine = ++issued;
     set({ value: next, unsaved: null });
-    return stateClient.setAppState({ key, body: { value: JSON.stringify(next) } })
-      .then(() => set({ unsaved: null }))
-      .catch(() => { set({ unsaved: next }); });
+    queue = queue.then(() => stateClient.setAppState({ key, body: { value: JSON.stringify(next) } }).then(
+      () => { if (mine === issued) set({ unsaved: null }); },
+      () => { if (mine === issued) set({ unsaved: next }); },
+    ));
+    return queue as Promise<void>;
   };
 
   return {
@@ -73,6 +91,18 @@ export function envSetting<T>(key: string, fallback: T, parse: (raw: string) => 
     save: (next: T) => store(next),
     /** offer the environment the value it refused, again */
     retry: () => (state.unsaved == null ? Promise.resolve() : store(state.unsaved)),
+    /**
+     * Ask the environment again for a setting it could not give.
+     *
+     * Something has to be able to clear `unreadable`, because what depends on it is held while it
+     * stands: a reader who fixes the permission, or whose network came back, has no other way to
+     * tell the app to look again short of reloading it.
+     */
+    retryRead: () => {
+      if (reading || !state.unreadable) return;
+      set({ resolved: false, unreadable: false });
+      read(0);
+    },
     /* the two halves of useSyncExternalStore, so each setting keeps its own hook with its own name */
     subscribe: (l: () => void) => { load(); listeners.add(l); return () => { listeners.delete(l); }; },
     snapshot: (): SettingState<T> => state,

@@ -78,7 +78,7 @@ export function App() {
   const openSettings = (focus: NeedKey | null = null) => { setSettingsFocus(focus); setSettingsOpen(true); };
 
   const infos = useMemo(() => (model ? allSites(model) : []), [model]);
-  const needs = useMemo(() => evaluateNeeds(net.counts, model, url.source, net.absent, net.loading, net.unread, net.failed), [JSON.stringify(net.counts), model, url.source, JSON.stringify(net.absent), net.loading, net.unread.join(","), net.failed.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const needs = useMemo(() => evaluateNeeds(net.counts, model, url.source, net.absent, net.loading, net.unread, net.failed, net.blocked), [JSON.stringify(net.counts), model, url.source, JSON.stringify(net.absent), net.loading, net.unread.join(","), net.failed.join(","), net.blocked.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
   // what to do next to get more from the app, measured on this environment
   const buckets = useLogBuckets();
   const stepOpts = { cost: net.cost, bucketsSet: buckets.length > 0 };

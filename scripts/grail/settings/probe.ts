@@ -5,7 +5,7 @@
 // fixtures the rest of the suite runs on: a setting is a round trip, and what matters is what the app
 // believes while the round trip is in flight. Run with `node settings_check.mjs`.
 import { envSetting } from "../../../app/ui/app/hooks/envSetting";
-import { calls, setBehaviour, setSaveFails } from "./stub_state";
+import { calls, saveDelay, saveRejects, setBehaviour, setSaveFails, stateClient } from "./stub_state";
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -63,6 +63,34 @@ async function run() {
   await f.save(99);        // set before it lands
   await tick(); await tick(); await wait(10);
   ok("a late read does not undo a save", f.peek().value === 99, `value=${f.peek().value}`);
+
+  // 6. two saves in the air at once: the older one must not speak for the setting, and the tenant
+  // must not be left holding the value the reader changed their mind about
+  setBehaviour("ok"); setSaveFails(false); saveRejects.clear();
+  const g = envSetting<number>("k7", 7, (raw) => Number(JSON.parse(raw)));
+  g.peek(); await tick(); await tick();
+  saveDelay["30"] = 80; saveRejects.add("30");   // the first is slow and fails
+  saveDelay["70"] = 0;                           // the second is quick and lands
+  const first = g.save(30);
+  const second = g.save(70);
+  await Promise.all([first, second]); await wait(150);
+  const racy = g.peek();
+  ok("an older save cannot report over a newer one", racy.value === 70 && racy.unsaved === null, `value=${racy.value} unsaved=${racy.unsaved}`);
+  const written = JSON.parse((await stateClient.getAppState()).value);
+  ok("the tenant holds the value picked last", written === 70, `stored=${written}`);
+  delete saveDelay["30"]; delete saveDelay["70"]; saveRejects.clear();
+
+  // 7. a setting the tenant could not give can be asked for again
+  setBehaviour("broken");
+  const h = envSetting<number>("k8", 7, (raw) => Number(JSON.parse(raw)));
+  h.peek(); await wait(1600);
+  ok("unreadable before the retry", h.peek().unreadable === true, `unreadable=${h.peek().unreadable}`);
+  setBehaviour("ok");
+  h.retryRead(); await tick(); await tick();
+  const back = h.peek();
+  // 70 and not 42: the stub holds what test 6 wrote, which is the point — the retry reads the
+  // tenant as it stands now, not what it held when the first attempt failed
+  ok("reading it again clears unreadable", back.unreadable === false && back.resolved === true && back.value === 70, `unreadable=${back.unreadable} value=${back.value}`);
 
   console.log(out.join("\n"));
   if (out.some((l) => l.startsWith("FAIL"))) process.exitCode = 1;

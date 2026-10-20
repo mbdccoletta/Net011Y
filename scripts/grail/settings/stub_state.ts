@@ -5,6 +5,10 @@ export let stored = JSON.stringify(42);
 export let saveFails = false;
 export const setBehaviour = (b: typeof behaviour) => { behaviour = b; };
 export const setSaveFails = (v: boolean) => { saveFails = v; };
+/** how long each save takes to answer, by the value written: lets a test land them out of order */
+export const saveDelay: Record<string, number> = {};
+export const saveRejects = new Set<string>();
+
 export const stateClient = {
   getAppState: async () => {
     calls.get += 1;
@@ -16,7 +20,9 @@ export const stateClient = {
   },
   setAppState: async ({ body }: { body: { value: string } }) => {
     calls.set.push(body.value);
-    if (saveFails) throw new Error("refused");
+    const wait = saveDelay[body.value] ?? 0;
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    if (saveFails || saveRejects.has(body.value)) throw new Error("refused");
     stored = body.value;
     return {};
   },
