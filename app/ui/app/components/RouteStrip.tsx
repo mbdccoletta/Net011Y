@@ -39,7 +39,12 @@ export function RouteStrip({ nodes, routes, pick, onPick, alerting }: {
                 <span className="rs-path">
                   <b>{label(r.from)}</b>
                   <i aria-hidden="true">→</i>
-                  <b className={mark ? "rs-alert" : undefined} style={mark ? { ["--c" as string]: mark } : undefined}>{label(r.via)}</b>
+                  {/* The underline is the whole of what an alert looked like here, so the row read
+                      the same to a screen reader whether the device was alerting or not. The chart
+                      beside it has said "is alerting" in a <title> since it was written. */}
+                  <b className={mark ? "rs-alert" : undefined} style={mark ? { ["--c" as string]: mark } : undefined}>
+                    {label(r.via)}{mark && <span className="vz-sr"> is alerting</span>}
+                  </b>
                   <i aria-hidden="true">→</i>
                   <b>{label(r.to)}</b>
                 </span>

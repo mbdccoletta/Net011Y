@@ -9,13 +9,34 @@ import { ExternalLink, Heading, List, Paragraph, Strong, Text } from "@dynatrace
 import type { Need, NeedKey, NeedStatus } from "../data/requirements";
 import { APP_PERMISSIONS, DATA_GROUPS, NETWORK_BUCKET_MATCHER, NETWORK_BUCKET_STEPS, PAGE_NEEDS, SETUP } from "../data/setupGuide";
 import { openNative, openNotebook } from "../utils/drilldown";
-import { useDropThreshold, setDropThreshold } from "../hooks/useDropThreshold";
+import { useDropThresholdState, setDropThreshold, retryDropThreshold } from "../hooks/useDropThreshold";
 import { DEFAULT_DROP_PCT } from "../model/suspicion";
-import { parseBuckets, setLogBuckets, useLogBuckets } from "../hooks/useLogBucket";
+import { parseBuckets, setLogBuckets, retryLogBuckets, useLogBucketState } from "../hooks/useLogBucket";
 import { SOURCE_RECHECK_MS, type LoadCost, type SourceGroup } from "../data/useNetwork";
 import { FAMILIES } from "../data/formats";
 import type { Step } from "../model/nextSteps";
 import type { NetworkModel } from "../model/types";
+
+/**
+ * What a setting says when the tenant did not take it, or could not be asked.
+ *
+ * A save that fails left the new value on the screen and the old one in the environment, so the
+ * reader believed their colleagues were working from what they were looking at. The value that did
+ * not land is named, and offered again.
+ */
+function SettingTrouble({ unsaved, unreadable, what, onRetry }: {
+  unsaved: string | null; unreadable: boolean; what: string; onRetry: () => void;
+}) {
+  if (unsaved == null && !unreadable) return null;
+  return (
+    <div className="ds-row" role="alert">
+      <Text textStyle="small">{unsaved != null
+        ? `${what} is not stored in this environment: ${unsaved} is on this screen only, and everyone else still has the value before it.`
+        : `${what} could not be read from this environment, so the app is running on its default. A permission or a failed request, not a setting that was never made.`}</Text>
+      {unsaved != null && <Button onClick={onRetry}>Save again</Button>}
+    </div>
+  );
+}
 
 const SOURCE_LABEL: Record<SourceGroup, string> = {
   netflow: "NetFlow / IPFIX", deviceLogs: "Syslog and SNMP traps",
@@ -107,7 +128,8 @@ function LoadMeter({ cost, buckets, onHow }: { cost: LoadCost; buckets: string[]
 }
 
 export function QueryCostSection({ absent, onRecheck, cost, onHow }: { absent: Partial<Record<SourceGroup, number>>; onRecheck: () => void; cost?: LoadCost | null; onHow?: () => void }) {
-  const buckets = useLogBuckets();
+  const bucketState = useLogBucketState();
+  const buckets = bucketState.value;
   const [draft, setDraft] = React.useState(buckets.join(", "));
   React.useEffect(() => { setDraft(buckets.join(", ")); }, [buckets]);
   const empty = (Object.keys(absent) as SourceGroup[]).filter((g) => absent[g] != null);
@@ -121,7 +143,8 @@ export function QueryCostSection({ absent, onRecheck, cost, onHow }: { absent: P
         Queries on logs, events and sessions are billed by the data Grail scans, not by what they return, and a filter still reads
         every record of the window; metrics, Smartscape and problems are included. The app reads each optional source once; a source that comes back empty is not
         read again for {SOURCE_RECHECK_MS / 3600000} hours. Device logs, traps, neighbours, the NetFlow timeline and the applications&apos;
-        network are kept in this browser: the next open reads only what arrived since, with the same result as reading it all.
+        network are kept for as long as the app is open: while it is, every reread asks only for what arrived since, with the same
+        result as reading it all. Nothing of it is written into the browser.
       </Text>
       {empty.length > 0 ? (
         <List>
@@ -139,6 +162,8 @@ export function QueryCostSection({ absent, onRecheck, cost, onHow }: { absent: P
         <Button variant="emphasized" disabled={parsed.join(",") === buckets.join(",")} onClick={() => setLogBuckets(parsed)}>Save</Button>
       </div>
       {draft.trim() && parsed.length === 0 && <Text textStyle="small">Bucket names use lower-case letters, digits, dashes and underscores.</Text>}
+      <SettingTrouble what="The bucket list" onRetry={retryLogBuckets} unreadable={bucketState.unreadable}
+        unsaved={bucketState.unsaved ? (bucketState.unsaved.join(", ") || "an empty list") : null} />
     </section>
   );
 }
@@ -147,6 +172,7 @@ const STATUS: Record<NeedStatus, { status: "ideal" | "good" | "neutral" | "warni
   ok: { status: "ideal", label: "Received" },
   partial: { status: "warning", label: "Partly received" },
   missing: { status: "critical", label: "Not received" },
+  failed: { status: "warning", label: "Could not be read" },
   loading: { status: "neutral", label: "Checking" },
   simulated: { status: "good", label: "Simulated" },
   manual: { status: "neutral", label: "Checked when used" },
@@ -196,10 +222,13 @@ export function DataSourceSection({ source, scale, onSource }: Pick<Props, "sour
 
 /** The one number the isolation reading uses, kept where the customer can see and change it. */
 export function SuspicionSection() {
-  const pct = useDropThreshold();
+  const drop = useDropThresholdState();
+  const pct = drop.value;
   return (
     <section className="ds-block" aria-labelledby="ds-drop">
       <Heading level={5} id="ds-drop">Traffic drop worth suspecting</Heading>
+      <SettingTrouble what="The threshold" onRetry={retryDropThreshold} unreadable={drop.unreadable}
+        unsaved={drop.unsaved == null ? null : `${drop.unsaved}%`} />
       <Select value={String(pct)} onChange={(v) => setDropThreshold(Number(v ?? DEFAULT_DROP_PCT))}>
         <Select.Trigger placeholder="Threshold" />
         <Select.Content>

@@ -9,7 +9,7 @@ import type { NetworkModel } from "../model/types";
 import { DETAIL_MAX_DEVICES, QUERIES } from "./queries";
 import { familyOfToken } from "./formats";
 import { keep, mergeRows, planFor, type Plan } from "./logCache";
-import { inBuckets, useLogBuckets } from "../hooks/useLogBucket";
+import { inBuckets, useLogBuckets, useLogBucketsResolved } from "../hooks/useLogBucket";
 import { buildRealModel, type QueryResults } from "./buildRealModel";
 
 export type Source = "live" | "example";
@@ -253,6 +253,15 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   const [done2, setDone2] = useState(0);
 
   const buckets = useLogBuckets();
+  /**
+   * A log query runs once the tenant has said which buckets hold the network's logs.
+   *
+   * It used to run immediately against the empty list, which means every bucket: on an environment
+   * with the setting in place that is the whole window scanned for nothing, and then scanned again
+   * when the answer landed and the plan changed. The wait is one app-state read.
+   */
+  const bucketsKnown = useLogBucketsResolved();
+  const waitsForBuckets = (name: string) => !bucketsKnown && /^fetch logs\b/.test(QUERIES[name].query);
   const remembered = useSourceMemory();
   const absent = fresh(remembered.absent, SOURCE_RECHECK_MS);
   const barren = remembered.barren;
@@ -296,7 +305,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     // eslint-disable-next-line react-hooks/rules-of-hooks
     return useDql(
       { query: plans[name]?.query ?? inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500, requestTimeoutMilliseconds: INLINE_MS },
-      { enabled: live && !gated && !familyWaits(name) && !familyAbsent(name) && !isBarren(name) && (!QUERIES[name].detail || detailOk) && viewWants(name) && waveOf(name) <= phase && inLane(name), staleTime: STALE_MS, runInBackground: true },
+      { enabled: live && !gated && !waitsForBuckets(name) && !familyWaits(name) && !familyAbsent(name) && !isBarren(name) && (!QUERIES[name].detail || detailOk) && viewWants(name) && waveOf(name) <= phase && inLane(name), staleTime: STALE_MS, runInBackground: true },
     );
   });
   // what the rest of the app sees of an incremental query is the whole window: the kept part and the new one

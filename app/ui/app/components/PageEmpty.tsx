@@ -23,7 +23,10 @@ export function PageEmpty({ title, detail, keys, needs, configure, onSettings, o
   // The queries run in waves, so a view can have nothing to draw while the sources it draws from have
   // not been read yet. Saying "neither is arriving in this environment" then is a measurement the app
   // has not made: until every source this view needs has answered, it says it is still reading.
-  if (keys.some((k) => needs[k]?.status === "loading")) {
+  /* a read that came back as an error is not a read still running: the page says what happened and
+     keeps the two things the reader can do about it */
+  const broken = keys.filter((k) => needs[k]?.status === "failed");
+  if (!broken.length && keys.some((k) => needs[k]?.status === "loading")) {
     return (
       <div className="vz-body vz-empty">
         <ProgressCircle aria-label="Reading the sources this view needs" />
@@ -32,13 +35,15 @@ export function PageEmpty({ title, detail, keys, needs, configure, onSettings, o
     );
   }
   // whatever the caller names, or the first thing this view needs that is not arriving
-  const target = configure ?? keys.find((k) => needs[k] && (needs[k].status === "missing" || needs[k].status === "partial"));
+  const target = configure ?? broken[0] ?? keys.find((k) => needs[k] && (needs[k].status === "missing" || needs[k].status === "partial"));
   return (
     <div className="vz-body vz-empty">
       <EmptyState>
         <EmptyState.VisualPreset context="generic" type="something-missing" />
-        <EmptyState.Title>{title}</EmptyState.Title>
-        <EmptyState.Details>{detail}</EmptyState.Details>
+        <EmptyState.Title>{broken.length ? "This view could not be read" : title}</EmptyState.Title>
+        <EmptyState.Details>{broken.length
+          ? `${broken.map((k) => needs[k]?.label ?? k).join(", ")}: the query did not come back, so the app cannot say whether this environment sends it. Reload, or open Settings to see what it reads.`
+          : detail}</EmptyState.Details>
         <EmptyState.Actions>
           {onSettings && target && (
             <Button variant="emphasized" onClick={() => onSettings(target)}>Settings › {needs[target]?.label ?? "Data"}</Button>

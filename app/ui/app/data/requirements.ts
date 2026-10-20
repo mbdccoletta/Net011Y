@@ -10,7 +10,16 @@ export type NeedKey =
   | "devices" | "interfaces" | "traffic" | "cpu" | "availability" | "icmp" | "syslog" | "traps"
   | "lldp" | "routing" | "netflow" | "appFlows" | "wan" | "sites" | "alerts" | "assist" | "sessions" | "requests";
 
-export type NeedStatus = "ok" | "partial" | "missing" | "loading" | "simulated" | "manual";
+/**
+ * `failed` is not `missing` and not `loading`.
+ *
+ * A query that errored used to count as a read this app does not have, which is true, and the page
+ * drawing from it then waited for it for ever: three failing ICMP reads left the WAN links page on
+ * its spinner with the setup and example buttons hidden behind it. "Nothing arrives in this
+ * environment" is also not what happened — the app never got an answer either way, and saying which
+ * of the two it is the whole job of this list.
+ */
+export type NeedStatus = "ok" | "partial" | "missing" | "failed" | "loading" | "simulated" | "manual";
 
 export interface Need {
   key: NeedKey;
@@ -65,7 +74,7 @@ const ABSENT_FEEDS: Partial<Record<NeedKey, string>> = { netflow: "netflow", sys
  * so between the first screen and the last wave a model exists while a source has not been read yet —
  * and a source nobody has read is not a source that is missing.
  */
-export function evaluateNeeds(counts: Record<string, number | null>, model: NetworkModel | null, source: "live" | "example", absent: Record<string, number | undefined> = {}, loading = false, unread: readonly string[] = []): Record<NeedKey, Need> {
+export function evaluateNeeds(counts: Record<string, number | null>, model: NetworkModel | null, source: "live" | "example", absent: Record<string, number | undefined> = {}, loading = false, unread: readonly string[] = [], failed: readonly string[] = []): Record<NeedKey, Need> {
   const out = {} as Record<NeedKey, Need>;
   (Object.keys(CATALOG) as NeedKey[]).forEach((key) => {
     const { label, how, queries = [] } = CATALOG[key];
@@ -105,6 +114,12 @@ export function evaluateNeeds(counts: Record<string, number | null>, model: Netw
       // query answers in under two seconds from the browser's own cache while the conversations take
       // nine; in between, one answer in hand was enough for the page to announce that nothing arrives.
       const outstanding = loading && queries.some((q) => counts[q] == null && !unread.includes(q));
+      // every read behind it came back as an error: the environment was asked and the answer never
+      // arrived, which is a different sentence from either "still reading" or "nothing is sent here"
+      if (queries.length > 0 && queries.every((q) => failed.includes(q))) {
+        out[key] = { key, label, how, status: "failed", detail: queries.length === 1 ? "the read did not come back" : `${queries.length} reads did not come back` };
+        return;
+      }
       if (values.every((v) => v === null || v === undefined)) {
         const read = !!model && !loading && !notRead;
         status = read ? "missing" : "loading";

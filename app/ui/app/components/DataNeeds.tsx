@@ -10,6 +10,8 @@ const MARK: Record<Need["status"], { sym: React.ReactNode; cls: string; label: s
   ok: { sym: <SuccessIcon />, cls: "ok", label: "received" },
   partial: { sym: <WarningIcon />, cls: "partial", label: "partly received" },
   missing: { sym: <CriticalIcon />, cls: "missing", label: "missing" },
+  /* the read errored: the app has no answer either way, which is not the same as nothing arriving */
+  failed: { sym: <WarningIcon />, cls: "partial", label: "could not be read" },
   loading: { sym: <RefreshIcon />, cls: "loading", label: "loading" },
   simulated: { sym: <InformationIcon />, cls: "sim", label: "simulated" },
   manual: { sym: <HelpIcon />, cls: "manual", label: "checked on use" },

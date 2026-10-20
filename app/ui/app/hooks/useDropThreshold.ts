@@ -2,45 +2,28 @@
 // customer's number, like the SLA on a circuit: stored in the tenant as app state so the whole team works
 // from the same one. Nothing is kept in the browser — a value mirrored there is one user's copy of a
 // setting that belongs to the environment, and it outlives the change that replaced it.
+//
+// `envSetting` holds the two things this file used to get wrong: a read that lands after a save no longer
+// undoes it, and a save the tenant refuses is reported instead of sitting on the screen as if it were
+// stored.
 import { useSyncExternalStore } from "react";
-import { stateClient } from "@dynatrace-sdk/client-state";
+import { envSetting, type SettingState } from "./envSetting";
 import { DEFAULT_DROP_PCT } from "../model/suspicion";
 
-const KEY = "net-o11y.drop-threshold";
-const listeners = new Set<() => void>();
-
-let pct = DEFAULT_DROP_PCT;
-let loaded = false;
-/**
- * Whether somebody has set it here since the page opened.
- *
- * The first read and a save can be in flight together: set 60 while the initial read of 30 is
- * still on the wire, and the read lands second and puts 30 back on the screen while the tenant
- * holds 60. The screen then disagrees with the store until the next load. A read that was
- * asked for before anyone touched the value has nothing to say once they have.
- */
-let touched = false;
-
-const notify = () => listeners.forEach((l) => l());
 const clamp = (v: number) => Math.min(95, Math.max(5, Math.round(v)));
 const parse = (value: string): number => { const n = Number(JSON.parse(value)); return Number.isFinite(n) ? clamp(n) : DEFAULT_DROP_PCT; };
 
-function load() {
-  if (loaded) return;
-  loaded = true;
-  stateClient.getAppState({ key: KEY })
-    .then((s) => { if (touched) return; pct = parse(s.value); notify(); })
-    .catch(() => { /* not set, or no permission: the default stands */ });
-}
+const setting = envSetting<number>("net-o11y.drop-threshold", DEFAULT_DROP_PCT, parse);
 
-export async function setDropThreshold(next: number) {
-  pct = clamp(next);
-  touched = true;
-  notify();
-  try { await stateClient.setAppState({ key: KEY, body: { value: JSON.stringify(pct) } }); } catch { /* the tenant refused it: the screen shows the new value, the next load shows the stored one */ }
-}
+export const setDropThreshold = (next: number) => setting.save(clamp(next));
+/** offer the tenant a value it refused, again */
+export const retryDropThreshold = () => setting.retry();
 
 export function useDropThreshold(): number {
-  load();
-  return useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l); }, () => pct);
+  return useDropThresholdState().value;
+}
+
+/** the value and what the tenant has done with it, for the screen that lets it be changed */
+export function useDropThresholdState(): SettingState<number> {
+  return useSyncExternalStore(setting.subscribe, setting.snapshot);
 }
