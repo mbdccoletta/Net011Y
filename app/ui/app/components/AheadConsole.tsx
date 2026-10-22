@@ -117,7 +117,12 @@ export function AheadConsole({ model, subjects, scope, onScope }: {
     <div className="acx">
       <header className="acx-mast">
         {/* "13 d of record" abbreviated the unit and named the quantity in this page's own
-            jargon. Both are spelled out: it is how far back the measurements go. */}
+            jargon. Both are spelled out: it is how far back the measurements go.
+            Two words were still doing work the reader could not see. "Room" is room before
+            *what* — the answer is the limit the subject's own owner stated, never one this app
+            chose, and that is the whole stance of the page; and "record" is record of what,
+            which is the hourly series every number here rests on. A reader asked what the
+            title meant, which is the same question that got the unit spelled out. */}
         {/* The page was named after the thing it almost never finds. Measured on this estate
             over an hour and a half: zero subjects on course, every reading, and Dynatrace's own
             analyzer agrees — 172 valid forecasts, no crossings. Room is the reading that exists
@@ -125,7 +130,8 @@ export function AheadConsole({ model, subjects, scope, onScope }: {
         {/* The total was here, in the census strip below and in the room row's own figure —
             three statements of one number within two hundred pixels. It belongs where it is
             clickable, which is the census. */}
-        <h2>Ahead · how much room is left <b>// {hrs(depth).replace(" d", " days").replace(" h", " hours")} of record</b></h2>
+        <h2>Ahead · how much room is left before each one&rsquo;s own limit
+          {" "}<b>// measured on {hrs(depth).replace(" d", " days").replace(" h", " hours")} of hourly record</b></h2>
         {/* The verdict, in the words a reader would use, before any drawing.
             A console that opens with six charts and no sentence makes the reader assemble the
             answer themselves — and on an estate where the answer is "nothing is coming" they
@@ -165,7 +171,10 @@ export function AheadConsole({ model, subjects, scope, onScope }: {
                   devices report no processor and 55 no uplink the record can use. The sentence
                   says what was actually found. */}
               <em>{fmtInt(ports)} uplinks · {fmtInt(procs)} processors · {fmtInt(mems)} memories
-                {" "}· {fmtInt(model.devices.length)} devices · {hrs(depth).replace(" d", " days").replace(" h", " hours")} of record
+                {" "}· {fmtInt(model.devices.length)} devices
+                {/* the median, not a window on the calendar: a record with holes in it has
+                    fewer hours behind it than the days it spans, and this counts the hours */}
+                {" "}· {hrs(depth).replace(" d", " days").replace(" h", " hours")} of hourly record behind the typical one
                 {" "}· drawn no further than {hrs(horizon).replace(" d", " days").replace(" h", " hours")} ahead</em>
               {/* The gap this reading has, in a clause. What it means and what would close it
                   is a question for the Assist, which has the whole method in its context. */}

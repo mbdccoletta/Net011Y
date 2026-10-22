@@ -19,7 +19,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import { HoneycombChart } from "@dynatrace/strato-components/charts";
 import { useTokens } from "../../hooks/useToken";
-import { DEAD, NEAR, ROOM_KINDS, useRoom, type RoomCell } from "./room";
+import { DEAD, NEAR, ROOM_KINDS, useRoom, type RoomCell, type RoomKind } from "./room";
 import { useNf, useSel } from "./source";
 
 /**
@@ -176,6 +176,29 @@ export default function RoomComb() {
   const near = ROOM_KINDS.reduce((n, k) =>
     n + cells[k.id].filter((c) => c.reach != null && c.reach >= NEAR).length, 0);
   const picked = pick?.kind === "room" ? pick.key : null;
+  /**
+   * The subject the forecast puts highest, whichever kind it belongs to.
+   *
+   * The count below used to do one thing: switch the hive to the forecast shading and leave
+   * the reader to find the dark end by eye, across three hives of four hundred tiles. On an
+   * estate where nothing reaches ninety it did not even do that — the sentence read "0 could
+   * reach 90% of their own limit — the dark end below", pointing at a dark end that does not
+   * exist, on a button that was disabled so the click did nothing at all.
+   *
+   * A count is only worth printing if it is a way to the subjects it counts, so the click
+   * opens one: the highest the band goes over the horizon. That is a pick like any other, so
+   * the panel scrolls to its row and opens the three forecast readings under it.
+   */
+  const highest = useMemo(() => {
+    let best: { of: RoomKind; c: RoomCell } | null = null;
+    for (const k of ROOM_KINDS) {
+      for (const c of cells[k.id]) {
+        if (c.reach == null) continue;
+        if (!best || c.reach > (best.c.reach as number)) best = { of: k.id, c };
+      }
+    }
+    return best;
+  }, [cells]);
   /* read off this card, because the ramp is declared on the themed block above it and not
      on :root; `inkRef` goes on the card, and `--sel` comes from the same read */
   const [ink, inkRef] = useTokens({ ...RAMP_VARS, "--sel": "#ff8643" });
@@ -230,15 +253,24 @@ export default function RoomComb() {
               aria-pressed={view === v} onClick={() => setView(v)}>{t}</button>
           ))}
         </div>
-        {/* The ring these used to wear is gone with the hand-rolled hive, so the count is the
-            way to them: the subjects that could reach ninety are only dark in the forecast
-            view, and this is the switch to it. */}
-        <div className="rc-near">
-          <button type="button" onClick={() => setView("reach")} disabled={view === "reach" || !near}>
-            <b>{near}</b> could reach {NEAR}% of their own limit
-            {view === "reach" ? " — the dark end below" : " (show the forecast)"}
-          </button>
-        </div>
+        {/* The ring these used to wear is gone with the hand-rolled hive, so this is the way
+            to them: it shades the hive by the forecast and opens the one that goes highest.
+            An estate where nothing is near its limit says so and still offers the way in,
+            because "nothing reaches ninety" is only believable next to what the top of the
+            estate actually is. */}
+        {highest && (
+          <div className="rc-near">
+            <button type="button" onClick={() => {
+              setView("reach");
+              setPick({ kind: "room", of: highest.of, key: highest.c.s.key });
+            }}>
+              {near
+                ? <><b>{near}</b> could reach {NEAR}% of their own limit — open the highest</>
+                : <>Nothing reaches {NEAR}% of its own limit · the highest is{" "}
+                  <b>{highest.c.s.name}</b> at {highest.c.reach}%</>}
+            </button>
+          </div>
+        )}
       </div>
 
       {ROOM_KINDS.map((k) => (
