@@ -18,8 +18,15 @@ export interface RegionShape {
   rings: Float64Array[];
 }
 
-/** Quantised deltas, five bits a character, as scripts/admin1.py writes them. */
-function decode(s: string): Float64Array {
+/**
+ * Quantised deltas, five bits a character, as scripts/admin1.py writes them.
+ *
+ * `grid` is how many steps there are to a degree. A country whose regions are smaller than the
+ * default hundredth of a degree is written on a finer one and says so in its file: the Vatican is
+ * four hundred metres across and came out as a single point, with a box of zero width that the
+ * country lookup could never match.
+ */
+function decode(s: string, grid: number): Float64Array {
   const out: number[] = [];
   let x = 0, y = 0, i = 0;
   while (i < s.length) {
@@ -34,7 +41,7 @@ function decode(s: string): Float64Array {
       vals.push(v & 1 ? -(v >> 1) : v >> 1);
     }
     x += vals[0]; y += vals[1];
-    out.push(x / 100, y / 100);
+    out.push(x / grid, y / grid);
   }
   return new Float64Array(out);
 }
@@ -48,10 +55,11 @@ function ofCountry(cc: string): Promise<RegionShape[]> {
   const p: Promise<RegionShape[]> = load
     ? load().then((m) => {
       const c: Admin1Country = m.default;
+      const grid = c.g ?? 100;
       return c.regions.map((r) => ({
         cc, code: r.code, name: r.name, lon: r.lon, lat: r.lat,
         box: r.b as unknown as readonly [number, number, number, number],
-        rings: r.d.map(decode),
+        rings: r.d.map((d) => decode(d, grid)),
       }));
     }).catch(() => [])
     : Promise.resolve([]);

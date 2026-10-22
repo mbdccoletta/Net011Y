@@ -77,7 +77,7 @@ def inside_points(ring):
     return out[:9] or [(cx, cy)]
 
 
-def decode(s):
+def decode(s, grid=100):
     """The app's own decoder, in Python: five bits a character, quantised deltas."""
     out = []
     x = y = 0
@@ -96,7 +96,7 @@ def decode(s):
             vals.append(-(v >> 1) if v & 1 else v >> 1)
         x += vals[0]
         y += vals[1]
-        out.append((x / 100, y / 100))
+        out.append((x / grid, y / grid))
     return out
 
 
@@ -130,8 +130,10 @@ def generated():
         if not m:
             continue
         doc = json.loads(m.group(1))
+        grid = doc.get("g", 100)
         for r in doc["regions"]:
-            r["rings"] = [decode(d) for d in r["d"]]
+            r["rings"] = [decode(d, grid) for d in r["d"]]
+            r["grid"] = grid
         out[doc["cc"]] = doc["regions"]
     return out
 
@@ -191,7 +193,7 @@ def main():
     # It is still drawn and still labelled; what it cannot do is claim a site. That is a property of
     # the format, stated here, and not a defect to be reported as one.
     GRID_DEG = 0.01
-    missing, moved, dupes, mislabelled, subgrid = [], [], [], [], []
+    missing, moved, dupes, mislabelled, subgrid, collapsed = [], [], [], [], [], []
     checked = 0
     for cc, feats in sorted(by_cc.items()):
         regions = gen.get(cc)
@@ -207,6 +209,14 @@ def main():
         for code, names in seen.items():
             if len(names) > 1:
                 dupes.append((cc, code, names))
+        # A shape that quantised down to a point is not an outline and its box matches nothing:
+        # the Vatican was written as one coordinate repeated, with a box of zero width, so the
+        # country could never be selected and the region could never be drawn. The grid a file is
+        # written on exists to prevent exactly this, and this is what asks whether it worked.
+        for r in regions:
+            pts = {pt for ring in r["rings"] for pt in ring}
+            if len(pts) < 3 or r["b"][2] <= r["b"][0] or r["b"][3] <= r["b"][1]:
+                collapsed.append((cc, r["code"], r["name"], f"{len(pts)} distinct points", r["b"], f"grid {r['grid']}"))
         for f in feats:
             p = f["properties"]
             code = (p.get("iso_3166_2") or "").split("-")[-1] or p.get("postal") or ""
@@ -266,6 +276,10 @@ def main():
     if worst:
         print("    by country:", ", ".join(f"{cc} {n}" for cc, n in sorted(worst.items(), key=lambda kv: -kv[1])[:10]))
 
+    print(f"\nregions that quantised down to nothing: {len(collapsed)}")
+    for row in collapsed[:10]:
+        print("   ", row)
+
     print(f"\nregions smaller than the coordinate grid, which no point can resolve: {len(subgrid)}")
     for row in subgrid[:8]:
         print("   ", row)
@@ -312,7 +326,7 @@ def main():
     for row in wrong_place:
         print("   ", row)
 
-    bad = len(missing) + len(moved) + len(dupes) + len(wrong_place)
+    bad = len(missing) + len(moved) + len(dupes) + len(wrong_place) + len(collapsed)
     print(f"\n{'OK' if not bad else str(bad) + ' to answer for'}")
     sys.exit(1 if bad else 0)
 

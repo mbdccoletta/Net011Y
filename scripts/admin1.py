@@ -91,6 +91,29 @@ def relabel(cc, props, code, name):
     return code, name
 
 
+def grid_for(spans):
+    """The grid a country is written on: fine enough that its smallest region is still a shape.
+
+    Coordinates are quantised, and a region narrower than a cell collapses. The Vatican — four
+    hundred metres across — came out as a single point with a bounding box of zero width, which
+    `countriesOf()` can never match, so a site there got no outlines and the one region it has could
+    not be drawn. One grid for the whole world cannot hold both Russia and the Vatican, so each
+    country is written on its own: the default hundredth of a degree, doubled until the smallest
+    region spans four cells, which is the fewest a quadrilateral can be drawn on. Only the countries
+    that need it pay for it, and the file says which grid it used.
+
+    Four and not eight because the grid is the whole country's: one small region in a large country
+    would otherwise refine every outline in it. Measured over the whole world — eight cells costs
+    1,149 KB and puts Russia at 75 KB, four costs 1,120 and keeps Russia at 64, for the same
+    countries rescued.
+    """
+    smallest = min([s for s in spans if s > 0] or [1.0])
+    grid = GRID
+    while smallest * grid < 4 and grid < 100000:
+        grid *= 2
+    return grid
+
+
 def tolerance_for(area):
     """How coarse a region may be drawn: a fraction of its own size, never coarser than the default.
 
@@ -112,12 +135,13 @@ def area_of(ring):
     return abs(s) / 2
 
 
-def encode(ring):
+def encode(ring, grid=None):
     """Quantised deltas as a string: one signed varint per value, six bits a character."""
+    grid = grid or GRID
     out = []
     px = py = 0
     for x, y in ring:
-        qx, qy = round(x * GRID), round(y * GRID)
+        qx, qy = round(x * grid), round(y * grid)
         for d in (qx - px, qy - py):
             v = (abs(d) << 1) | (1 if d < 0 else 0)
             while True:
@@ -154,7 +178,8 @@ def cluster_boxes(bs, gap=1.0, cap=14):
         k = min(range(len(boxes)), key=lambda i: abs(boxes[i][0] - a[0]) + abs(boxes[i][1] - a[1]))
         b = boxes[k]
         boxes[k] = [min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])]
-    return [[round(v, 2) for v in b] for b in boxes]
+    return [[math.floor(b[0] * 1e4) / 1e4, math.floor(b[1] * 1e4) / 1e4,
+             math.ceil(b[2] * 1e4) / 1e4, math.ceil(b[3] * 1e4) / 1e4] for b in boxes]
 
 
 def main():
@@ -208,10 +233,14 @@ def main():
             "code": code, "name": feature_name,
             "postal": (p.get("postal") or "").strip(), "hasc": (p.get("code_hasc") or "").strip(),
             "adm1": (p.get("adm1_code") or "").strip(),
-            "lon": round(cx, 2), "lat": round(cy, 2),
-            "b": [round(min(xs), 2), round(min(ys), 2), round(max(xs), 2), round(max(ys), 2)],
-            "p": [[round(v, 2) for v in q] for q in parts],
-            "d": [encode(r) for r in rings],
+            "lon": round(cx, 4), "lat": round(cy, 4),
+            # the box is rounded outward: it decides whether a region is even looked at, and a box
+            # that rounds inward can exclude a point the region contains
+            "b": [math.floor(min(xs) * 1e4) / 1e4, math.floor(min(ys) * 1e4) / 1e4,
+                  math.ceil(max(xs) * 1e4) / 1e4, math.ceil(max(ys) * 1e4) / 1e4],
+            "p": [[math.floor(q[0] * 1e4) / 1e4, math.floor(q[1] * 1e4) / 1e4,
+                   math.ceil(q[2] * 1e4) / 1e4, math.ceil(q[3] * 1e4) / 1e4] for q in parts],
+            "rings": rings,
         })
 
     # Natural Earth gives two of the Solomon Islands' provinces the same iso_3166_2 (Western and
@@ -258,8 +287,14 @@ def main():
         # way the enclave is asked about first and answers for itself.
         regions.sort(key=lambda r: (r["b"][2] - r["b"][0]) * (r["b"][3] - r["b"][1]))
         boxes[cc] = cluster_boxes([q for r in regions for q in r["p"]])
-        drop = ("p", "postal", "hasc", "adm1")
-        body = json.dumps({"cc": cc, "regions": [{k: v for k, v in r.items() if k not in drop} for r in regions]}, separators=(",", ":"), ensure_ascii=False)
+        grid = grid_for([span for r in regions for span in (r["b"][2] - r["b"][0], r["b"][3] - r["b"][1])])
+        for r in regions:
+            r["d"] = [encode(ring, grid) for ring in r["rings"]]
+        drop = ("p", "postal", "hasc", "adm1", "rings")
+        doc = {"cc": cc, "regions": [{k: v for k, v in r.items() if k not in drop} for r in regions]}
+        if grid != GRID:
+            doc["g"] = grid
+        body = json.dumps(doc, separators=(",", ":"), ensure_ascii=False)
         size = len(body.encode())
         total += size
         rows.append((cc, len(regions), size))
@@ -275,7 +310,8 @@ def main():
             "// A country's outlines are a chunk of their own: the bounding boxes say which countries the\n"
             "// sites fall in, and only those are fetched. Nobody who never opens the view downloads any.\n"
             "export interface Admin1Region { code: string; name: string; lon: number; lat: number; b: readonly number[]; d: readonly string[] }\n"
-            "export interface Admin1Country { cc: string; regions: readonly Admin1Region[] }\n\n"
+            "/** coordinates are quantised to 1/g of a degree; absent means the default hundredth */\n"
+            "export interface Admin1Country { cc: string; g?: number; regions: readonly Admin1Region[] }\n\n"
             "/** lon/lat boxes per country, west, south, east, north. More than one where a country\n"
             " *  has territories far from the rest of it. */\n"
             "export const ADMIN1_BOXES: Record<string, readonly (readonly number[])[]> = "
