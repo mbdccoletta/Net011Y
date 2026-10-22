@@ -147,10 +147,19 @@ function DeviceStrips({ devices, onDevice }: { devices: Device[]; onDevice: (nam
   );
 }
 
-/** A circuit's latency against its SLA as a bar; down links show as a red block. */
+/**
+ * A circuit's latency against its SLA as a bar; down links show as a red block.
+ *
+ * The three columns are named. They were a name, a bar and a number, and a reader who had not
+ * built the thing had to work out that the bar was latency against the SLA tagged on the monitor
+ * and that the number beside it was that pair in milliseconds.
+ */
 export function SlaBars({ circuits, onLink, nameOf }: { circuits: Circuit[]; onLink: (id: string) => void; nameOf?: (c: Circuit) => string }) {
   return (
     <div className="vz-sla">
+      <div className="vz-sla__row vz-sla__head" role="row" aria-hidden="true">
+        <span>Link</span><span>Latency against its SLA</span><span>Measured / SLA</span>
+      </div>
       {circuits.map((c) => {
         const ratio = c.latencyMs != null ? c.latencyMs / c.slaMs : null;
         const tone = c.status === "down" ? TONE.bad : verdictTone(c.verdict);

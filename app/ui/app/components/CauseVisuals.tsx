@@ -222,11 +222,17 @@ export function CauseDetail({ cause, onDevice }: { cause: Cause; onDevice: (name
       {rest.length > 0 && (
         <>
           <div className="lm-detail__h">What it reported</div>
+          {/* The dot is a severity and the middle column is where the line came from, neither of
+              which the rows said out loud: the first was colour alone, which is no answer to a
+              reader who cannot see it, and the second looked like part of the sentence. */}
           <ul className="lm-detail__ev">
+            <li className="lm-detail__evhead" role="row">
+              <span aria-hidden="true" /><span>Source</span><span>What it reported</span>
+            </li>
             {rest.slice(0, 8).map(({ e, devices }) => (
               <li key={e.id}>
                 <i style={{ background: MAP_COLORS[e.level] }} aria-hidden="true" />
-                <span className="lm-detail__src">{srcLabel(e.source)}</span>
+                <span className="lm-detail__src"><span className="vz-sr">{e.level}. </span>{srcLabel(e.source)}</span>
                 <span>
                   <span className="lm-detail__txt">{e.text}</span>
                   {devices.length === 1 && (
@@ -345,6 +351,9 @@ export function NetworkStatus({ infos, onRegion }: { infos: SiteInfo[]; onRegion
         <text x={60} y={76} textAnchor="middle" fontSize={fitInCircle(`of ${fmtInt(infos.length)}`, R - 6, 12)} fill="var(--lm-muted)">of {fmtInt(infos.length)}</text>
       </svg>
       <div className="lm-regions">
+        <div className="lm-region lm-region--head" role="row" aria-hidden="true">
+          <span>Region</span><span>Sites by status</span><b>Bad</b>
+        </div>
         {regions.map(({ r, list }) => (
           <button key={r} type="button" className="lm-region" onClick={() => onRegion?.(r)} disabled={!onRegion}
             aria-label={`${r}: ${list.filter((i) => isBad(i.verdict)).length} of ${list.length} sites with issues`}>

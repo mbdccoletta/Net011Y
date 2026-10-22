@@ -320,7 +320,9 @@ export function LinksVisual(p: VisualProps) {
   // whole drawing being blown up.
   const [chartRef, chartW] = useElementWidth<HTMLDivElement>(760);
   const W = Math.max(520, chartW);
-  const rowH = W < 720 ? 52 : 56, top = 20, SEGS = 24, OVER_SEGS = 5;
+  // the extra room above the first row is the header: four columns of values with nothing saying
+  // what they are is a table without column names, whatever it is drawn with
+  const rowH = W < 720 ? 52 : 56, top = 36, SEGS = 24, OVER_SEGS = 5;
   const LABEL_W = Math.round(Math.min(240, Math.max(150, W * 0.22)));
   const PILL_W = 104, SLA_LABEL_W = 96;
   const METER_X = LABEL_W + 16;
@@ -379,6 +381,13 @@ export function LinksVisual(p: VisualProps) {
                     <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
                   </filter>
                 </defs>
+                <g className="vz-svg-head" aria-hidden="true">
+                  <text x={22} y={16} className="vz-svg-cap">Carrier</text>
+                  <text x={METER_X} y={16} className="vz-svg-cap">Median latency</text>
+                  <text x={SLA_X + 12} y={16} className="vz-svg-cap">Its SLA</text>
+                  <text x={PILL_X + PILL_W / 2} y={16} textAnchor="middle" className="vz-svg-cap">State</text>
+                  <line x1={0} x2={W} y1={top - 8} y2={top - 8} stroke="var(--lm-line)" opacity={0.5} />
+                </g>
                 {carriers.map((g, k) => {
                   const y = top + k * rowH + rowH / 2;
                   const dim = !!focusCarrier && !inSet(focusCarrier, g.name);

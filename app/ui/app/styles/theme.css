@@ -376,6 +376,8 @@
 .lm-netstatus { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 14px; align-items: center; }
 .lm-ring { width: 116px; height: 116px; }
 .lm-regions { display: grid; gap: 6px; }
+.lm-region--head > span, .lm-region--head > b { font: 500 11px var(--lm-label); letter-spacing: .02em; color: var(--lm-ink-3); }
+.lm-region--head > b { font-family: var(--lm-label); }
 .lm-region { display: grid; grid-template-columns: 76px minmax(0, 1fr) 28px; align-items: center; gap: 8px; border: 0; background: none; padding: 2px 0; cursor: pointer; text-align: left; }
 .lm-region:disabled { cursor: default; }
 .lm-region__name { font: 600 12px var(--lm-label); color: var(--lm-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -469,6 +471,7 @@
 }
 .lm-detail__ev { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .lm-detail__ev li { display: grid; grid-template-columns: 8px 62px minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: 12px; }
+.lm-detail__evhead > span { font: 500 11px var(--lm-label); letter-spacing: .02em; color: var(--lm-ink-3); }
 .lm-detail__ev i { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
 .lm-detail__src { color: var(--lm-ink-3); font-size: 11px; }
 .lm-detail__go {
@@ -662,6 +665,9 @@
 .vz-strip__cells em { font: 500 12px var(--lm-label); color: var(--lm-ink-3); font-style: normal; grid-column: 1 / -1; }
 .vz-strips__axis { display: flex; justify-content: space-between; margin-left: 106px; font: 500 12px var(--lm-label); color: var(--lm-ink-3); }
 .vz-sla { display: grid; gap: 8px; }
+/* the column names, in the same grid as the rows so they sit over what they name */
+.vz-sla__head > span { font: 500 11px var(--lm-label); letter-spacing: .02em; color: var(--lm-ink-3); }
+.vz-sla__head > span:last-child { text-align: right; }
 .vz-sla__row { display: grid; grid-template-columns: 130px minmax(0, 1fr) 96px; align-items: center; gap: 10px; border: 0; background: none; padding: 0; cursor: pointer; text-align: left; }
 .vz-sla__name { font: 600 12px var(--lm-label); color: var(--lm-ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vz-sla__track { position: relative; height: 10px; border-radius: 5px; background: color-mix(in srgb, var(--lm-ink-hi) 8%, transparent); }
