@@ -10,12 +10,19 @@ Output: app/ui/app/data/geo/admin1/<cc>.ts, plus an index of which countries exi
 
 Without --write it only measures, which is the point: the size is the decision.
 """
-import json, pathlib, sys, math
+import json, pathlib, sys, math, re
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "data/geo/ne_admin1_10m.geojson"
 OUT = ROOT / "app/ui/app/data/geo/admin1"
-TOL = float(sys.argv[1]) if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else 0.05
+# Two kilometres, not five.
+#
+# The tolerance is the width of the error at a border, and a border is where this layer is asked its
+# only question: which region is this site in. At 0.05° a site within five kilometres of a boundary
+# could fall on the wrong side of it; the files cost 866 KB across 240 countries at that figure and
+# 1,048 KB at 0.02°, spread over one chunk per country that nobody fetches unless they have a site
+# in it. The median country is two and a half kilobytes either way.
+TOL = float(sys.argv[1]) if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else 0.02
 WRITE = "--write" in sys.argv
 # coordinates are kept to a hundredth of a degree: about a kilometre, under the width of the line
 # that draws them at any zoom this map reaches
@@ -47,6 +54,55 @@ def simplify(points, tol):
             stack.append((a, wi))
             stack.append((wi, b))
     return [p for p, k in zip(points, keep) if k]
+
+
+# Two countries whose labels Natural Earth has shifted against the geometry.
+#
+# The feature that covers Asmara is named "Anseba" and coded ER-AN; the GeoNames fields on that same
+# feature say "Maekel Region" and ER.05, which is where Asmara is. Six cities in Eritrea and six in
+# Guyana were put through the source geometry and the GeoNames name was right every time — Keren in
+# Anseba, Massawa in the Northern Red Sea, Lethem in Upper Takutu-Upper Essequibo, Georgetown in
+# Demerara-Mahaica. Nothing here is a judgement about the shapes: the outlines are the source's, and
+# only the name and the code on them are taken from the other fields of the same record.
+#
+# `python3 scripts/geo_check.py` re-tests those cities, so a regeneration that loses this fails.
+RELABEL = {
+    "ER": {"Anseba": "AN", "Debub": "DU", "Debubawi Keyih Bahri": "DK", "Southern Red Sea": "DK",
+           "Gash-Barka": "GB", "Maekel": "MA", "Semenawi Keyih Bahri": "SK", "Northern Red Sea": "SK"},
+    "GY": {"Barima-Waini": "BA", "Cuyuni-Mazaruni": "CU", "Demerara-Mahaica": "DE",
+           "East Berbice-Corentyne": "EB", "Essequibo Islands-West Demerara": "ES",
+           "Mahaica-Berbice": "MA", "Pomeroon-Supenaam": "PM", "Potaro-Siparuni": "PT",
+           "Upper Demerara-Berbice": "UD", "Upper Takutu-Upper Essequibo": "UT"},
+}
+
+
+def relabel(cc, props, code, name):
+    """The name and code the GeoNames fields give this polygon, where those are the ones to trust."""
+    table = RELABEL.get(cc)
+    if not table:
+        return code, name
+    for field in ("gn_name", "gns_name"):
+        raw = (props.get(field) or "").strip()
+        if not raw:
+            continue
+        clean = re.sub(r"\s+(Region|Province|District)$", "", raw)
+        if clean in table:
+            return table[clean], clean
+    return code, name
+
+
+def tolerance_for(area):
+    """How coarse a region may be drawn: a fraction of its own size, never coarser than the default.
+
+    One tolerance for the whole world is one tolerance for Siberia and for a Maltese locality. At
+    0.05° — about five kilometres — a locality a kilometre across simplifies to fewer than four
+    points and is dropped, which is how sixty-four of Malta's sixty-eight regions, and Anguilla
+    entirely, failed to reach the app: the bounds that decide whether a country's outlines are
+    fetched at all were then computed from the four that survived, so a site in Valletta got no
+    Maltese outlines. A region keeps its shape to about a twenty-fifth of its own width now, and
+    nothing is simplified below a hundred metres, which is finer than the line that draws it.
+    """
+    return max(0.001, min(TOL, math.sqrt(max(area, 1e-9)) / 25))
 
 
 def area_of(ring):
@@ -111,20 +167,32 @@ def main():
             continue
         geom = f["geometry"]
         polys = geom["coordinates"] if geom["type"] == "MultiPolygon" else [geom["coordinates"]]
+        outers = [[(float(x), float(y)) for x, y in poly[0]] for poly in polys]
+        if not outers:
+            continue
+        # the region's own size sets how finely it is drawn, and its largest piece is never dropped:
+        # a region that reaches the app as nothing at all takes its name, its code and its share of
+        # the country's bounds with it
+        main = max(outers, key=area_of)
+        tol = tolerance_for(area_of(main))
         rings = []
-        for poly in polys:
-            outer = [(float(x), float(y)) for x, y in poly[0]]
-            if area_of(outer) < TOL * TOL * 4:   # an island smaller than the pen that draws it
+        for outer in outers:
+            a_outer = area_of(outer)
+            if outer is not main and a_outer < tol * tol * 4:   # an island smaller than the pen that draws it
                 continue
-            s = simplify(outer, TOL)
-            if len(s) >= 4:
-                rings.append(s)
+            simplified = simplify(outer, tol)
+            if len(simplified) < 4:
+                # whatever is left of a shape this small is still where the region is
+                simplified = outer if len(outer) >= 4 else None
+            if simplified:
+                rings.append(simplified)
         if not rings:
             continue
         big = max(rings, key=area_of)
         cx = sum(x for x, _ in big) / len(big)
         cy = sum(y for _, y in big) / len(big)
         code = (p.get("iso_3166_2") or "").split("-")[-1] or p.get("postal") or ""
+        code, feature_name = relabel(cc, p, code, p.get("name") or code)
         xs = [x for r in rings for x, _ in r]
         ys = [y for r in rings for _, y in r]
         # A region that crosses the antimeridian — Chukotka, the Aleutians, Fiji — has points at both
@@ -137,19 +205,61 @@ def main():
         else:
             parts = [[min(xs), min(ys), max(xs), max(ys)]]
         by_cc.setdefault(cc, []).append({
-            "code": code, "name": p.get("name") or code,
+            "code": code, "name": feature_name,
+            "postal": (p.get("postal") or "").strip(), "hasc": (p.get("code_hasc") or "").strip(),
+            "adm1": (p.get("adm1_code") or "").strip(),
             "lon": round(cx, 2), "lat": round(cy, 2),
             "b": [round(min(xs), 2), round(min(ys), 2), round(max(xs), 2), round(max(ys), 2)],
             "p": [[round(v, 2) for v in q] for q in parts],
             "d": [encode(r) for r in rings],
         })
 
+    # Natural Earth gives two of the Solomon Islands' provinces the same iso_3166_2 (Western and
+    # Choiseul are both SB-CH), and the same happens in a handful of other countries. The map prints
+    # the code on the region and counts how many distinct ones a view holds, so a repeat hides a
+    # province and undercounts the estate. Where the right answer is known it is written down; where
+    # it is not, the duplicate falls back to the other identifiers the source carries.
+    ISO_FIX = {("SB", "Western"): "WE"}
+
+    def unique_codes(cc, regions):
+        seen = {}
+        for r in regions:
+            fixed = ISO_FIX.get((cc, r["name"]))
+            if fixed:
+                r["code"] = fixed
+            code = r["code"]
+            if code not in seen:
+                seen[code] = r
+                continue
+            # the postal abbreviation, then the source's own admin-1 id, then a number: whatever
+            # separates them, as long as two regions never answer to one code
+            for candidate in (r.get("postal") or "", (r.get("hasc") or "").split(".")[-1], (r.get("adm1") or "")[-4:]):
+                c = candidate.strip()
+                if c and c not in seen:
+                    r["code"] = c
+                    break
+            else:
+                n = 2
+                while f"{code}{n}" in seen:
+                    n += 1
+                r["code"] = f"{code}{n}"
+            seen[r["code"]] = r
+        return regions
+
     total = 0
     rows = []
     boxes = {}
     for cc, regions in sorted(by_cc.items()):
+        regions = unique_codes(cc, regions)
+        # Smallest first, because the app returns the first outline a point falls inside and an
+        # enclave is inside the region around it: holes are not carried (they would cost more than
+        # they are worth here), so Vienna sat inside Lower Austria, the Australian Capital Territory
+        # inside New South Wales, and Botswana's three cities inside their districts. Ordered this
+        # way the enclave is asked about first and answers for itself.
+        regions.sort(key=lambda r: (r["b"][2] - r["b"][0]) * (r["b"][3] - r["b"][1]))
         boxes[cc] = cluster_boxes([q for r in regions for q in r["p"]])
-        body = json.dumps({"cc": cc, "regions": [{k: v for k, v in r.items() if k != "p"} for r in regions]}, separators=(",", ":"), ensure_ascii=False)
+        drop = ("p", "postal", "hasc", "adm1")
+        body = json.dumps({"cc": cc, "regions": [{k: v for k, v in r.items() if k not in drop} for r in regions]}, separators=(",", ":"), ensure_ascii=False)
         size = len(body.encode())
         total += size
         rows.append((cc, len(regions), size))
