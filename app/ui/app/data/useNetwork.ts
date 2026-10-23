@@ -376,10 +376,23 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   }, [live, incrementalNames]);
 
   /* a read served by a metric is not read incrementally: there is nothing to save and nothing to keep */
-  const plans = useMemo(() => Object.fromEntries(NAMES.filter((n) => QUERIES[n].incremental && !asMetric(n))
-    .map((n) => [n, planFor(n, inBuckets(QUERIES[n].query, buckets), QUERIES[n].incremental!)] as const)) as Record<string, Plan>,
+  /**
+   * The plan is made once everything it depends on is known, and not before.
+   *
+   * It used to be rebuilt as each answer arrived — the kept parts, then the metric catalogue — and
+   * a rebuilt plan is a different query string, which fires the read again. Measured against the
+   * tenant: two page loads produced twelve executions of the hour-long flow window, forty-eight
+   * gigabytes where two loads should cost sixteen. The reads that carry a plan already wait for
+   * these answers, so waiting for them here as well costs nothing and stops the window being paid
+   * for twice.
+   */
+  const planReady = keptReady && (!metricKeys.length || !catalogQ.isLoading) && bucketGate.released;
+  const plans = useMemo(() => (planReady
+    ? Object.fromEntries(NAMES.filter((n) => QUERIES[n].incremental && !asMetric(n))
+      .map((n) => [n, planFor(n, inBuckets(QUERIES[n].query, buckets), QUERIES[n].incremental!)] as const)) as Record<string, Plan>
+    : {} as Record<string, Plan>),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [gen, bucketKey, keptReady, published ? [...published].sort().join(",") : ""]);
+  [gen, bucketKey, planReady]);
   /* the queue of the last wave, in the order the registry declares them, and the gate that
      lets a query in once the three ahead of it are out of the way */
   const wave2 = NAMES.filter((n) => waveOf(n) === 2);
@@ -396,7 +409,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     // eslint-disable-next-line react-hooks/rules-of-hooks
     return useDql(
       { query: asMetric(name) ? QUERIES[name].metric!.query : plans[name]?.query ?? inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: QUERIES[name].scanLimitGb ?? SCAN_LIMIT_GB, requestTimeoutMilliseconds: INLINE_MS },
-      { enabled: live && !gated && !waitsForBuckets(name) && !metricWaits(name) && (keptReady || !QUERIES[name].incremental) && !familyWaits(name) && !familyAbsent(name) && !isBarren(name) && (!QUERIES[name].detail || detailOk) && viewWants(name) && waveOf(name) <= phase && inLane(name), staleTime: STALE_MS, runInBackground: true },
+      { enabled: live && !gated && !waitsForBuckets(name) && !metricWaits(name) && (planReady || !QUERIES[name].incremental) && !familyWaits(name) && !familyAbsent(name) && !isBarren(name) && (!QUERIES[name].detail || detailOk) && viewWants(name) && waveOf(name) <= phase && inLane(name), staleTime: STALE_MS, runInBackground: true },
     );
   });
   // what the rest of the app sees of an incremental query is the whole window: the kept part and the new one
