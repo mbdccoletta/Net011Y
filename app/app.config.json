@@ -2,7 +2,7 @@
   "environmentUrl": "https://ENVIRONMENTID.apps.dynatrace.com",
   "app": {
     "name": "NetO11y",
-    "version": "0.1.81",
+    "version": "0.1.82",
     "description": "Sites, devices and WAN links on one map, with the alerts open on them",
     "icon": "./assets/icon.svg",
     "id": "my.net.o11y",
@@ -46,6 +46,14 @@
       {
         "name": "state:app-states:write",
         "comment": "Saving the site hierarchy for every user of the app"
+      },
+      {
+        "name": "state:user-app-states:read",
+        "comment": "The part of a log window this reader already fetched, kept for them alone so the next open asks only for what came after it"
+      },
+      {
+        "name": "state:user-app-states:write",
+        "comment": "Writing that kept part back, with an expiry, after each read"
       },
       {
         "name": "davis:analyzers:read",

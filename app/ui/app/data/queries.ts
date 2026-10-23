@@ -4,9 +4,25 @@
 import { familiesQuery, familyQueries, vlanQuery } from "./formats";
 import type { Incremental } from "./logCache";
 
+/**
+ * How much a single read may scan before Grail stops it.
+ *
+ * Every query was sent with 1500 GB, which on any real environment is not a limit at all. Its job
+ * is not to save a few gigabytes — it is to turn a pathological estate into something the app can
+ * say out loud instead of a bill nobody expected. The heaviest read measured on a busy environment
+ * scans about ten gigabytes; fifty is five times that and a fiftieth of what was there before.
+ *
+ * A scan that hits the limit does not fail: it comes back truncated, with a warning and a count
+ * that looks like an answer. That is the dangerous part, and why the app compares what was scanned
+ * against the limit it set and treats a read that reached it as a read it does not have.
+ */
+export const SCAN_LIMIT_GB = 50;
+
 export interface NetQuery {
   query: string;
   maxResultRecords?: number;
+  /** a read that may legitimately scan more than SCAN_LIMIT_GB, or less */
+  scanLimitGb?: number;
   /**
    * The query must return the whole estate: if it comes back at its cap, the app is missing elements and
    * says so. Top-N queries (the last traps, the busiest flows) are capped on purpose and are not marked.
@@ -320,7 +336,9 @@ export const QUERIES: Record<string, NetQuery> = {
   flowTs: {
     metric: {
       keys: ["log.net.flow.records", "log.net.flow.bytes"],
-      query: 'timeseries {flows = sum(log.net.flow.records), bytes = sum(log.net.flow.bytes)}, from:now()-70m, interval:5m, by:{exp}',
+      /* the dimension is the field the extraction took it from — a rule cannot rename one — so the
+         query renames it here, and the rows arrive under the name the model already reads */
+      query: 'timeseries {flows = sum(log.net.flow.records), bytes = sum(log.net.flow.bytes)}, from:now()-70m, interval:5m, by:{exp = flow.sampler_address}',
       covers: 'timeseries n = sum(log.net.flow.records), from:now()-70m, interval:35m | fieldsAdd oldest = arrayFirst(n) | fields oldest',
     },
     query: 'fetch logs, from:now()-70m | filter otel.scope.name == "otelcol/netflowreceiver" | makeTimeseries flows=count(), bytes=sum(toLong(flow.io.bytes)), by:{exp=flow.sampler_address}, interval:5m',

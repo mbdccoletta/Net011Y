@@ -9,3 +9,9 @@ execFileSync(esbuild, [`${here}settings/probe.ts`, "--bundle", "--format=esm", "
   `--outfile=${here}out/settings-probe.mjs`, "--log-level=warning",
   `--alias:@dynatrace-sdk/client-state=${here}settings/stub_state.ts`], { stdio: "inherit" });
 execFileSync(process.execPath, [`${here}out/settings-probe.mjs`], { stdio: "inherit" });
+
+// the kept part of a log window: where it is stored, when it expires, and every way that can fail
+execFileSync(esbuild, [`${here}settings/cache_probe.ts`, "--bundle", "--format=esm", "--platform=node",
+  `--outfile=${here}out/cache-probe.mjs`, "--log-level=warning",
+  `--alias:@dynatrace-sdk/client-state=${here}settings/stub_state.ts`], { stdio: "inherit" });
+execFileSync(process.execPath, [`${here}out/cache-probe.mjs`], { stdio: "inherit" });

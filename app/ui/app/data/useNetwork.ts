@@ -6,9 +6,9 @@ import { useDql } from "@dynatrace-sdk/react-hooks";
 import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
 import { clearSourceMemory, setAbsent as rememberAbsent, setBarren as rememberBarren, setPresent as rememberPresent, sourceMemory, useSourceMemory, type Stamps } from "./sourceMemory";
 import type { NetworkModel } from "../model/types";
-import { DETAIL_MAX_DEVICES, QUERIES } from "./queries";
+import { DETAIL_MAX_DEVICES, QUERIES, SCAN_LIMIT_GB } from "./queries";
 import { familyOfToken } from "./formats";
-import { keep, mergeRows, planFor, type Plan } from "./logCache";
+import { keep, loadKeptParts, mergeRows, planFor, type Plan } from "./logCache";
 import { inBuckets, useLogBuckets, useLogBucketGate } from "../hooks/useLogBucket";
 import { buildRealModel, type QueryResults } from "./buildRealModel";
 
@@ -176,6 +176,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   // runInBackground: the SDK cancels a running query when the tab loses focus and does not start it again,
   // so a user who switched tabs during the load came back to a load that never finished
   const inventory = useDql(
+    /* Smartscape, which scans nothing: the limit is irrelevant and a low one would only be a trap */
     { query: QUERIES.devices.query, maxResultRecords: QUERIES.devices.maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500, requestTimeoutMilliseconds: INLINE_MS },
     { enabled: live, staleTime: STALE_MS, runInBackground: true },
   );
@@ -358,11 +359,27 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   // plan is made when the app opens and on Refresh, never while a load is running
   const [gen, setGen] = useState(0);
   const bucketKey = buckets.join(",");
+  /**
+   * The kept parts this reader left behind, fetched once before any plan is made.
+   *
+   * A plan built before they arrive reads the whole window and then keeps it again, which is the
+   * cost this cache exists to avoid — so the incremental reads wait for one state fetch. It is one
+   * round trip against six hours of logs, and a failure is simply no cache.
+   */
+  const incrementalNames = useMemo(() => NAMES.filter((n) => QUERIES[n].incremental), []);
+  const [keptReady, setKeptReady] = useState(false);
+  useEffect(() => {
+    if (!live) { setKeptReady(true); return; }
+    let alive = true;
+    loadKeptParts(incrementalNames).then(() => { if (alive) setKeptReady(true); });
+    return () => { alive = false; };
+  }, [live, incrementalNames]);
+
   /* a read served by a metric is not read incrementally: there is nothing to save and nothing to keep */
   const plans = useMemo(() => Object.fromEntries(NAMES.filter((n) => QUERIES[n].incremental && !asMetric(n))
     .map((n) => [n, planFor(n, inBuckets(QUERIES[n].query, buckets), QUERIES[n].incremental!)] as const)) as Record<string, Plan>,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [gen, bucketKey, published ? [...published].sort().join(",") : ""]);
+  [gen, bucketKey, keptReady, published ? [...published].sort().join(",") : ""]);
   /* the queue of the last wave, in the order the registry declares them, and the gate that
      lets a query in once the three ahead of it are out of the way */
   const wave2 = NAMES.filter((n) => waveOf(n) === 2);
@@ -378,8 +395,8 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
       || (!isProbe && answered[g] == null && !(SOURCE_GROUPS[g].probes as readonly string[]).some((p) => (probeRows.get(p) ?? 0) > 0)));
     // eslint-disable-next-line react-hooks/rules-of-hooks
     return useDql(
-      { query: asMetric(name) ? QUERIES[name].metric!.query : plans[name]?.query ?? inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500, requestTimeoutMilliseconds: INLINE_MS },
-      { enabled: live && !gated && !waitsForBuckets(name) && !metricWaits(name) && !familyWaits(name) && !familyAbsent(name) && !isBarren(name) && (!QUERIES[name].detail || detailOk) && viewWants(name) && waveOf(name) <= phase && inLane(name), staleTime: STALE_MS, runInBackground: true },
+      { query: asMetric(name) ? QUERIES[name].metric!.query : plans[name]?.query ?? inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: QUERIES[name].scanLimitGb ?? SCAN_LIMIT_GB, requestTimeoutMilliseconds: INLINE_MS },
+      { enabled: live && !gated && !waitsForBuckets(name) && !metricWaits(name) && (keptReady || !QUERIES[name].incremental) && !familyWaits(name) && !familyAbsent(name) && !isBarren(name) && (!QUERIES[name].detail || detailOk) && viewWants(name) && waveOf(name) <= phase && inLane(name), staleTime: STALE_MS, runInBackground: true },
     );
   });
   // what the rest of the app sees of an incremental query is the whole window: the kept part and the new one
@@ -391,9 +408,26 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     if (!m || m.data !== r.data) {
       m = { data: r.data, rows: mergeRows(inc, plan, (r.data.records ?? []).filter(Boolean) as Record<string, unknown>[]) };
       merged.current.set(n, m);
-      keep(n, plan, m.rows);
+      keep(n, plan, m.rows, inc.windowMs);
     }
     return { ...r, data: { ...r.data, records: m.rows } } as typeof r;
+  });
+  /**
+   * A read Grail stopped at the scan limit is not a smaller answer, it is a different question.
+   *
+   * The limit does not fail the query: it returns what it managed to read, with a warning and a
+   * count that looks like a total. Measured deliberately on a live environment — a six-hour flow
+   * read capped at one gigabyte came back with 867,114 of about nine million records and nothing
+   * in the rows to say so. So the app compares what was scanned against the limit it set, and a
+   * read that reached it is reported as a read that could not be made, with the one thing that
+   * fixes it: naming the buckets that hold these logs.
+   */
+  const truncated = NAMES.filter((n, i) => {
+    const r = results[i];
+    if (!r.isSuccess) return false;
+    const limit = (QUERIES[n].scanLimitGb ?? SCAN_LIMIT_GB) * 1e9;
+    const scanned = r.data?.metadata?.grail?.scannedBytes ?? 0;
+    return limit > 0 && scanned >= limit * 0.98;
   });
   NAMES.forEach((n, i) => { if (results[i].isSuccess) probeRows.set(n, (results[i].data?.records ?? []).length); });
   // a source whose probes all came back empty is remembered; one that answered is forgotten
@@ -458,7 +492,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   /* reset by the same thing that restarts the reads, so a refresh counts up from zero again */
   const highWater = useRef(0);
   highWater.current = settled === 0 ? 0 : Math.max(highWater.current, settled);
-  const failed = NAMES.filter((_, i) => results[i].isError);
+  const failed = NAMES.filter((n, i) => results[i].isError || truncated.includes(n));
   const requiredOk = REQUIRED.every((n) => { const i = NAMES.indexOf(n); return results[i].isSuccess || skipped(i); });
   const coreSettled = CORE.every((n) => { const i = NAMES.indexOf(n); const r = results[i]; return r.isSuccess || r.isError || skipped(i); });
   // A slow environment must not hold the whole app hostage: once the inventory is in and the core has had
@@ -501,12 +535,14 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     const data: QueryResults = {};
     NAMES.forEach((n, i) => {
       const r = results[i];
-      if (r.isSuccess) data[n] = (r.data?.records ?? []).filter(Boolean) as Record<string, unknown>[];
+      // a read the scan limit cut short is left out entirely: its rows are a part of the window
+      // with nothing saying which part, and the model would state them as the whole of it
+      if (r.isSuccess && !truncated.includes(n)) data[n] = (r.data?.records ?? []).filter(Boolean) as Record<string, unknown>[];
     });
     return buildRealModel(data, tenantName());
     // results change identity on every render; the stamp captures what matters
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live, demo, coreSettled, overdue, requiredOk, stamp]);
+  }, [live, demo, coreSettled, overdue, requiredOk, stamp, truncated.join(",")]);
 
   const counts = Object.fromEntries(NAMES.map((n, i) => [n, results[i].isSuccess ? (results[i].data?.records ?? []).length : null]));
   /**

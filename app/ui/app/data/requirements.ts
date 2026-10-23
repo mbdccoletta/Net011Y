@@ -121,10 +121,11 @@ export function evaluateNeeds(counts: Record<string, number | null>, model: Netw
         out[key] = { key, label, how, status: "failed", detail: "not read: the bucket setting could not be read from this environment · Settings › Data" };
         return;
       }
-      // every read behind it came back as an error: the environment was asked and the answer never
-      // arrived, which is a different sentence from either "still reading" or "nothing is sent here"
+      // every read behind it came back as an error, or was stopped at the scan limit with part of
+      // the window read: either way the app does not have the answer, and saying how many rows it
+      // did get would state a fraction of a window as the whole of it
       if (queries.length > 0 && queries.every((q) => failed.includes(q))) {
-        out[key] = { key, label, how, status: "failed", detail: queries.length === 1 ? "the read did not come back" : `${queries.length} reads did not come back` };
+        out[key] = { key, label, how, status: "failed", detail: queries.length === 1 ? "the read did not come back, or stopped at the scan limit" : `${queries.length} reads did not come back, or stopped at the scan limit` };
         return;
       }
       if (values.every((v) => v === null || v === undefined)) {

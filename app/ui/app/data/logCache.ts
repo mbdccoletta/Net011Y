@@ -5,14 +5,16 @@
 // full query gives: series are cut in clock-aligned buckets, so a bucket read now replaces the same bucket
 // read before; the latest-seen and newest-records queries merge by their keys.
 //
-// It is kept for as long as the app is open and nowhere else. It used to be written to
-// `window.localStorage`, which is the one kind of state this app does not keep: everything it remembers
-// belongs to the environment and lives in app state, where the whole team works from the same copy. These
-// rows cannot go there — they can carry log content, and another user of the same app may not be allowed
-// to read that bucket — so they are held in memory for this session and the next open reads the full
-// window. Within a session the saving is unchanged: Refresh, a view opening, a bucket changing all ask
-// Grail only for what came after what is already here. Anything unexpected — a changed query, a kept part
-// older than the window — runs the full query, as before.
+// Where it is kept, and why not where it used to be. It was written to `window.localStorage`, which is
+// the one kind of state this app does not keep: everything it remembers belongs to the environment. It
+// cannot go into *shared* app state either — these rows can carry log content, and another user of the
+// same app may not be allowed to read that bucket — so it goes into the state of the one person reading
+// it, where the platform keeps it for them alone and expires it on a date this file sets. A reader who
+// comes back inside the window pays for the minutes since they left instead of the whole six hours;
+// within a session nothing changes, and anything unexpected — a changed query, a kept part older than
+// the window, a payload too large to store, a tenant that refuses — runs the full query, as before.
+
+import { stateClient } from "@dynatrace-sdk/client-state";
 
 type Row = Record<string, unknown>;
 
@@ -54,14 +56,46 @@ const floor = (ms: number, step: number) => Math.floor(ms / step) * step;
 /** This session's kept parts, by query name. */
 const held = new Map<string, Entry>();
 
+/**
+ * What the platform will take, and what this file will send it.
+ *
+ * The size a user app state may hold is not documented, and a write that is refused is silent, so
+ * the cap here is deliberately far below anything plausible: a kept part larger than this is left
+ * in memory for the session and not stored. The entries that matter are small — two hundred series
+ * of a day's syslog counts is tens of kilobytes — and the ones that are not are the ones that
+ * should not be carried around anyway.
+ */
+const STORE_MAX_CHARS = 60_000;
+const KEY = (name: string) => `net-o11y.log-cache.${name}`;
+let loaded: Promise<void> | null = null;
+
+/** The kept parts this reader left behind, fetched once per page. Nothing waits on a failure. */
+export function loadKeptParts(names: readonly string[]): Promise<void> {
+  if (loaded) return loaded;
+  loaded = Promise.all(names.map((n) => stateClient.getUserAppState({ key: KEY(n) })
+    .then((s) => {
+      const e = JSON.parse(s.value) as Entry;
+      if (e && e.v === VERSION && Array.isArray(e.rows)) held.set(n, e);
+    })
+    .catch(() => { /* never stored, expired, or no permission: the full window is read */ })))
+    .then(() => undefined);
+  return loaded;
+}
+
 function read(name: string): Entry | null {
   const e = held.get(name);
   return e && e.v === VERSION && Array.isArray(e.rows) ? e : null;
 }
-function write(name: string, e: Entry) {
+function write(name: string, e: Entry, windowMs: number) {
   // the ceiling stays: a window of logs can be enormous and holding all of it helps nobody
-  if (JSON.stringify(e).length > MAX_CHARS) { held.delete(name); return; }
+  const s = JSON.stringify(e);
+  if (s.length > MAX_CHARS) { held.delete(name); return; }
   held.set(name, e);
+  if (s.length > STORE_MAX_CHARS) return;
+  /* it expires when it stops being useful: a kept part older than the window it belongs to is of no
+     help to the next read, and the platform can drop it rather than hand back something unusable */
+  stateClient.setUserAppState({ key: KEY(name), body: { value: s, validUntilTime: new Date(Date.now() + windowMs).toISOString() } })
+    .catch(() => { /* refused or too large: this session still has it in memory */ });
 }
 
 /** The query to run now for `name`: from where the kept part ends, or the full window. */
@@ -141,6 +175,6 @@ function mergeSeries(inc: Extract<Incremental, { kind: "series" }>, plan: Plan, 
 }
 
 /** Keeps the rows for the next open. */
-export function keep(name: string, plan: Plan, rows: Row[], at = Date.now()) {
-  write(name, { v: VERSION, q: plan.full, at, rows });
+export function keep(name: string, plan: Plan, rows: Row[], windowMs: number, at = Date.now()) {
+  write(name, { v: VERSION, q: plan.full, at, rows }, windowMs);
 }
