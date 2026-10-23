@@ -97,6 +97,15 @@ const XL_DCS: typeof BASE_DCS = [
  *  Tuned so the extra-large estate lands on the twenty thousand devices the app is documented and tested
  *  at; it came down when the American arm was added, which brought its own sites with it. */
 const XL = 7.6;
+/**
+ * The mid-sized estate: about a thousand devices.
+ *
+ * Between the enterprise network of five hundred sites and the extra-large one of four thousand
+ * there was nothing, and a thousand devices is the size most of the networks this app is shown to
+ * actually are. The multiplier is not a guess — it was tuned against the built model until the
+ * device count landed where the name says.
+ */
+const MID = 0.38;
 
 interface Scenario {
   circuitsDown?: number;
@@ -135,16 +144,19 @@ function km(lat1: number, lon1: number, lat2: number, lon2: number) {
   return 6371 * 2 * Math.asin(Math.sqrt(a));
 }
 
-export function buildExampleNetwork(now = new Date(), size: "enterprise" | "xl" = "enterprise"): NetworkModel {
+/** the three sizes the example network comes in: about 1,000, 2,700 and 20,000 devices */
+export type ExampleSize = "mid" | "enterprise" | "xl";
+
+export function buildExampleNetwork(now = new Date(), size: ExampleSize = "enterprise"): NetworkModel {
   const xl = size === "xl";
-  const K = xl ? XL : 1;
+  const K = xl ? XL : size === "mid" ? MID : 1;
   const DCS = xl ? [...BASE_DCS, ...XL_DCS] : BASE_DCS;
   // which data center a branch's WAN terminates on: the extra-large estate splits the Southeast between
   // São Paulo and Rio and sends the North and Northeast to Recife
   const hubOf = (region: string, k: number) => (!xl ? REGIONS.find((r) => r.name === region)!.hub
     : region === "East US" ? "ASH1" : region === "Central US" || region === "West US" ? "DAL1"
       : region === "Southeast" ? (k % 2 ? "RIO1" : "SPO1") : region === "Northeast" || region === "North" ? "REC1" : region === "Midwest" ? "CPS1" : "SPO1");
-  const rnd = mulberry32(xl ? 20260919 : 20260914);
+  const rnd = mulberry32(xl ? 20260919 : size === "mid" ? 20261023 : 20260914);
   const uni = (a: number, b: number) => a + rnd() * (b - a);
   const int = (a: number, b: number) => Math.floor(uni(a, b + 1));
   const r1 = (v: number) => Math.round(v * 10) / 10;

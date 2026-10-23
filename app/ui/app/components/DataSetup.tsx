@@ -339,22 +339,25 @@ function NeedStatusIndicator({ need }: { need: Need }) {
 interface Props {
   needs: Record<NeedKey, Need>;
   source: "live" | "example";
-  onSource: (source: "live" | "example", scale?: "xl" | null) => void;
+  onSource: (source: "live" | "example", scale?: "mid" | "xl" | null) => void;
 }
 
-export function DataSourceSection({ source, scale, onSource }: Pick<Props, "source" | "onSource"> & { scale: "xl" | null }) {
-  const value = source === "example" ? (scale === "xl" ? "example-xl" : "example") : "live";
+export function DataSourceSection({ source, scale, onSource }: Pick<Props, "source" | "onSource"> & { scale: "mid" | "xl" | null }) {
+  const value = source === "example" ? (scale === "xl" ? "example-xl" : scale === "mid" ? "example-mid" : "example") : "live";
   return (
       <section className="ds-block" aria-labelledby="ds-source">
         <Heading level={5} id="ds-source">Data source</Heading>
         {/* the menu is as wide as the field, and in this column the field was cutting the two example
             names down to "Example network …" and "Example network,…", which read as the same thing */}
         <div className="ds-source">
-          <Select value={value} onChange={(v) => (v === "example-xl" ? onSource("example", "xl") : v === "example" ? onSource("example", null) : onSource("live", null))}>
+          <Select value={value} onChange={(v) => (v === "example-xl" ? onSource("example", "xl") : v === "example-mid" ? onSource("example", "mid") : v === "example" ? onSource("example", null) : onSource("live", null))}>
             <Select.Trigger placeholder="Data source" />
             <Select.Content>
               <Select.Option value="live" textValue="This environment">This environment</Select.Option>
-              <Select.Option value="example" textValue="Example network · 550 sites">Example network · 550 sites</Select.Option>
+              {/* three sizes, named by the number a reader is sizing against: most networks this app is
+                  shown to are nearer the first than the last */}
+              <Select.Option value="example-mid" textValue="Example network · 1,000 devices">Example network · 1,000 devices</Select.Option>
+              <Select.Option value="example" textValue="Example network · 2,700 devices">Example network · 2,700 devices</Select.Option>
               <Select.Option value="example-xl" textValue="Example network · 20,000 devices">Example network · 20,000 devices</Select.Option>
             </Select.Content>
           </Select>

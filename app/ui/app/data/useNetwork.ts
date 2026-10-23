@@ -169,14 +169,14 @@ function tenantName(): string {
 const probeStore = new Map<string, number>();
 const useProbeRows = () => probeStore;
 
-export function useNetwork(source: Source, scale: "xl" | null = null, views: readonly string[] = []): NetworkState {
+export function useNetwork(source: Source, scale: "mid" | "xl" | null = null, views: readonly string[] = []): NetworkState {
   const live = source === "live";
   // The example network is generated on demand, in its own chunk (keeps main.js small).
-  const [built, setBuilt] = useState<{ scale: "xl" | null; model: NetworkModel } | null>(null);
+  const [built, setBuilt] = useState<{ scale: "mid" | "xl" | null; model: NetworkModel } | null>(null);
   const demo = built && built.scale === scale ? built.model : null;
   useEffect(() => {
     if (live || demo) return;
-    import("./exampleNetwork").then((m) => setBuilt({ scale, model: m.buildExampleNetwork(new Date(), scale === "xl" ? "xl" : "enterprise") }));
+    import("./exampleNetwork").then((m) => setBuilt({ scale, model: m.buildExampleNetwork(new Date(), scale ?? "enterprise") }));
   }, [live, demo, scale]);
   // The query set is static, so the hooks are always called in the same order.
   // the inventory decides whether the per-interface queries run at all

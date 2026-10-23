@@ -23,8 +23,8 @@ interface Props {
   model: NetworkModel | null;
   needs: Record<NeedKey, Need>;
   source: "live" | "example";
-  onSource: (source: "live" | "example", scale?: "xl" | null) => void;
-  scale?: "xl" | null;
+  onSource: (source: "live" | "example", scale?: "mid" | "xl" | null) => void;
+  scale?: "mid" | "xl" | null;
   /** Data type the caller wants explained: opens the Data tab with that entry expanded */
   focus?: NeedKey | null;
   absent: Partial<Record<SourceGroup, number>>;

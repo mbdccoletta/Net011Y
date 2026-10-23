@@ -20,8 +20,8 @@ export interface UrlState {
   /** Visual or table rendering of the entity pages */
   view: "visual" | "table";
   source: "live" | "example";
-  /** size of the example network: the enterprise one, or an extra-large estate of about 20,000 devices */
-  scale: "xl" | null;
+  /** size of the example network: about 1,000 devices, the enterprise one, or 20,000 */
+  scale: "mid" | "xl" | null;
   /** which list the map's left panel shows: the open causes, or the sites grouped by tag */
   list: "causes" | "sites";
 }
@@ -43,7 +43,7 @@ function read(): UrlState {
     q: p.get("q") ?? "",
     view: p.get("view") === "table" ? "table" : "visual",
     source: p.get("source") === "example" ? "example" : "live",
-    scale: p.get("source") === "example" && p.get("scale") === "xl" ? "xl" : null,
+    scale: p.get("source") !== "example" ? null : p.get("scale") === "xl" ? "xl" : p.get("scale") === "mid" ? "mid" : null,
     list: p.get("list") === "sites" ? "sites" : "causes",
   };
 }
@@ -68,7 +68,7 @@ export function useUrlState() {
       });
       if (next.view === "table" && next.page !== "causes") p.set("view", "table");
       if (next.source === "example") p.set("source", "example");
-      if (next.source === "example" && next.scale === "xl") p.set("scale", "xl");
+      if (next.source === "example" && next.scale) p.set("scale", next.scale);
       if (next.list === "sites") p.set("list", "sites");
       const url = `${window.location.pathname}${p.toString() ? `?${p}` : ""}`;
       if (push) window.history.pushState(null, "", url);

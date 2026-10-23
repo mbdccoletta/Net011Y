@@ -40,11 +40,11 @@ const PAGES: [Page, string][] = [["causes", "Live map"], ["sites", "Sites"], ["d
 /** the queries the Live map counts, colours and names causes from */
 const MAP_SPEAKS_FROM = ["alerts", "problems", "devices", "sites", "wan", "icmp"];
 
-const hrefOf = (p: Page, source: "live" | "example", scale: "xl" | null = null) => {
+const hrefOf = (p: Page, source: "live" | "example", scale: "mid" | "xl" | null = null) => {
   const q = new URLSearchParams();
   if (p !== "causes") q.set("page", p);
   if (source === "example") q.set("source", "example");
-  if (source === "example" && scale === "xl") q.set("scale", "xl");
+  if (source === "example" && scale) q.set("scale", scale);
   return `${window.location.pathname}${q.toString() ? `?${q}` : ""}`;
 };
 
@@ -208,7 +208,7 @@ export function App() {
           ) : showProgress ? (
             <>
               <ProgressCircle aria-label="Loading network data" />
-              <Text>{url.source === "example" ? (url.scale === "xl" ? "Building the extra-large example network · 20,000 devices" : "Building the example network") : `Loading network data · ${net.done} of ${net.total} queries`}</Text>
+              <Text>{url.source === "example" ? (url.scale === "xl" ? "Building the extra-large example network · 20,000 devices" : url.scale === "mid" ? "Building the mid-sized example network · 1,000 devices" : "Building the example network") : `Loading network data · ${net.done} of ${net.total} queries`}</Text>
             </>
           ) : null}
         </div>
