@@ -149,7 +149,7 @@ const METRIC_RULE: Record<string, { what: string; where: string; rule: string }>
   },
 };
 
-function MetricReads({ reads }: { reads: { name: string; keys: readonly string[]; served: boolean }[] }) {
+function MetricReads({ reads }: { reads: { name: string; keys: readonly string[]; served: boolean; listed: boolean }[] }) {
   const known = reads.filter((r) => METRIC_RULE[r.name]);
   if (!known.length) return null;
   return (
@@ -167,7 +167,9 @@ function MetricReads({ reads }: { reads: { name: string; keys: readonly string[]
             <Text key={r.name}>
               <Strong>{m.what}</Strong> — {r.served
                 ? `read from ${r.keys.join(" and ")}, at no query cost.`
-                : `still read from the logs. ${m.where}. ${m.rule}.`}
+                : r.listed
+                  ? `${r.keys.join(" and ")} exists but does not reach the start of the window this read covers, so the logs are still being read. A rule produces nothing for the time before it was made; this turns itself over once the metric is as old as the window.`
+                  : `still read from the logs. ${m.where}. ${m.rule}.`}
             </Text>
           );
         })}
@@ -176,7 +178,7 @@ function MetricReads({ reads }: { reads: { name: string; keys: readonly string[]
   );
 }
 
-export function QueryCostSection({ absent, onRecheck, cost, onHow, metricReads = [] }: { absent: Partial<Record<SourceGroup, number>>; onRecheck: () => void; cost?: LoadCost | null; onHow?: () => void; metricReads?: { name: string; keys: readonly string[]; served: boolean }[] }) {
+export function QueryCostSection({ absent, onRecheck, cost, onHow, metricReads = [] }: { absent: Partial<Record<SourceGroup, number>>; onRecheck: () => void; cost?: LoadCost | null; onHow?: () => void; metricReads?: { name: string; keys: readonly string[]; served: boolean; listed: boolean }[] }) {
   const bucketState = useLogBucketState();
   const bucketGate = useLogBucketGate();
   const buckets = bucketState.value;

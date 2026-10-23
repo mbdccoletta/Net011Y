@@ -41,7 +41,7 @@ export interface NetworkState {
    * The reads a metric could answer: whether this environment publishes one, and what it would cost
    * to keep paying for the log form. Settings turns this into the rule that would make it free.
    */
-  metricReads: { name: string; keys: readonly string[]; served: boolean }[];
+  metricReads: { name: string; keys: readonly string[]; served: boolean; listed: boolean }[];
 }
 
 /**
@@ -316,11 +316,44 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   const published = catalogQ.isSuccess
     ? new Set((catalogQ.data?.records ?? []).map((r) => String(r?.["metric.key"] ?? "")).filter(Boolean))
     : null;
-  const asMetric = (name: string) => {
+  const listed = (name: string) => {
     const m = QUERIES[name].metric;
     return !!m && !!published && m.keys.every((k) => published.has(k));
   };
-  const metricWaits = (name: string) => !!QUERIES[name].metric && catalogQ.isLoading;
+  /**
+   * A metric is used only once it covers the window the log form reads.
+   *
+   * An extraction rule produces nothing for the time before it was made, and this app reads six
+   * hours of syslog and seventy minutes of flow. A rule created an hour ago would answer with one
+   * hour of data and five of silence — and silence here is read as "that device logged nothing",
+   * which is the opposite of saving money honestly. The probe asks for the oldest bucket of the
+   * window; a number there means the rule was already running then. It is a metric query, so the
+   * check itself costs nothing, and anything other than a clear yes keeps the log form.
+   */
+  const coverNames = useMemo(() => NAMES.filter((n) => QUERIES[n].metric), []);
+  const coverQs = coverNames.map((n) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useDql({ query: QUERIES[n].metric!.covers, maxResultRecords: 10, requestTimeoutMilliseconds: INLINE_MS },
+      { enabled: live && listed(n), staleTime: STALE_MS, runInBackground: true }));
+  const covered = (name: string) => {
+    const i = coverNames.indexOf(name);
+    if (i < 0) return false;
+    const q = coverQs[i];
+    if (!q.isSuccess) return false;
+    const rows = q.data?.records ?? [];
+    return rows.length > 0 && rows.every((r) => r?.oldest != null);
+  };
+  const asMetric = (name: string) => listed(name) && covered(name);
+  /* the log form waits while the catalogue is being read, and while the coverage of a metric the
+     catalogue did list is still unknown: paying for the scan and then finding the metric was there
+     is the outcome this whole mechanism exists to avoid */
+  const metricWaits = (name: string) => {
+    const m = QUERIES[name].metric;
+    if (!m) return false;
+    if (catalogQ.isLoading) return true;
+    const i = coverNames.indexOf(name);
+    return listed(name) && i >= 0 && coverQs[i].isLoading;
+  };
   // the log queries read incrementally: from where this browser's last read ends (logCache.ts); a new
   // plan is made when the app opens and on Refresh, never while a load is running
   const [gen, setGen] = useState(0);
@@ -554,7 +587,7 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
       setGen((g) => g + 1);
     },
     metricReads: NAMES.filter((n) => QUERIES[n].metric)
-      .map((n) => ({ name: n, keys: QUERIES[n].metric!.keys, served: asMetric(n) })),
+      .map((n) => ({ name: n, keys: QUERIES[n].metric!.keys, served: asMetric(n), listed: listed(n) })),
     absent,
     recheck: () => clearSourceMemory(),
     cost,

@@ -15,7 +15,7 @@ import { SiteHierarchySettings } from "./SiteHierarchySettings";
 
 interface Props {
   /** the reads a metric could answer, and whether this environment publishes one */
-  metricReads?: { name: string; keys: readonly string[]; served: boolean }[];
+  metricReads?: { name: string; keys: readonly string[]; served: boolean; listed: boolean }[];
   show: boolean;
   onDismiss: () => void;
   model: NetworkModel | null;

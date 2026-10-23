@@ -43,7 +43,20 @@ export interface NetQuery {
    * does is ask the catalogue once — a metric query, so free — and use the metric where it exists.
    * The two forms return the same rows under the same names, so nothing downstream knows which ran.
    */
-  metric?: { keys: readonly string[]; query: string };
+  metric?: {
+    keys: readonly string[];
+    query: string;
+    /**
+     * Does the metric cover the whole window the log form reads?
+     *
+     * An extraction rule produces nothing for the time before it was created. A rule made this
+     * morning answers a six-hour question with one hour of data and five hours of silence, and
+     * silence in this app is a statement — "that device logged nothing" — so the substitution would
+     * not save money, it would lie. This asks for the oldest bucket of the window: a number there
+     * means the rule was already running then, and nothing there sends the read back to the logs.
+     */
+    covers: string;
+  };
 }
 
 const CIRCUIT_TAGS = "primary_tags.site, primary_tags.circuit_id, primary_tags.circuit_role, primary_tags.carrier, primary_tags.circuit_tech, primary_tags.sla_ms, primary_tags.bandwidth_mbps";
@@ -266,6 +279,7 @@ export const QUERIES: Record<string, NetQuery> = {
     metric: {
       keys: ["log.net.syslog.records"],
       query: `timeseries n = sum(log.net.syslog.records), from:now()-${DEVICE_LOG_HOURS}h, interval:15m, by:{ip, kind, loglevel}`,
+      covers: `timeseries n = sum(log.net.syslog.records), from:now()-${DEVICE_LOG_HOURS}h, interval:1h | fieldsAdd oldest = arrayFirst(n) | fields oldest`,
     },
     query: `fetch logs, from:now()-6h | filter ${SYSLOG_SOURCE} or log.source == "snmptraps" | ${SYSLOG_PARSE} | fieldsAdd kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = ${SOURCE_IP}, loglevel = ${SYSLOG_LEVEL} | makeTimeseries n = count(), by:{ip, kind, loglevel}, interval:15m`,
     maxResultRecords: 10000,
@@ -307,6 +321,7 @@ export const QUERIES: Record<string, NetQuery> = {
     metric: {
       keys: ["log.net.flow.records", "log.net.flow.bytes"],
       query: 'timeseries {flows = sum(log.net.flow.records), bytes = sum(log.net.flow.bytes)}, from:now()-70m, interval:5m, by:{exp}',
+      covers: 'timeseries n = sum(log.net.flow.records), from:now()-70m, interval:35m | fieldsAdd oldest = arrayFirst(n) | fields oldest',
     },
     query: 'fetch logs, from:now()-70m | filter otel.scope.name == "otelcol/netflowreceiver" | makeTimeseries flows=count(), bytes=sum(toLong(flow.io.bytes)), by:{exp=flow.sampler_address}, interval:5m',
     maxResultRecords: 500,
