@@ -58,7 +58,7 @@ one.
 | `deviceLogs` | `count()` by device, kind, level | ip, kind, loglevel | **207** in 6 h | **substitute** |
 | `flowTs` | `count()`, `sum(bytes)` by exporter | exp | **3** in 70 min | **substitute** |
 | `netChanges` | `count()` **and `max(timestamp)`** | fac, mnem, ip, iface | **606** in 6 h | partial — see below |
-| `flowNets` | top-N `sum(bytes)` | exp, s24, d24, proto, port | **59,929 in one hour** | keep |
+| `flowNets` | top-N `sum(bytes)` | exp, s24, d24, proto, port | **59,929 in one hour** | keep (sampling tested and refused) |
 | `flowFanIn` | `countDistinct(source)` | — | not recomputable | keep |
 | `appPaths` | `sum()` by group, remote /24, port | grp, server, r24, port | **5,256 in one hour** | keep |
 | `appNet` | sums and `percentile(rtt, 90)` | none (one series) | 1 | partial — percentile |
@@ -99,6 +99,78 @@ there is nothing to set in the app: define the rule and the app changes its own 
 **An aggregation can look right and be wrong.** `countDistinct` and percentiles are not recomputable
 from buckets. No read whose answer depends on one is substituted, whatever it would save.
 
+## What the platform's own guidance adds
+
+The developer documentation names four levers for a log query — `filter`, `scanLimit`,
+`samplingRatio`, `limit` — and the app was using one of them.
+
+**Sampling is the lever this analysis missed.** `fetch logs, samplingRatio: 100` reads one record in
+a hundred. Measured on eob14444, the same NetFlow question over the same hour:
+
+| | Scanned | Records | Server time |
+|---|---|---|---|
+| Unsampled | 8.17 GB | 9,016,985 | 1,044 ms |
+| `samplingRatio: 100` | **0.09 GB** | 184,319 | **206 ms** |
+
+Ninety-nine per cent of the cost and eighty per cent of the time, for an answer that is no longer
+exact: the result is **not** scaled back up — 4,446,447 flows became 44,103 — so the app has to
+multiply by the ratio and say that it did.
+
+That argument was written, implemented, and then tested — and the test refused it. It is kept here
+because the refutation is the useful part.
+
+**The experiment.** The same hour of NetFlow, the top conversations by bytes, run both ways:
+
+| Pair | Full | Sampled ×100 | Error |
+|---|---|---|---|
+| 138.118.0.0 → 200.229.251.0 | 1.29 GB | 8.85 GB | +587% |
+| 10.175.5.0 → 13.107.228.0 | 3.21 GB | 5.35 GB | +67% |
+| six others in the sampled top eight | not in the real top ten | — | — |
+
+**Two of the eight heaviest conversations survived sampling.** Not because the ratio is too coarse,
+but because the quantity is wrong for it: forty-two thousand pairs share four million records, so a
+pair holding a few hundred of them is estimated from two or three, and bytes are dominated by a few
+large flows that the sample either catches or misses entirely.
+
+Per exporter — three groups instead of forty-two thousand — it looks better, and still fails in the
+same place:
+
+| Exporter | Flows, full | Flows, estimated | Bytes, full | Bytes, estimated |
+|---|---|---|---|---|
+| 10.175.7.101 | 1,830,130 | 1,804,700 (−1.4%) | 94.84 GB | 98.53 GB (+3.9%) |
+| 10.175.5.62 | 3,319,397 | 3,288,500 (−0.9%) | 79.09 GB | 81.63 GB (+3.2%) |
+| 10.1.20.130 | 70,701 | 68,200 (−3.5%) | 3.11 GB | **0.23 GB (−92.6%)** |
+
+So the rule sampling actually obeys here is not "volume questions are fine". It is:
+
+* a **count** over a large population survives (±1–3.5% in every row above);
+* a **sum of a skewed quantity** does not, unless the group is enormous — the third exporter's
+  bytes were out by ninety-two per cent on seventy thousand records;
+* a **top-N over many groups** does not survive at all;
+* a **`countDistinct`** cannot be sampled by definition: a hundredth of the records holds a
+  hundredth of the distinct values.
+
+Every number this app shows from NetFlow is bytes — bandwidth is the question the page asks — so
+sampling is not used. The implementation was written and removed. It is the right lever for a
+different app, and the measurement above is what decides which one you have.
+
+**The scan limit is set to a number that is not a limit.** *(recommended, not implemented)* Every query is sent with
+`defaultScanLimitGbytes: 1500`, which on any real environment means "no guard". Its purpose is to
+turn a pathological environment into a clear failure instead of a silent bill, and a limit
+proportional to what each read should scan would do that.
+
+**Stale-while-revalidate is already in `useDql`, and the app is on the conservative side of it.**
+The documentation suggests 15–30 seconds of `staleTime` for logs and 30–60 for metrics; the app uses
+five minutes for everything, which costs less and risks only staleness that the clock in the header
+and the Refresh button already disclose. Nothing to change, but worth stating: a future page that
+lowers it is choosing to pay for it.
+
+**App state can carry a time-to-live.** *(recommended, not implemented)* `setAppState` takes `validUntilTime`, and the platform's own
+guide uses it to cache expensive responses. The app's incremental log cache went from the browser to
+memory-for-this-session two days ago, which was right about the browser and lost the saving across
+sessions; user app state with a TTL would give it back without writing anything into the browser and
+without sharing one reader's records with another.
+
 ## What is implemented
 
 `deviceLogs` and `flowTs` carry a metric form (0.1.80, with the coverage guard in this change). At
@@ -128,3 +200,15 @@ every flow read also scans the 48% that is not flow.
 At a hundred people opening the app once a working day, the three rows above are about US$ 280,
 US$ 169 and US$ 50 a month. For comparison, one Assist question costs US$ 0.30 — three AI units,
 measured — so twenty-five questions a day cost more than all the scanning in either column.
+
+## Where this leaves the app
+
+| Lever | Status | Measured effect on eob14444 |
+|---|---|---|
+| Metric instead of scan, where the environment publishes one | implemented, 0.1.80–0.1.81 | −15.6 GB and −5.9 s per session |
+| Coverage guard, so a young metric is not trusted | implemented, 0.1.81 | correctness, no cost change |
+| Naming the network log buckets | available in Settings, unset here | −52% of every log read |
+| Sampling the flow reads | tested and refused | would have been −99% and wrong |
+| A real scan limit per read | recommended | turns a runaway environment into an error, not a bill |
+| Per-user app-state cache with a TTL | recommended | restores the cross-session saving lost when the log cache left the browser |
+| Shorter `staleTime` | deliberately not done | the documentation's 15–30 s for logs costs more than the five minutes used here |
