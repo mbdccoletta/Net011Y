@@ -43,7 +43,14 @@ async function run() {
   ok("a kept part makes the next read incremental", second.query !== full && !!second.base && second.from != null,
     `from ${second.from ? new Date(second.from).toISOString().slice(11, 19) : "none"}`);
 
-  // 4. a payload too large for the store stays in memory and is not sent
+  // 4. the entry this cache exists for — six hours of syslog counts, measured at 118 KB on a real
+  // environment — is stored, and only something far larger is left in memory
+  const mid = calls.userSet.length;
+  keep("deviceLogs24h", planFor("deviceLogs24h", full, inc), rows(1200), WINDOW);
+  await tick();
+  ok("an entry the size of a real syslog window is stored", calls.userSet.length === mid + 1,
+    `${JSON.stringify(rows(1200)).length / 1024 | 0} KB sent`);
+
   const before = calls.userSet.length;
   keep("flowTs", planFor("flowTs", full, inc), rows(20000), WINDOW);
   await tick();

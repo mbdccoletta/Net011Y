@@ -59,13 +59,17 @@ const held = new Map<string, Entry>();
 /**
  * What the platform will take, and what this file will send it.
  *
- * The size a user app state may hold is not documented, and a write that is refused is silent, so
- * the cap here is deliberately far below anything plausible: a kept part larger than this is left
- * in memory for the session and not stored. The entries that matter are small — two hundred series
- * of a day's syslog counts is tens of kilobytes — and the ones that are not are the ones that
- * should not be carried around anyway.
+ * The documentation names the error — the combined size of one user's app states for one app is
+ * capped — without naming the number. The first cap written here was sixty kilobytes, and measuring
+ * the entry it exists for showed why that was a guess worth checking: six hours of syslog counts on
+ * a real environment is two hundred and seven series and a hundred and eighteen kilobytes, so the
+ * saving this cache exists for was the one thing it refused to store. The ceiling is high enough for
+ * that entry now, and the budget is respected the only way it can be without a documented figure:
+ * the first refusal stops the writing for the rest of the session, because a tenant that said no
+ * will say no again.
  */
-const STORE_MAX_CHARS = 60_000;
+const STORE_MAX_CHARS = 250_000;
+let refused = false;
 const KEY = (name: string) => `net-o11y.log-cache.${name}`;
 let loaded: Promise<void> | null = null;
 
@@ -91,11 +95,11 @@ function write(name: string, e: Entry, windowMs: number) {
   const s = JSON.stringify(e);
   if (s.length > MAX_CHARS) { held.delete(name); return; }
   held.set(name, e);
-  if (s.length > STORE_MAX_CHARS) return;
+  if (s.length > STORE_MAX_CHARS || refused) return;
   /* it expires when it stops being useful: a kept part older than the window it belongs to is of no
      help to the next read, and the platform can drop it rather than hand back something unusable */
   stateClient.setUserAppState({ key: KEY(name), body: { value: s, validUntilTime: new Date(Date.now() + windowMs).toISOString() } })
-    .catch(() => { /* refused or too large: this session still has it in memory */ });
+    .catch(() => { refused = true; /* over the budget or not permitted: this session keeps it in memory */ });
 }
 
 /** The query to run now for `name`: from where the kept part ends, or the full window. */
