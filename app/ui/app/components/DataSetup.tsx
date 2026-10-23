@@ -1,12 +1,14 @@
 // Settings content: what each page of the app reads, how to send each kind of data to Dynatrace,
 // and the configuration the app itself needs. Status per data type comes from the app's own queries.
 import React from "react";
+import { useDql } from "@dynatrace-sdk/react-hooks";
 import { getAppName, getAppVersion } from "@dynatrace-sdk/app-environment";
 import { Accordion, CodeSnippet, HealthIndicator } from "@dynatrace/strato-components/content";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Select, TextInput } from "@dynatrace/strato-components/forms";
 import { ExternalLink, Heading, List, Paragraph, Strong, Text } from "@dynatrace/strato-components/typography";
 import type { Need, NeedKey, NeedStatus } from "../data/requirements";
+import { BUCKET_LIST, BUCKET_PROBE } from "../data/queries";
 import { APP_PERMISSIONS, DATA_GROUPS, NETWORK_BUCKET_MATCHER, NETWORK_BUCKET_STEPS, PAGE_NEEDS, SETUP } from "../data/setupGuide";
 import { openNative, openNotebook } from "../utils/drilldown";
 import { useDropThresholdState, setDropThreshold, retryDropThreshold } from "../hooks/useDropThreshold";
@@ -178,6 +180,65 @@ function MetricReads({ reads }: { reads: { name: string; keys: readonly string[]
   );
 }
 
+/**
+ * Which buckets exist, and which of them these records are in.
+ *
+ * Two questions the reader should not have to answer from memory. The first is a system table and
+ * free; the second has to read logs, so it runs when somebody presses the button and the button
+ * says what it will cost. An environment with no dedicated bucket gets the answer that matters:
+ * everything is in the default bucket with every other log, and there is nothing to name yet.
+ */
+function BucketFinder({ onPick }: { onPick: (names: string[]) => void }) {
+  const [asked, setAsked] = React.useState(false);
+  const list = useDql({ query: BUCKET_LIST, maxResultRecords: 50 }, { staleTime: 5 * 60 * 1000 });
+  const probe = useDql({ query: BUCKET_PROBE, maxResultRecords: 20 }, { enabled: asked, staleTime: 5 * 60 * 1000 });
+  const buckets = (list.data?.records ?? []) as { name: string; display_name: string; retention_days: number; records: number; has_access: boolean }[];
+  const found = (probe.data?.records ?? []) as { bucket: string; records: number }[];
+  const total = found.reduce((a, r) => a + (r.records ?? 0), 0);
+  const onlyDefault = found.length === 1 && found[0]?.bucket === "default_logs";
+  return (
+    <>
+      {buckets.length > 0 && (
+        <Text textStyle="small">
+          Log buckets in this environment: {buckets.map((b) => `${b.name}${b.has_access ? "" : " (no access)"}`).join(", ")}.
+        </Text>
+      )}
+      <div className="ds-row">
+        <Button onClick={() => setAsked(true)} disabled={asked && probe.isLoading}>
+          {asked && probe.isLoading ? "Reading five minutes of logs…" : "Find where these logs are"}
+        </Button>
+        <Text textStyle="small">Reads the last five minutes of logs to see which buckets the network records land in — about half a gigabyte on a busy environment.</Text>
+      </div>
+      {asked && !probe.isLoading && found.length === 0 && (
+        <Text textStyle="small">No syslog, trap, NetFlow or autodiscovery record arrived in the last five minutes, so this cannot say where they live.</Text>
+      )}
+      {found.length > 0 && (
+        <>
+          <List>
+            {found.map((r) => (
+              <Text key={r.bucket}>
+                <Strong>{r.bucket}</Strong> — {Math.round((100 * (r.records ?? 0)) / Math.max(total, 1))}% of the network records of the last five minutes
+              </Text>
+            ))}
+          </List>
+          {onlyDefault ? (
+            <Text textStyle="small">
+              They are all in <Strong>default_logs</Strong>, together with every other log in this environment, so naming it would
+              scan exactly what is being scanned now. A bucket of their own, and an OpenPipeline rule that routes them to it, come first.
+            </Text>
+          ) : (
+            <div className="ds-row">
+              <Button variant="emphasized" onClick={() => onPick(found.map((r) => r.bucket))}>
+                Use {found.length === 1 ? "this bucket" : `these ${found.length} buckets`}
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 export function QueryCostSection({ absent, onRecheck, cost, onHow, metricReads = [], emptyInBuckets = [] }: { absent: Partial<Record<SourceGroup, number>>; onRecheck: () => void; cost?: LoadCost | null; onHow?: () => void; metricReads?: { name: string; keys: readonly string[]; served: boolean; listed: boolean }[]; emptyInBuckets?: SourceGroup[] }) {
   const bucketState = useLogBucketState();
   const bucketGate = useLogBucketGate();
@@ -221,6 +282,7 @@ export function QueryCostSection({ absent, onRecheck, cost, onHow, metricReads =
         <Button variant="emphasized" disabled={parsed.join(",") === buckets.join(",")} onClick={() => setLogBuckets(parsed)}>Save</Button>
       </div>
       {draft.trim() && parsed.length === 0 && <Text textStyle="small">Bucket names use lower-case letters, digits, dashes and underscores.</Text>}
+      <BucketFinder onPick={(names) => { setDraft(names.join(", ")); setLogBuckets(names); }} />
       {emptyInBuckets.length > 0 && (
         <div className="ds-row" role="alert">
           <Text textStyle="small">

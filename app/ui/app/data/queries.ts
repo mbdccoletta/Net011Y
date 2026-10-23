@@ -114,6 +114,22 @@ export const SYSLOG_PARSE = `parse content, "LD '%' UPPER:fac '-' INT:sev '-'"`;
 export const deviceLogs24h = (ip: string) =>
   `fetch logs, from:now()-24h | filter ${SYSLOG_SOURCE} or log.source == "snmptraps" | ${SYSLOG_PARSE} | fieldsAdd kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = ${SOURCE_IP} | filter ip == "${ip.replace(/[^0-9a-fA-F.:]/g, "")}" | fieldsAdd loglevel = ${SYSLOG_LEVEL} | makeTimeseries n = count(), by:{kind, loglevel}, interval:1h`;
 
+/**
+ * The buckets this environment has, and the ones its network logs are actually in.
+ *
+ * The bucket field was free text, which asks the reader to know a name the app can find out for
+ * itself. Two questions, and they are not the same one: which log buckets exist — answered by a
+ * system table, measured at nought bytes and forty-three milliseconds — and which of them these
+ * records land in, which only the records can answer. The second reads five minutes of logs
+ * (0.47 GB on the environment this was measured against), so it happens when somebody asks for it
+ * and the button says what it costs.
+ *
+ * On an environment with no dedicated bucket the answer is the useful one: everything is in
+ * `default_logs` together with every other log, so there is nothing worth naming yet.
+ */
+export const BUCKET_LIST = 'fetch dt.system.buckets | filter dt.system.table == "logs" | fields name, display_name, retention_days, records, has_access | sort records desc | limit 50';
+export const BUCKET_PROBE = `fetch logs, from:now()-5m | filter otel.scope.name == "otelcol/netflowreceiver" or ${SYSLOG_SOURCE} or log.source == "snmptraps" or log.source == "snmp_autodiscovery" | summarize records = count(), by: {bucket = dt.system.bucket} | sort records desc | limit 20`;
+
 export const QUERIES: Record<string, NetQuery> = {
   // Open Davis problems, matched to devices by their Smartscape or classic entity id (drill-down to Problems)
   problems: {
