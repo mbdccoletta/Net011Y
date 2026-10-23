@@ -29,6 +29,21 @@ export interface NetQuery {
    * read alone was a quarter of every load, on every page, including the ones that never draw it.
    */
   views?: readonly string[];
+  /**
+   * The same question asked of a metric, for the environments that publish one.
+   *
+   * Grail bills a log or event query by what it scans and nothing at all for a metric. Two of the
+   * app's reads are pure arithmetic over a stream — how many syslog lines per device and level, how
+   * many flows and bytes per exporter — and arithmetic over a stream is what a metric is. Measured on
+   * one environment sending four million flows an hour: those two reads are 13.6 GB of a 28 GB
+   * session, and as metrics they are free.
+   *
+   * The app cannot create the metric; the environment does, with a metric-extraction rule in
+   * OpenPipeline (Settings › Data says which rule, for each read still being paid for). What the app
+   * does is ask the catalogue once — a metric query, so free — and use the metric where it exists.
+   * The two forms return the same rows under the same names, so nothing downstream knows which ran.
+   */
+  metric?: { keys: readonly string[]; query: string };
 }
 
 const CIRCUIT_TAGS = "primary_tags.site, primary_tags.circuit_id, primary_tags.circuit_role, primary_tags.carrier, primary_tags.circuit_tech, primary_tags.sla_ms, primary_tags.bandwidth_mbps";
@@ -248,6 +263,10 @@ export const QUERIES: Record<string, NetQuery> = {
   // over 3 h for the latest records themselves. Grail bills the whole window whatever the filter, so the
   // 24 h view of one device is read only when someone asks for it (deviceLogs24h).
   deviceLogs: {
+    metric: {
+      keys: ["log.net.syslog.records"],
+      query: `timeseries n = sum(log.net.syslog.records), from:now()-${DEVICE_LOG_HOURS}h, interval:15m, by:{ip, kind, loglevel}`,
+    },
     query: `fetch logs, from:now()-6h | filter ${SYSLOG_SOURCE} or log.source == "snmptraps" | ${SYSLOG_PARSE} | fieldsAdd kind = if(log.source == "snmptraps", "trap", else:"syslog"), ip = ${SOURCE_IP}, loglevel = ${SYSLOG_LEVEL} | makeTimeseries n = count(), by:{ip, kind, loglevel}, interval:15m`,
     maxResultRecords: 10000,
     incremental: { kind: "series", windowMs: DEVICE_LOG_HOURS * 3600e3, stepMs: 15 * 60e3, fields: ["n"], keys: ["ip", "kind", "loglevel"] },
@@ -285,6 +304,10 @@ export const QUERIES: Record<string, NetQuery> = {
     maxResultRecords: 2000,
   },
   flowTs: {
+    metric: {
+      keys: ["log.net.flow.records", "log.net.flow.bytes"],
+      query: 'timeseries {flows = sum(log.net.flow.records), bytes = sum(log.net.flow.bytes)}, from:now()-70m, interval:5m, by:{exp}',
+    },
     query: 'fetch logs, from:now()-70m | filter otel.scope.name == "otelcol/netflowreceiver" | makeTimeseries flows=count(), bytes=sum(toLong(flow.io.bytes)), by:{exp=flow.sampler_address}, interval:5m',
     maxResultRecords: 500,
     incremental: { kind: "series", windowMs: 70 * 60e3, stepMs: 5 * 60e3, fields: ["flows", "bytes"], keys: ["exp"] },

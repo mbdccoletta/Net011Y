@@ -127,7 +127,56 @@ function LoadMeter({ cost, buckets, onHow }: { cost: LoadCost; buckets: string[]
   );
 }
 
-export function QueryCostSection({ absent, onRecheck, cost, onHow }: { absent: Partial<Record<SourceGroup, number>>; onRecheck: () => void; cost?: LoadCost | null; onHow?: () => void }) {
+/**
+ * What a metric would make free.
+ *
+ * Grail charges a log or event query for what it scans and a metric query for nothing. Two of the
+ * app's reads are arithmetic over a stream — how many syslog lines per device and level, how many
+ * flows and bytes per exporter — and that is what a metric is. The app cannot create one; the
+ * environment does, with a metric-extraction rule in OpenPipeline, and the app then uses it without
+ * being told. This says which of the two are already served and gives the rule for the rest.
+ */
+const METRIC_RULE: Record<string, { what: string; where: string; rule: string }> = {
+  deviceLogs: {
+    what: "Syslog and trap counts per device",
+    where: "Settings › Process and contextualize › OpenPipeline › Logs › the pipeline carrying extension:syslog and snmptraps",
+    rule: 'Metric extraction · key log.net.syslog.records · measure "record count" · dimensions ip (the source address), kind (syslog or trap) and loglevel',
+  },
+  flowTs: {
+    what: "NetFlow volume per exporter",
+    where: "Settings › Process and contextualize › OpenPipeline › Logs › the pipeline carrying otelcol/netflowreceiver",
+    rule: 'Two extractions · log.net.flow.records, measure "record count" · log.net.flow.bytes, measure the field flow.io.bytes · both with the dimension exp (flow.sampler_address)',
+  },
+};
+
+function MetricReads({ reads }: { reads: { name: string; keys: readonly string[]; served: boolean }[] }) {
+  const known = reads.filter((r) => METRIC_RULE[r.name]);
+  if (!known.length) return null;
+  return (
+    <>
+      <Heading level={6} id="ds-metrics">Reads a metric would make free</Heading>
+      <Text textStyle="small">
+        A metric query costs nothing and a log query is billed by what it scans. These reads are
+        arithmetic over a stream, which is what a metric is: define the rule below in OpenPipeline and
+        the app uses the metric instead, with no setting to change here.
+      </Text>
+      <List>
+        {known.map((r) => {
+          const m = METRIC_RULE[r.name];
+          return (
+            <Text key={r.name}>
+              <Strong>{m.what}</Strong> — {r.served
+                ? `read from ${r.keys.join(" and ")}, at no query cost.`
+                : `still read from the logs. ${m.where}. ${m.rule}.`}
+            </Text>
+          );
+        })}
+      </List>
+    </>
+  );
+}
+
+export function QueryCostSection({ absent, onRecheck, cost, onHow, metricReads = [] }: { absent: Partial<Record<SourceGroup, number>>; onRecheck: () => void; cost?: LoadCost | null; onHow?: () => void; metricReads?: { name: string; keys: readonly string[]; served: boolean }[] }) {
   const bucketState = useLogBucketState();
   const bucketGate = useLogBucketGate();
   const buckets = bucketState.value;
@@ -163,6 +212,7 @@ export function QueryCostSection({ absent, onRecheck, cost, onHow }: { absent: P
         <Button variant="emphasized" disabled={parsed.join(",") === buckets.join(",")} onClick={() => setLogBuckets(parsed)}>Save</Button>
       </div>
       {draft.trim() && parsed.length === 0 && <Text textStyle="small">Bucket names use lower-case letters, digits, dashes and underscores.</Text>}
+      <MetricReads reads={metricReads} />
       <SettingTrouble what="The bucket list" onRetry={retryLogBuckets} unreadable={false}
         unsaved={bucketState.unsaved ? (bucketState.unsaved.join(", ") || "an empty list") : null} />
       {/* A list the app could not read is the one case where it holds the log queries back. Reading

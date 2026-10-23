@@ -37,6 +37,11 @@ export interface NetworkState {
   recheck: () => void;
   /** what this load read from Grail, as Dynatrace bills it */
   cost: LoadCost | null;
+  /**
+   * The reads a metric could answer: whether this environment publishes one, and what it would cost
+   * to keep paying for the log form. Settings turns this into the rule that would make it free.
+   */
+  metricReads: { name: string; keys: readonly string[]; served: boolean }[];
 }
 
 /**
@@ -287,14 +292,44 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
   const familyOf = (name: string) => (name.includes(":") ? name.split(":")[1] : null);
   const familyWaits = (name: string) => !!familyOf(name) && familiesQ.isLoading;
   const familyAbsent = (name: string) => { const f = familyOf(name); return !!f && !!present && !present.has(f); };
+  /**
+   * The reads that a metric can answer, and whether this environment publishes one.
+   *
+   * A metric query is not billed and a log query is billed by what it scans, and two of the app's
+   * reads are arithmetic over a stream — syslog lines per device and level, flows and bytes per
+   * exporter — which is what a metric is. One catalogue read, itself a metric query and so free,
+   * says which of them exist here; where one does, the metric form runs instead of the log form and
+   * the rows arrive under the same names. Where none does, nothing changes and Settings says which
+   * rule would make it free.
+   *
+   * A substitutable read waits for this answer rather than racing it: paying for the log scan and
+   * then discovering the metric existed is the one outcome worth avoiding.
+   */
+  const metricKeys = useMemo(() => [...new Set(NAMES.flatMap((n) => QUERIES[n].metric?.keys ?? []))], []);
+  const catalogQ = useDql(
+    /* `summarize by:{...}` with nothing to summarise is TOO_FEW_PARAMETERS_FOR_COMMAND; the count is
+       thrown away and only the keys are read */
+    { query: `metrics from:now()-24h | filter ${metricKeys.map((k) => `metric.key == "${k}"`).join(" or ")} | summarize n = count(), by:{metric.key}`,
+      maxResultRecords: 100, requestTimeoutMilliseconds: INLINE_MS },
+    { enabled: live && metricKeys.length > 0, staleTime: STALE_MS, runInBackground: true },
+  );
+  const published = catalogQ.isSuccess
+    ? new Set((catalogQ.data?.records ?? []).map((r) => String(r?.["metric.key"] ?? "")).filter(Boolean))
+    : null;
+  const asMetric = (name: string) => {
+    const m = QUERIES[name].metric;
+    return !!m && !!published && m.keys.every((k) => published.has(k));
+  };
+  const metricWaits = (name: string) => !!QUERIES[name].metric && catalogQ.isLoading;
   // the log queries read incrementally: from where this browser's last read ends (logCache.ts); a new
   // plan is made when the app opens and on Refresh, never while a load is running
   const [gen, setGen] = useState(0);
   const bucketKey = buckets.join(",");
-  const plans = useMemo(() => Object.fromEntries(NAMES.filter((n) => QUERIES[n].incremental)
+  /* a read served by a metric is not read incrementally: there is nothing to save and nothing to keep */
+  const plans = useMemo(() => Object.fromEntries(NAMES.filter((n) => QUERIES[n].incremental && !asMetric(n))
     .map((n) => [n, planFor(n, inBuckets(QUERIES[n].query, buckets), QUERIES[n].incremental!)] as const)) as Record<string, Plan>,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [gen, bucketKey]);
+  [gen, bucketKey, published ? [...published].sort().join(",") : ""]);
   /* the queue of the last wave, in the order the registry declares them, and the gate that
      lets a query in once the three ahead of it are out of the way */
   const wave2 = NAMES.filter((n) => waveOf(n) === 2);
@@ -310,8 +345,8 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
       || (!isProbe && answered[g] == null && !(SOURCE_GROUPS[g].probes as readonly string[]).some((p) => (probeRows.get(p) ?? 0) > 0)));
     // eslint-disable-next-line react-hooks/rules-of-hooks
     return useDql(
-      { query: plans[name]?.query ?? inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500, requestTimeoutMilliseconds: INLINE_MS },
-      { enabled: live && !gated && !waitsForBuckets(name) && !familyWaits(name) && !familyAbsent(name) && !isBarren(name) && (!QUERIES[name].detail || detailOk) && viewWants(name) && waveOf(name) <= phase && inLane(name), staleTime: STALE_MS, runInBackground: true },
+      { query: asMetric(name) ? QUERIES[name].metric!.query : plans[name]?.query ?? inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: 1500, requestTimeoutMilliseconds: INLINE_MS },
+      { enabled: live && !gated && !waitsForBuckets(name) && !metricWaits(name) && !familyWaits(name) && !familyAbsent(name) && !isBarren(name) && (!QUERIES[name].detail || detailOk) && viewWants(name) && waveOf(name) <= phase && inLane(name), staleTime: STALE_MS, runInBackground: true },
     );
   });
   // what the rest of the app sees of an incremental query is the whole window: the kept part and the new one
@@ -464,7 +499,8 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
       return { scanned: (g?.scannedRecords ?? 0) / (h || 1), h: h || 1 };
     };
     NAMES.forEach((n, i) => {
-      const kind = billedAs(QUERIES[n].query);
+      // what ran is what is billed: a read served by a metric is not a log read any more
+      const kind = asMetric(n) ? null : billedAs(QUERIES[n].query);
       const gb = (raw[i].isSuccess ? raw[i].data?.metadata?.grail?.scannedBytes ?? 0 : 0) / 1e9;
       if (!kind || !gb) return;
       c[kind] += gb; c.billableGb += gb; c.byQuery.push({ name: n, gb });
@@ -517,6 +553,8 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
       rememberBarren({});
       setGen((g) => g + 1);
     },
+    metricReads: NAMES.filter((n) => QUERIES[n].metric)
+      .map((n) => ({ name: n, keys: QUERIES[n].metric!.keys, served: asMetric(n) })),
     absent,
     recheck: () => clearSourceMemory(),
     cost,
