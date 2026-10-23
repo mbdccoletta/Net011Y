@@ -193,6 +193,24 @@ On eob14444, with both rules in place and covering their windows:
 | With the two metrics | 23.5 GB | US$ 0.077 | 6.6 s |
 | With the metrics and the network log buckets named | ~7 GB | US$ 0.023 | ~2 s |
 
+### Naming the buckets has a prerequisite
+
+The app's bucket field restricts its log queries to the buckets named in it, which only saves
+anything if those buckets hold the network's logs and little else. On eob14444 they do not exist:
+the environment has two log buckets, `default_logs` with 4.65 billion records and one for database
+monitoring, so naming either would scan exactly what is being scanned now. The lever needs, in
+order: a bucket, an OpenPipeline routing rule that sends syslog, traps, NetFlow and autodiscovery
+records to it, and then the name in Settings. A routing rule applies to what arrives after it, so
+the saving appears over the length of the window rather than at once, and the bucket's own
+retention becomes a decision of its own.
+
+It also needs a guard, because the failure is silent: a log query restricted to a bucket that does
+not hold these records answers with no rows, and this app reads no rows as "the environment does
+not send this" — in the memory the whole team shares, for twelve hours. One typo would tell
+everybody the data is not there. While a bucket list is in force, an empty answer from a log source
+is no longer recorded as an absence; Settings names the source, says the app cannot tell which of
+the two it is, and offers to read every bucket again.
+
 The bucket list is the other half and needs no code: 52% of that environment's log volume in the
 last hour was `otelcol/netflowreceiver`, and the app's log queries there carry no bucket filter, so
 every flow read also scans the 48% that is not flow.

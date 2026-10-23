@@ -16,6 +16,8 @@ import { SiteHierarchySettings } from "./SiteHierarchySettings";
 interface Props {
   /** the reads a metric could answer, and whether this environment publishes one */
   metricReads?: { name: string; keys: readonly string[]; served: boolean; listed: boolean }[];
+  /** log sources that answered with nothing while a bucket list is in force */
+  emptyInBuckets?: SourceGroup[];
   show: boolean;
   onDismiss: () => void;
   model: NetworkModel | null;
@@ -35,7 +37,7 @@ interface Props {
   onFocus?: (key: NeedKey) => void;
 }
 
-export function SettingsSheet({ show, onDismiss, model, needs, source, scale, onSource, focus, absent, onRecheck, steps, inUse, cost, metricReads, onFocus }: Props) {
+export function SettingsSheet({ show, onDismiss, model, needs, source, scale, onSource, focus, absent, onRecheck, steps, inUse, cost, metricReads, emptyInBuckets, onFocus }: Props) {
   return (
     <Sheet
       title="Settings"
@@ -62,7 +64,7 @@ export function SettingsSheet({ show, onDismiss, model, needs, source, scale, on
             <PagesSection needs={needs} />
             <SendDataSection needs={needs} source={source} focus={focus} />
             {source === "live" && <ExtensionsSection model={model} />}
-            {source === "live" && <QueryCostSection absent={absent} onRecheck={onRecheck} cost={cost} metricReads={metricReads} onHow={() => onFocus?.("syslog")} />}
+            {source === "live" && <QueryCostSection absent={absent} onRecheck={onRecheck} cost={cost} metricReads={metricReads} emptyInBuckets={emptyInBuckets} onHow={() => onFocus?.("syslog")} />}
           </div>
         </Tab>
         <Tab title="App">

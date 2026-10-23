@@ -26,6 +26,13 @@ export interface NetworkState {
   unread: string[];
   /** reads the app is deliberately not making, and why a view that needs them says so */
   blocked: string[];
+  /**
+   * Log sources that came back empty while a bucket list is in force.
+   *
+   * It is the one case where "no rows" has two readings — the environment does not send this, or
+   * the buckets named here do not hold it — and the app may not choose between them on its own.
+   */
+  emptyInBuckets: SourceGroup[];
   /** Devices in the environment, as soon as the inventory answers */
   estate: number | null;
   /** false in a large estate, where interface detail is fetched per device instead */
@@ -454,6 +461,16 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
       const rs = SOURCE_GROUPS[g].probes.map((p) => results[NAMES.indexOf(p)]);
       if (!rs.every((r) => r.isSuccess)) return;
       const empty = rs.every((r) => !(r.data?.records ?? []).length);
+      /**
+       * Nothing in a named bucket is not nothing in the environment.
+       *
+       * A bucket list is typed by hand, and a log query restricted to a bucket that does not hold
+       * these records answers with no rows — which this app would otherwise write down as "this
+       * environment sends no syslog", in the memory the whole team shares, for twelve hours. One
+       * typo would tell everybody the data is not there. While a bucket filter is in place, an
+       * empty probe says nothing about the environment and is not remembered.
+       */
+      if (empty && buckets.length && SOURCE_GROUPS[g].probes.some((p) => /^fetch logs\b/.test(QUERIES[p].query))) return;
       if (empty && next[g] == null) { next[g] = Date.now(); changed = true; }
       if (!empty && next[g] != null) { delete next[g]; changed = true; }
       if (!empty && yes[g] == null) { yes[g] = Date.now(); alsoChanged = true; }
@@ -607,6 +624,14 @@ export function useNetwork(source: Source, scale: "xl" | null = null, views: rea
     counts,
     unread,
     blocked,
+    emptyInBuckets: buckets.length
+      ? (Object.keys(SOURCE_GROUPS) as SourceGroup[]).filter((g) => {
+        const probes = SOURCE_GROUPS[g].probes as readonly string[];
+        if (!probes.some((p) => /^fetch logs\b/.test(QUERIES[p].query))) return false;
+        const rs = probes.map((p) => results[NAMES.indexOf(p)]);
+        return rs.every((r) => r.isSuccess) && rs.every((r) => !(r.data?.records ?? []).length);
+      })
+      : [],
     estate,
     detailLoaded: detailOk,
     loading: live ? settled < NAMES.length : !demo,

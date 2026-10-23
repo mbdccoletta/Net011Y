@@ -178,7 +178,7 @@ function MetricReads({ reads }: { reads: { name: string; keys: readonly string[]
   );
 }
 
-export function QueryCostSection({ absent, onRecheck, cost, onHow, metricReads = [] }: { absent: Partial<Record<SourceGroup, number>>; onRecheck: () => void; cost?: LoadCost | null; onHow?: () => void; metricReads?: { name: string; keys: readonly string[]; served: boolean; listed: boolean }[] }) {
+export function QueryCostSection({ absent, onRecheck, cost, onHow, metricReads = [], emptyInBuckets = [] }: { absent: Partial<Record<SourceGroup, number>>; onRecheck: () => void; cost?: LoadCost | null; onHow?: () => void; metricReads?: { name: string; keys: readonly string[]; served: boolean; listed: boolean }[]; emptyInBuckets?: SourceGroup[] }) {
   const bucketState = useLogBucketState();
   const bucketGate = useLogBucketGate();
   const buckets = bucketState.value;
@@ -209,11 +209,28 @@ export function QueryCostSection({ absent, onRecheck, cost, onHow, metricReads =
         When OpenPipeline routes syslog, traps, NetFlow and SNMP autodiscovery records to buckets of their own, name them
         here: every log query then reads only those buckets instead of all logs. Leave empty to read all log buckets.
       </Text>
+      <Text textStyle="small">
+        The buckets have to exist first, and a bucket on its own is not enough: a bucket holds what an OpenPipeline
+        routing rule sends to it, and a rule only routes what arrives after it was made, so the saving appears over the
+        length of the window rather than at once. Naming a bucket that does not hold these records does not fail — it
+        answers with no rows — which is why a source that comes back empty while a list is in force is reported here
+        rather than recorded as a source this environment does not send.
+      </Text>
       <div className="ds-row">
         <TextInput value={draft} onChange={(v: string) => setDraft(v)} placeholder="for example network_logs" aria-labelledby="ds-buckets" />
         <Button variant="emphasized" disabled={parsed.join(",") === buckets.join(",")} onClick={() => setLogBuckets(parsed)}>Save</Button>
       </div>
       {draft.trim() && parsed.length === 0 && <Text textStyle="small">Bucket names use lower-case letters, digits, dashes and underscores.</Text>}
+      {emptyInBuckets.length > 0 && (
+        <div className="ds-row" role="alert">
+          <Text textStyle="small">
+            {emptyInBuckets.map((g) => SOURCE_LABEL[g]).join(", ")} came back empty from the buckets named above. Either
+            this environment does not send {emptyInBuckets.length === 1 ? "it" : "them"}, or {buckets.length === 1 ? "that bucket does" : "those buckets do"} not hold
+            {emptyInBuckets.length === 1 ? " it" : " them"} — the app cannot tell which, so it has recorded neither.
+          </Text>
+          <Button onClick={() => setLogBuckets([])}>Read every bucket again</Button>
+        </div>
+      )}
       <MetricReads reads={metricReads} />
       <SettingTrouble what="The bucket list" onRetry={retryLogBuckets} unreadable={false}
         unsaved={bucketState.unsaved ? (bucketState.unsaved.join(", ") || "an empty list") : null} />
