@@ -3,7 +3,7 @@
 // Reads site names, one per line, and reports how many the app would place from the name alone —
 // no tags, no coordinates. The estate's countries are learned the way the app learns them: a
 // country word in a name anchors the region codes in every other name, so a file of
-// "…, Durham, NC, 27712" lines places nothing while one of them saying USA places all of them.
+// "…, <city>, NC, <zip>" lines places nothing while one of them saying USA places all of them.
 //
 //   node scripts/grail/place_dryrun.mjs sites.txt
 //

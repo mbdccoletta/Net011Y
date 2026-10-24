@@ -58,7 +58,7 @@ export const siteVerdict = (m: NetworkModel, code: string): Verdict =>
  * them, and the few that survive read as a column of addresses rather than as a map.
  *
  * At map scale the city identifies the site and the street does not, so an address is cut to the
- * city and the region that follow it. Nothing else is touched. A name that is a name — `Durham DC`,
+ * city and the region that follow it. Nothing else is touched. A name that is a name — `Harbour DC`,
  * `Springfield, IL` — comes back as it was, because a name the team chose says more than anything
  * this could derive from it, and the full string stays on the hover and on the site page.
  */

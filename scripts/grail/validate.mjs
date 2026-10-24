@@ -1084,7 +1084,7 @@ check("An address-shaped site name is cut to the city and the region the map nee
 
 // A name the team chose is better than anything this can derive from it, so only an address is
 // touched: no street, no postal code and no country means the string goes to the map as it is.
-const KEPT = ["Durham DC", "Sao Paulo, BR", "HQ", "Fairview, KS", "Dallas Hub, Texas", "Site 42", "", "   "];
+const KEPT = ["Harbour DC", "Sao Paulo, BR", "HQ", "Fairview, KS", "Dallas Hub, Texas", "Site 42", "", "   "];
 check("A site name that is a name reaches the map unchanged",
   KEPT.every((n) => shortSiteName(n) === n.trim()),
   KEPT.filter((n) => shortSiteName(n) !== n.trim()).map((n) => `${n} became ${shortSiteName(n)}`).join(" · ") || "all kept");

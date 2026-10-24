@@ -74,7 +74,7 @@ function build(): Map<string, string> {
  *
  * Never from two letters — `CA` is California as often as Canada, `IN` is Indiana as often as
  * India — and never from the digits beside it: the last field of a US address is written
- * `USA 67010`, the country and the postal code in one part, and reading it whole finds nothing.
+ * `USA 66000`, the country and the postal code in one part, and reading it whole finds nothing.
  */
 export function countryCodeOf(part: string): string | null {
   const t = part.replace(/\d[\d\-/]*/g, " ").replace(/[.,]/g, "").replace(/\s+/g, " ").trim();
