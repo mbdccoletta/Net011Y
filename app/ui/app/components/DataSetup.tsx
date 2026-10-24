@@ -363,7 +363,7 @@ export function DataSourceSection({ source, scale, onSource }: Pick<Props, "sour
           </Select>
         </div>
         <Text textStyle="small">
-          This environment reads what your Dynatrace environment already stores. The example network is a fictitious retail group with about 550 sites across Brazil and the United States, so you can explore
+          This environment reads what your Dynatrace environment already stores. The example network is a fictitious retail group with about 550 sites across Europe, Asia and the United States, so you can explore
           the app before sending data; the extra-large one is the same group at about 4,200 sites and 20,000 devices, read the way the app reads an estate that size (per-device summaries, not every port).
         </Text>
       </section>

@@ -127,7 +127,7 @@ type Label = { key: string; kind: "site" | "region"; lon: number; lat: number; t
 /**
  * The names, and which of them fit.
  *
- * A marker per label and nothing else would stack Guarulhos over São Paulo over SP at every
+ * A marker per label and nothing else would stack a suburb over its city over its region at every
  * zoom the reader did not choose. The canvas ran a box test in draw order and dropped what
  * collided; the same pass runs here on the settled camera — `map.project` gives the pixel,
  * the element gives the width, and anything overlapping something already taken is hidden.
@@ -456,7 +456,7 @@ function Motion({ routes, hit: hitRegions, all, focus, focusKey, refit, colour, 
      * The flight, timed by how far it is going.
      *
      * Every move took the same 1100 ms on the same cubic ease, which reads as a slide: a hop
-     * between two neighbouring sites crawled, and a jump from Brazil to the estate's whole
+     * between two neighbouring sites crawled, and a jump from one country to the estate's whole
      * extent arrived before the eye had followed it. `fitBounds` flies rather than slides when
      * it is left to — the arc that pulls back, travels and comes down is maplibre's own, and
      * supplying an easing of ours replaced it with a straight interpolation. So the easing is

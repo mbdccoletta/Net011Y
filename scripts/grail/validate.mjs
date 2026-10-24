@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES } from "./out/queries.mjs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
+import { buildRealModel, deriveTags, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -984,10 +984,14 @@ const estate = clusterChanges(subjects.filter((s) => s.reading.state === "change
 const migration = estate.events.find((e) => ["changedA", "changedB", "changedC"]
   .every((n) => e.members.some((m) => m.key === portOf(n)?.key)));
 check("Ports that changed together are one event across their sites, and one that changed alone is a single",
-  !!migration && migration.members.length === 3 && migration.spread === 0 && migration.sites === 3
+  // the three step at one declared moment, but each series is bucketed from its own start, so they
+  // can land in adjacent hours — they did align exactly on an earlier estate, and that was the
+  // estate's doing, not the clustering's. What the event has to hold is the three of them, at their
+  // three sites, inside the window: the spread is checked as small rather than as zero.
+  !!migration && migration.members.length === 3 && migration.spread <= 1 && migration.sites === 3
   && Math.abs(migration.ago - ah.changedAgo) <= 24
   && estate.singles.some((s) => s.key === portOf("changedAlone")?.key),
-  migration ? `${migration.members.length} members · ${migration.sites} sites · ${migration.ago} h ago · ${estate.singles.length} singles`
+  migration ? `${migration.members.length} members · ${migration.sites} sites · spread ${migration.spread} h · ${migration.ago} h ago · ${estate.singles.length} singles`
     : `no event holds the three: ${estate.events.map((e) => `${e.members.length}@${e.ago}`).join(" ")}`);
 
 // The left half of the runway is the record and not a projection, and a tag path has to carry it
@@ -1146,6 +1150,23 @@ check("A site name that names a state is placed in it, with the country from the
     const r = parts.map((t) => regionOf(t, own.length ? own : ["US"])).find(Boolean);
     return r ? `${r.cc}/${r.region}` : "unplaced";
   }).join(" · "));
+
+// A device naming convention is read from whatever subdivision code that country writes. Two
+// letters is the United States and Brazil; almost everywhere else is something else, and an estate
+// using its own country's codes used to be read as having no convention at all.
+const NAMED = [
+  ["DE-HE-FRA1-SWT1", "FRA1", "switch"],
+  ["GB-MAN-MCR1-RTR1", "MCR1", "edge"],
+  ["JP-13-TKY1-CON1", "TKY1", "core"],
+  ["MX-BCN-TIJ1-FWL1", "TIJ1", "firewall"],
+  ["US-KS-FRV1-SWA-001", "FRV1", "switch"],
+];
+check("A device naming convention is read whatever subdivision code the country writes",
+  NAMED.every(([name, site, role]) => {
+    const d = deriveTags(name);
+    return d.matched && d.site === site && d.role === role;
+  }),
+  NAMED.map(([name]) => { const d = deriveTags(name); return `${name}→${d.matched ? `${d.site}/${d.role}` : "no match"}`; }).join(" · "));
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 

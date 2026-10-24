@@ -207,7 +207,7 @@ on any Node other than 24; it deploys anyway.
 ## Example networks
 
 Settings › General › Data source opens three simulated networks, so the app can be explored before any data
-arrives — a Brazilian and American retail group, at the three sizes a reader is likely to be sizing against:
+arrives — a retail group across Europe, Asia and the Americas, at the three sizes a reader is likely to be sizing against:
 
 | | Sites | Devices | Interfaces | WAN links |
 |---|---|---|---|---|

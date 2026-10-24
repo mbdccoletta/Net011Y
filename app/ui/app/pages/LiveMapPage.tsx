@@ -151,7 +151,7 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
    * The platform's map draws the world; the schematic stays on the canvas.
    *
    * Its coordinates are a layout and not a place — eight discs on a ring, so a geographic map
-   * would put Southeast Brazil in the Atlantic. Both components take the same props, and the
+   * would put a ring of regions out in the ocean. Both components take the same props, and the
    * switch is a component rather than a call so the two keep their own hooks.
    */
   const Stage = schematic ? LiveMap : LiveMapGeo;
@@ -243,7 +243,7 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
       const key = `${r.cc}|${r.code}|${r.name}`;
       const l = count.get(key); if (l) l.push(i); else count.set(key, [i]);
     });
-    // A box is not a country: France reaches from Guiana to Réunion, so a Brazilian site used to fetch
+    // A box is not a country: France reaches from Guiana to Réunion, so a South American site used to fetch
     // it and draw its hundred and one regions over Europe. Only countries that hold a site are drawn,
     // and inside one the regions without sites stay as outlines, which is the context worth having.
     regionSites.current = new Map([...count].map(([k, v]) => [k.split("|").slice(1).join("|"), new Set(v.map((i) => i.code))]));

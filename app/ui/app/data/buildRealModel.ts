@@ -11,7 +11,7 @@ import { appName, buildFlowMap } from "./buildFlowMap";
 import { FAMILIES } from "./formats";
 import { addressParts } from "../model/site";
 import { countriesOf } from "./geo/admin1/load";
-import { countryOf, ensurePlaces, regionOf } from "./geo/places";
+import { countryOf, ensurePlaces, regionOf } from "./places";
 
 type Rec = Record<string, any>;
 export type QueryResults = Partial<Record<string, Rec[]>>;
@@ -42,23 +42,19 @@ const deadSince = (row: Rec, values: unknown[], dead: (i: number) => boolean): s
   return Number.isFinite(start) && Number.isFinite(step) ? new Date(start + i * step).toISOString() : null;
 };
 
-// COUNTRY-UF-SITE-ROLE[NNN | -NNN], with or without the DNS domain (BR-SC-FLN1-SWA-001.corp.example.com)
-const CONVENTION = /^([A-Z]{2})-([A-Z]{2})-([A-Z0-9]{3,5})-([A-Z]{2,5})(?:-?\d+)?$/;
+// COUNTRY-SUBDIVISION-SITE-ROLE[NNN | -NNN], with or without the DNS domain
+// (DE-HE-FRA1-SWA-001.corp.example.com)
+//
+// The subdivision was two letters, which is what the United States and Brazil write and almost
+// nowhere else does: Great Britain writes MAN, Japan writes 13, France writes 01, Mexico writes
+// BCN. An estate using its own country's codes matched nothing and was read as having no naming
+// convention at all.
+const CONVENTION = /^([A-Z]{2})-([A-Z0-9]{1,4})-([A-Z0-9]{3,5})-([A-Z]{2,5})(?:-?\d+)?$/;
 const ROLE_CODES: Record<string, string> = {
   RTR: "edge", RTC: "edge", RTP: "edge", L2L: "edge", CON: "core", COR: "core", SWT: "switch", DISP: "switch", APW: "ap", WLC: "wlc", FWL: "firewall", LBL: "lb",
   SWA: "switch", SWD: "switch", LEF: "switch", SWC: "core", SPN: "core", FWC: "firewall", FW: "firewall",
 };
 
-/** Brazilian federative units: the name the region is shown as, and a centre to place a site at when
- *  nothing gives its coordinates. A site placed this way is marked approximate. */
-const BR_UF: Record<string, [string, number, number]> = {
-  AC: ["Acre", -9.0, -70.5], AL: ["Alagoas", -9.6, -36.6], AP: ["Amapá", 1.4, -51.8], AM: ["Amazonas", -3.4, -64.7], BA: ["Bahia", -12.5, -41.7],
-  CE: ["Ceará", -5.2, -39.5], DF: ["Distrito Federal", -15.8, -47.9], ES: ["Espírito Santo", -19.6, -40.6], GO: ["Goiás", -15.9, -49.6], MA: ["Maranhão", -5.0, -45.3],
-  MT: ["Mato Grosso", -12.9, -55.9], MS: ["Mato Grosso do Sul", -20.5, -54.8], MG: ["Minas Gerais", -18.5, -44.6], PA: ["Pará", -3.8, -52.5], PB: ["Paraíba", -7.2, -36.8],
-  PR: ["Paraná", -24.6, -51.6], PE: ["Pernambuco", -8.4, -37.9], PI: ["Piauí", -7.7, -42.7], RJ: ["Rio de Janeiro", -22.2, -42.7], RN: ["Rio Grande do Norte", -5.8, -36.6],
-  RS: ["Rio Grande do Sul", -29.7, -53.2], RO: ["Rondônia", -10.9, -63.0], RR: ["Roraima", 2.0, -61.4], SC: ["Santa Catarina", -27.3, -50.5], SP: ["São Paulo", -22.2, -48.8],
-  SE: ["Sergipe", -10.6, -37.4], TO: ["Tocantins", -10.2, -48.3],
-};
 
 /** "City - CODE - Area" in the SNMP sysLocation: the city of a site, when the code in it matches. */
 /** sysLocation left at its default ("n/a", "unknown", "-") says nothing about where the device is. */
@@ -352,7 +348,9 @@ export function buildRealModel(r: QueryResults, tenant: string): NetworkModel {
     if (cidr) { const set = siteCidrs.get(site) ?? new Set<string>(); cidr.split(/[,;\s]+/).filter(Boolean).forEach((c) => set.add(c)); siteCidrs.set(site, set); }
     const hint = siteHints.get(site) ?? { cities: [] };
     if (loc) hint.cities.push(loc.city);
-    hint.uf ??= derived.uf ?? tag(d, "federativeunit") ?? tag(d, "state") ?? tag(d, "uf") ?? undefined;
+    // `state` is the documented key and `uf` the short form; `federativeunit` is read last and only
+    // because an early environment was tagged with it — it is one country's word for a subdivision
+    hint.uf ??= derived.uf ?? tag(d, "state") ?? tag(d, "uf") ?? tag(d, "federativeunit") ?? undefined;
     if (DC_NAME.test(`${d.activation_tag ?? ""} ${d["autodiscovery.group_label"] ?? ""}`)) hint.dc = true;
     hint.country ??= derived.country ?? tag(d, "country") ?? undefined;
     siteHints.set(site, hint);
@@ -1040,7 +1038,6 @@ const pingsFailing = (d: Device, failing: Set<string>) =>
     const hint = siteHints.get(code);
     const city = hint?.cities.length ? mostCommon(hint.cities) : undefined;
     const uf = hint?.uf?.toUpperCase();
-    const state = hint?.country && hint.country.toUpperCase() !== "BR" ? undefined : uf ? BR_UF[uf] : undefined;
     if (t) {
       const lat = num(tag(t, "geo_lat")), lon = num(tag(t, "geo_lon"));
       // the name counts as well as the code, as it does for an untagged site: "DC SAO Central"
@@ -1048,7 +1045,7 @@ const pingsFailing = (d: Device, failing: Set<string>) =>
       const nm = tag(t, "site_name") ?? city ?? code;
       Object.assign(sites[code], {
         name: nm, city: tag(t, "city") ?? city, uf: tag(t, "state") ?? uf,
-        region: tag(t, "region") ?? state?.[0], hub: tag(t, "hub") ?? undefined,
+        region: tag(t, "region") ?? undefined, hub: tag(t, "hub") ?? undefined,
         dc: tag(t, "site_type") === "datacenter" || DC_NAME.test(code) || DC_NAME.test(nm),
         ...(lat != null && lon != null ? { lat, lon } : {}),
       });
@@ -1059,19 +1056,17 @@ const pingsFailing = (d: Device, failing: Set<string>) =>
       sites[code].name = city ?? mostCommon(locs) ?? code;
       if (city) sites[code].city = city;
       if (uf) sites[code].uf = uf;
-      if (state) sites[code].region = state[0];
       if (DC_NAME.test(code) || DC_NAME.test(sites[code].name) || hint?.dc) sites[code].dc = true;
       const place = placeOf(code, sites[code].name);
       if (place) Object.assign(sites[code], place);
     }
-    // nothing gives coordinates: place the site at the centre of its state and say it is approximate
-    if (sites[code].lat == null && state) Object.assign(sites[code], { lat: state[1], lon: state[2], approx: "state" as const });
   }
   // ---------- sites nothing placed: the centre of the region the name already states ----------
   //
   // An estate that has not been tagged still says where it is. `100 Example Road, Fairview, KS, USA
   // 66000` names a state, `SDC:A000.00:200 Example Parkway:Brookfield:NC:27000` names one too,
-  // and until this existed the app read a table of 27 Brazilian states and placed nothing else:
+  // and until this existed the app read one country's states from a hand-written table and placed
+  // nothing else:
   // a US estate opened on a schematic with two of the three map layouts switched off.
   //
   // The table of every admin-1 centre on earth is fetched, not bundled, so this is empty on the
@@ -1079,7 +1074,12 @@ const pingsFailing = (d: Device, failing: Set<string>) =>
   const unplaced = Object.values(sites).filter((x) => x.lat == null);
   if (unplaced.length) {
     void ensurePlaces();
-    const partsOf = new Map<string, string[]>(unplaced.map((x) => [x.code, addressParts(x.name)]));
+    // the parts of the name, plus the state code a device naming convention states for this site:
+    // `US-KS-FRV1-RTR1` says Kansas as plainly as the word does, and resolves through the same table
+    const partsOf = new Map<string, string[]>(unplaced.map((x) => {
+      const u = siteHints.get(x.code)?.uf?.toUpperCase();
+      return [x.code, u ? [...addressParts(x.name), u] : addressParts(x.name)];
+    }));
     /**
      * The countries this estate is known to be in.
      *

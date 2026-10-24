@@ -77,7 +77,7 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
     steps: [
       "In Extensions, activate the extension that matches each vendor: com.dynatrace.extension.snmp-generic-cisco-device, snmp-generic-juniper, palo-alto-generic, f5.bigip, or snmp-generic-device for any other device.",
       "Create a monitoring configuration on the ActiveGate group and add every device IP address with its SNMP credentials. For large networks, use the SNMP Autodiscovery extension per IP range.",
-      "Name devices BR-<state>-<site>-<role><n> (for example BR-RS-POR1-RTR1) or add the site primary tags below. Roles: RTR edge router, CON core, SWT switch, APW access point, WLC wireless controller, FWL firewall, LBL load balancer.",
+      "Name devices <country>-<subdivision>-<site>-<role><n> (for example DE-HE-FRA1-RTR1, GB-MAN-MCR1-SWT1 or JP-13-TKY1-CON1) or add the site primary tags below. The country is the two-letter ISO code and the subdivision is whatever that country calls its states, provinces or prefectures. Roles: RTR edge router, CON core, SWT switch, APW access point, WLC wireless controller, FWL firewall, LBL load balancer.",
     ],
     snippets: [{
       title: "Monitoring configuration (excerpt)",
@@ -192,12 +192,12 @@ export const SETUP: Record<NeedKey, SetupGuide> = {
   "authentication": { "type": "SNMPv3", "useCredentialVault": true, "credentialVaultIdSnmpV3": "CREDENTIALS_VAULT-<id>" },
   "primaryTags": [
     { "key": "primary_tags.site", "value": "POR1" },
-    { "key": "primary_tags.site_name", "value": "Porto Alegre Store 1" },
+    { "key": "primary_tags.site_name", "value": "Frankfurt Store 1" },
     { "key": "primary_tags.site_type", "value": "branch" },
     { "key": "primary_tags.region", "value": "South" },
     { "key": "primary_tags.geo_lat", "value": "-30.03" },
     { "key": "primary_tags.geo_lon", "value": "-51.23" },
-    { "key": "primary_tags.hub", "value": "SPO1" }
+    { "key": "primary_tags.hub", "value": "FRA1" }
   ]
 }`,
     }],

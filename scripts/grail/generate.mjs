@@ -28,27 +28,27 @@ const S = (v) => (v == null ? null : String(v)); // Grail longs arrive as string
 
 // ---------------- inventory ----------------
 const DCS = [
-  { code: "SPO1", uf: "SP", city: "São Paulo", lat: -23.55, lon: -46.63, net: "10.0" },
-  { code: "CPS1", uf: "SP", city: "Campinas", lat: -22.91, lon: -47.06, net: "10.1" },
+  { code: "FRA1", cc: "DE", uf: "HE", city: "Frankfurt", lat: 50.11, lon: 8.68, net: "10.0" },
+  { code: "MUM1", cc: "IN", uf: "MH", city: "Mumbai", lat: 19.08, lon: 72.88, net: "10.1" },
 ];
 const CITIES = [
-  ["South", "RS", "Porto Alegre", -30.03, -51.23], ["South", "RS", "Caxias do Sul", -29.17, -51.18], ["South", "PR", "Curitiba", -25.43, -49.27],
-  ["South", "PR", "Londrina", -23.31, -51.16], ["South", "SC", "Florianópolis", -27.6, -48.55], ["South", "SC", "Joinville", -26.3, -48.85],
-  ["Southeast", "SP", "Santos", -23.96, -46.33], ["Southeast", "SP", "Ribeirão Preto", -21.18, -47.81], ["Southeast", "RJ", "Rio de Janeiro", -22.91, -43.17],
-  ["Southeast", "MG", "Belo Horizonte", -19.92, -43.94], ["Southeast", "MG", "Uberlândia", -18.92, -48.28], ["Southeast", "ES", "Vitória", -20.32, -40.34],
-  ["Midwest", "GO", "Goiânia", -16.69, -49.26], ["Midwest", "DF", "Brasília", -15.79, -47.88], ["Midwest", "MT", "Cuiabá", -15.6, -56.1],
-  ["Northeast", "BA", "Salvador", -12.97, -38.5], ["Northeast", "PE", "Recife", -8.05, -34.9], ["Northeast", "CE", "Fortaleza", -3.73, -38.52],
-  ["North", "AM", "Manaus", -3.12, -60.02], ["North", "PA", "Belém", -1.46, -48.49],
+  ["Central Europe", "DE", "BY", "Munich", 48.14, 11.58], ["Central Europe", "DE", "HH", "Hamburg", 53.55, 9.99], ["Central Europe", "DE", "NW", "Cologne", 50.94, 6.96],
+  ["Central Europe", "DE", "BE", "Berlin", 52.52, 13.4], ["Central Europe", "DE", "BW", "Stuttgart", 48.78, 9.18], ["Central Europe", "DE", "SN", "Leipzig", 51.34, 12.37],
+  ["Eastern Europe", "PL", "MZ", "Warsaw", 52.23, 21.01], ["Eastern Europe", "PL", "MA", "Krakow", 50.06, 19.94], ["Eastern Europe", "PL", "DS", "Wroclaw", 51.11, 17.04],
+  ["Eastern Europe", "PL", "WP", "Poznan", 52.41, 16.93], ["Eastern Europe", "PL", "PM", "Gdansk", 54.35, 18.65], ["Eastern Europe", "PL", "SL", "Katowice", 50.26, 19.02],
+  ["Southern Europe", "IT", "MI", "Milan", 45.46, 9.19], ["Southern Europe", "IT", "RM", "Rome", 41.9, 12.5], ["Southern Europe", "IT", "TO", "Turin", 45.07, 7.69],
+  ["South Asia", "IN", "DL", "Delhi", 28.61, 77.21], ["South Asia", "IN", "KA", "Bengaluru", 12.97, 77.59], ["South Asia", "IN", "TN", "Chennai", 13.08, 80.27],
+  ["Southeast Asia", "ID", "JK", "Jakarta", -6.21, 106.85], ["Southeast Asia", "ID", "JI", "Surabaya", -7.25, 112.75],
 ];
-const sites = DCS.map((d) => ({ ...d, dc: true, region: "Southeast", name: `Data Center ${d.city}` }));
+const sites = DCS.map((d) => ({ ...d, dc: true, region: "Central Europe", name: `Data Center ${d.city}` }));
 for (let i = 0; i < 60; i++) {
-  const [region, uf, city, lat, lon] = CITIES[i % CITIES.length];
-  const code = `${({ Belém: "BLM" })[city] ?? city.normalize("NFD").replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase()}${Math.floor(i / CITIES.length) + 1}`;
+  const [region, cc, uf, city, lat, lon] = CITIES[i % CITIES.length];
+  const code = `${city.normalize("NFD").replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase()}${Math.floor(i / CITIES.length) + 1}`;
   const size = i % 5 === 0 ? "L" : i % 3 === 0 ? "S" : "M";
-  const hub = ["Northeast", "North"].includes(region) ? "CPS1" : "SPO1";
-  sites.push({ code, uf, city, region, hub, size, dc: false, name: `Loja ${city} ${Math.floor(i / CITIES.length) + 1}`, lat: +(lat + uni(-0.15, 0.15)).toFixed(3), lon: +(lon + uni(-0.15, 0.15)).toFixed(3), net: `10.${10 + i}` });
+  const hub = ["South Asia", "Southeast Asia"].includes(region) ? "MUM1" : "FRA1";
+  sites.push({ code, cc, uf, city, region, hub, size, dc: false, name: `Store ${city} ${Math.floor(i / CITIES.length) + 1}`, lat: +(lat + uni(-0.15, 0.15)).toFixed(3), lon: +(lon + uni(-0.15, 0.15)).toFixed(3), net: `10.${10 + i}` });
 }
-const carrierOf = (s) => (s.region === "South" ? "Carrier B" : s.region === "North" ? "Carrier D" : pick(["Carrier A", "Carrier A", "Carrier B"]));
+const carrierOf = (s) => (s.region === "Eastern Europe" ? "Carrier B" : s.region === "Southeast Asia" ? "Carrier D" : pick(["Carrier A", "Carrier A", "Carrier B"]));
 const circuits = [];
 for (const s of sites.filter((x) => !x.dc)) {
   const carrier = carrierOf(s);
@@ -73,13 +73,13 @@ const NO_CIRCUIT = { "primary_tags.circuit_id": null, "primary_tags.circuit_role
 
 // ---------------- scenarios ----------------
 // 1) Carrier B outage for 6 South sites since 47 min ago: edge routers stop answering SNMP and ICMP.
-const outage = sites.filter((s) => !s.dc && carrierOf(s) === "Carrier B" && s.region === "South").slice(0, 6).map((s) => s.code);
+const outage = sites.filter((s) => !s.dc && carrierOf(s) === "Carrier B" && s.region === "Eastern Europe").slice(0, 6).map((s) => s.code);
 // the outage opens 20 minutes into the hour before last: sessions are read from that settled hour (the
 // one after it is still filling), so it is the first low one
 const OUTAGE_SINCE = Math.floor(NOW / 3600e3) * 3600e3 - 100 * 60e3;
-// 2) Firewall CPU saturation in CPS1. 3) Uplink saturation in one large store. 4) CRC errors on a store switch.
+// 2) Firewall CPU saturation in MUM1. 3) Uplink saturation in one large store. 4) CRC errors on a store switch.
 const SAT_SITE = sites.find((s) => s.size === "L" && !outage.includes(s.code)).code;
-const CRC_SITE = sites.find((s) => s.size === "M" && s.region === "Southeast").code;
+const CRC_SITE = sites.find((s) => s.size === "M" && s.region === "Central Europe").code;
 
 // ---------------- devices and interfaces (smartscape nodes) ----------------
 const EXT = {
@@ -92,7 +92,7 @@ const EXT = {
 };
 const devices = [];
 const add = (s, role, n, vendor, ifaces, descr) => {
-  const name = `BR-${s.uf}-${s.code}-${role}${n}`;
+  const name = `${s.cc}-${s.uf}-${s.code}-${role}${n}`;
   const ip = `${s.net}.${{ RTR: 1, CON: 1, FWL: 2, LBL: 3, WLC: 4, SWT: 10, APW: 20 }[role]}.${n}`;
   devices.push({ name, site: s, role, vendor, ip, ifaces, descr, id: `EXT_NETWORK_DEVICE-${hex(name)}`, mac: hex(`${name}mac`, 12).match(/../g).join(":") });
 };
@@ -192,7 +192,7 @@ for (const f of ifaces) {
 }
 for (const d of devices) {
   if (d.vendor !== "generic") {
-    const hot = d.site.code === "CPS1" && d.role === "FWL";
+    const hot = d.site.code === "MUM1" && d.role === "FWL";
     results.cpu.push({ "dt.smartscape.ext_network_device": d.id, ...tf(B5, N5), cpu: Array.from({ length: N5 }, (_, k) => (unreachable(d, NOW - (N5 - k) * B5) ? null : hot && k > 8 ? Math.round(uni(91, 98)) : Math.round(uni(6, d.role === "FWL" ? 45 : 30)))) });
   }
   results.uptime.push({ c: Array.from({ length: N1H }, (_, k) => (unreachable(d, NOW - (N1H - k) * B1H + B1H - B5) ? null : "60")), "dt.smartscape.ext_network_device": d.id, ...tf(B1H, N1H) });
@@ -236,7 +236,7 @@ results.ifTraffic.push({ "dt.smartscape.ext_network_device": VL.id, "dt.smartsca
 // ICMP network availability monitors, run from a private location in each hub (one ping every 5 min):
 //  - one per WAN circuit, pinging the carrier side of the circuit, tagged with the circuit inventory;
 //  - one per store, pinging the edge router, tagged with the site only.
-const LOCS = { SPO1: `SYNTHETIC_LOCATION-${hex("agSPO1")}`, CPS1: `SYNTHETIC_LOCATION-${hex("agCPS1")}` };
+const LOCS = { FRA1: `SYNTHETIC_LOCATION-${hex("agFRA1")}`, MUM1: `SYNTHETIC_LOCATION-${hex("agMUM1")}` };
 results.icmpNow = [];
 const probe = (row, rttBase, downFrom) => {
   for (const [key, bucket, n] of [["icmp", B1H, N1H], ["icmpNow", B5, N5]]) {
@@ -290,7 +290,7 @@ for (const code of outage) {
   traps.push({ content: `SNMP trap (IF-MIB::linkDown) reported from src:${core.ip}\n agent:${core.ip}\n ifIndex:${int(9, 40)}`, "device.address": core.ip, "log.source": "snmptraps", "snmp.trap_oid": "IF-MIB::linkDown", timestamp: iso(OUTAGE_SINCE + 3e3) });
   traps.push({ content: `SNMP trap (BGP4-MIB::bgpBackwardTransition) reported from src:${core.ip}\n peer:${rtr.ip}`, "device.address": core.ip, "log.source": "snmptraps", "snmp.trap_oid": "BGP4-MIB::bgpBackwardTransition", timestamp: iso(OUTAGE_SINCE + 20e3) });
 }
-const fw = devices.find((d) => d.site.code === "CPS1" && d.role === "FWL");
+const fw = devices.find((d) => d.site.code === "MUM1" && d.role === "FWL");
 for (let k = 0; k < 14; k++) pushSyslog(fw, NOW - (80 - k * 5) * 60e3, "%PAN-SYSTEM-2-DP_CPU", 2, `Dataplane CPU utilisation above 90% on dp0 (${int(91, 98)}%) · session setup rate ${int(9, 14)}k/s`);
 const crcSw = devices.find((d) => d.site.code === CRC_SITE && d.role === "SWT");
 for (let k = 0; k < 9; k++) pushSyslog(crcSw, NOW - (170 - k * 18) * 60e3, "%ETHCNTR-3-HALF_DUX_COLLISION_EXCEED_THRESHOLD", 3, "Collisions and CRC errors on TenGigabitEthernet1/1/2 exceed threshold");
@@ -351,7 +351,7 @@ results.neighbors = devices.filter((d) => d.role === "RTR" && d.site.hub && hubC
 }));
 results.routing = [
   ...devices.filter((d) => d.role === "RTR").map((d) => ({ "cbgp.peer.state": outage.includes(d.site.code) ? "idle(1)" : "established(6)", "cbgp.remote.as": "65000", "cbgp.remote.identifier": hubCore(d.site.hub).ip, "metric.key": cisco("cbgp.peer.state"), "ospf.nbr.ip.addr": null, "ospf.nbr.state": null, "sys.name": d.name })),
-  ...DCS.map((dc) => ({ "cbgp.peer.state": null, "cbgp.remote.as": null, "cbgp.remote.identifier": null, "metric.key": cisco("ospf.nbr.state"), "ospf.nbr.ip.addr": `${dc.net}.1.2`, "ospf.nbr.state": "full(8)", "sys.name": `BR-SP-${dc.code}-CON1` })),
+  ...DCS.map((dc) => ({ "cbgp.peer.state": null, "cbgp.remote.as": null, "cbgp.remote.identifier": null, "metric.key": cisco("ospf.nbr.state"), "ospf.nbr.ip.addr": `${dc.net}.1.2`, "ospf.nbr.state": "full(8)", "sys.name": `${dc.cc}-${dc.uf}-${dc.code}-CON1` })),
 ];
 // a scan from the Internet against the main data center: 1500 distinct public sources, one range, one port
 const DC1 = devices.find((d) => d.role === "CON" && d.site.dc);
@@ -402,7 +402,7 @@ problem({ "event.id": evid("outage"), display_id: "P-2609001", "event.name": "Ne
 
 // 2. a custom alert from the firewall extension: it names its own custom device, not the Smartscape one,
 // so only the entity name joins the two
-const fwName = "BR-SP-CPS1-FWL1";
+const fwName = "IN-MH-MUM1-FWL1";
 problem({ "event.id": evid("fwcpu"), display_id: "P-2609002", "event.name": "Firewall CPU utilization high", "event.start": iso(NOW - 40 * 60e3),
   "event.category": "CUSTOM_ALERT", affected_entity_ids: [`CUSTOM_DEVICE-${hex("paloalto-own-device")}`], affected_entity_names: [fwName] });
 

@@ -1,5 +1,6 @@
-// Simulated retail and distribution network at enterprise scale, on two continents: a Brazilian arm of
-// five regions and an American one of three, ~550 sites, three data centers and four carriers. The
+// Simulated retail and distribution network at enterprise scale, on three continents: a European arm of
+// three regions, an Asian one of two and an American one of three, ~550 sites, three data centers and
+// four carriers. The
 // extra-large size is the same group at ~4,200 sites and ~20,000 devices with five data centers, read the
 // way the app reads an estate that size: per-device summaries instead of every port (DETAIL_MAX_DEVICES).
 // Every name and number is fictitious and the UI labels it as an example. Health is judged with the same verdict and end-to-end
@@ -17,32 +18,36 @@ const TEMPLATE = { cpu: 85, util: 95 };
 type Size = "L" | "M" | "S";
 type CityRow = [name: string, uf: string, lat: number, lon: number];
 
-// The same fictitious group on two continents: a Brazilian retail arm and a North American one, each
-// with its own data center, carriers and regions. Two countries is what makes the map, the site tags and
-// the carrier filters say something — one country reads as one big region.
-const REGIONS: { name: string; sites: number; hub: string; cities: CityRow[]; country?: "BR" | "US" }[] = [
-  { name: "Southeast", sites: 150, hub: "SPO1", cities: [
-    ["São Paulo", "SP", -23.55, -46.63], ["Campinas", "SP", -22.91, -47.06], ["Santos", "SP", -23.96, -46.33], ["Ribeirão Preto", "SP", -21.18, -47.81],
-    ["Sorocaba", "SP", -23.5, -47.46], ["São José dos Campos", "SP", -23.18, -45.89], ["Rio de Janeiro", "RJ", -22.91, -43.17], ["Niterói", "RJ", -22.88, -43.1],
-    ["Belo Horizonte", "MG", -19.92, -43.94], ["Uberlândia", "MG", -18.92, -48.28], ["Juiz de Fora", "MG", -21.76, -43.35], ["Vitória", "ES", -20.32, -40.34],
+// The same fictitious group across Europe, Asia and the Americas, each arm with its own data center,
+// carriers and regions. More than one country is what makes the map, the site tags and the carrier
+// filters say something — one country reads as one big region — and more than one continent is what
+// makes the world map worth opening. No country here is the app's home: every subdivision code below
+// is a real one from the same Natural Earth table the app places untagged sites with.
+const REGIONS: { name: string; sites: number; hub: string; cities: CityRow[]; country: string }[] = [
+  { name: "Central Europe", sites: 150, hub: "FRA1", country: "DE", cities: [
+    ["Frankfurt", "HE", 50.11, 8.68], ["Munich", "BY", 48.14, 11.58], ["Hamburg", "HH", 53.55, 9.99], ["Cologne", "NW", 50.94, 6.96],
+    ["Berlin", "BE", 52.52, 13.4], ["Stuttgart", "BW", 48.78, 9.18], ["Dusseldorf", "NW", 51.23, 6.78], ["Dortmund", "NW", 51.51, 7.47],
+    ["Leipzig", "SN", 51.34, 12.37], ["Bremen", "HB", 53.08, 8.8], ["Hannover", "NI", 52.37, 9.73], ["Nuremberg", "BY", 49.45, 11.08],
   ] },
-  { name: "South", sites: 84, hub: "SPO1", cities: [
-    ["Curitiba", "PR", -25.43, -49.27], ["Londrina", "PR", -23.31, -51.16], ["Maringá", "PR", -23.42, -51.94], ["Cascavel", "PR", -24.96, -53.46],
-    ["Florianópolis", "SC", -27.6, -48.55], ["Joinville", "SC", -26.3, -48.85], ["Blumenau", "SC", -26.92, -49.07], ["Porto Alegre", "RS", -30.03, -51.23],
-    ["Caxias do Sul", "RS", -29.17, -51.18], ["Pelotas", "RS", -31.77, -52.34], ["Passo Fundo", "RS", -28.26, -52.41],
+  { name: "Eastern Europe", sites: 84, hub: "FRA1", country: "PL", cities: [
+    ["Warsaw", "MZ", 52.23, 21.01], ["Krakow", "MA", 50.06, 19.94], ["Lodz", "LD", 51.76, 19.46], ["Wroclaw", "DS", 51.11, 17.04],
+    ["Poznan", "WP", 52.41, 16.93], ["Gdansk", "PM", 54.35, 18.65], ["Szczecin", "ZP", 53.43, 14.55], ["Lublin", "LU", 51.25, 22.57],
+    ["Katowice", "SL", 50.26, 19.02], ["Bydgoszcz", "KP", 53.12, 18.01], ["Bialystok", "PD", 53.13, 23.16], ["Rzeszow", "PK", 50.04, 22.0],
   ] },
-  { name: "Midwest", sites: 72, hub: "SPO1", cities: [
-    ["Brasília", "DF", -15.79, -47.88], ["Goiânia", "GO", -16.69, -49.26], ["Rio Verde", "GO", -17.79, -50.93], ["Cuiabá", "MT", -15.6, -56.1],
-    ["Sorriso", "MT", -12.55, -55.72], ["Rondonópolis", "MT", -16.47, -54.64], ["Campo Grande", "MS", -20.46, -54.62], ["Dourados", "MS", -22.22, -54.81],
+  { name: "Southern Europe", sites: 72, hub: "FRA1", country: "IT", cities: [
+    ["Milan", "MI", 45.46, 9.19], ["Rome", "RM", 41.9, 12.5], ["Turin", "TO", 45.07, 7.69], ["Naples", "NA", 40.85, 14.27],
+    ["Bologna", "BO", 44.49, 11.34], ["Florence", "FI", 43.77, 11.26], ["Venice", "VE", 45.44, 12.32], ["Genoa", "GE", 44.41, 8.93],
+    ["Verona", "VR", 45.44, 10.99], ["Bari", "BA", 41.12, 16.87], ["Palermo", "PA", 38.12, 13.36], ["Padua", "PD", 45.41, 11.88],
   ] },
-  { name: "Northeast", sites: 64, hub: "CPS1", cities: [
-    ["Salvador", "BA", -12.97, -38.5], ["Feira de Santana", "BA", -12.27, -38.97], ["Recife", "PE", -8.05, -34.88], ["Fortaleza", "CE", -3.73, -38.52],
-    ["Natal", "RN", -5.79, -35.21], ["João Pessoa", "PB", -7.12, -34.86], ["Maceió", "AL", -9.67, -35.74], ["São Luís", "MA", -2.53, -44.3],
-    ["Teresina", "PI", -5.09, -42.8], ["Petrolina", "PE", -9.39, -40.5],
+  { name: "South Asia", sites: 64, hub: "MUM1", country: "IN", cities: [
+    ["Mumbai", "MH", 19.08, 72.88], ["Delhi", "DL", 28.61, 77.21], ["Bengaluru", "KA", 12.97, 77.59], ["Hyderabad", "TG", 17.39, 78.49],
+    ["Chennai", "TN", 13.08, 80.27], ["Kolkata", "WB", 22.57, 88.36], ["Pune", "MH", 18.52, 73.86], ["Ahmedabad", "GJ", 23.03, 72.58],
+    ["Jaipur", "RJ", 26.91, 75.79], ["Lucknow", "UP", 26.85, 80.95], ["Kochi", "KL", 9.93, 76.27], ["Bhubaneswar", "OR", 20.3, 85.82],
   ] },
-  { name: "North", sites: 38, hub: "CPS1", cities: [
-    ["Manaus", "AM", -3.12, -60.02], ["Belém", "PA", -1.46, -48.49], ["Santarém", "PA", -2.44, -54.71], ["Porto Velho", "RO", -8.76, -63.9],
-    ["Palmas", "TO", -10.18, -48.33], ["Macapá", "AP", 0.03, -51.07], ["Boa Vista", "RR", 2.82, -60.67],
+  { name: "Southeast Asia", sites: 38, hub: "MUM1", country: "ID", cities: [
+    ["Jakarta", "JK", -6.21, 106.85], ["Surabaya", "JI", -7.25, 112.75], ["Bandung", "JB", -6.91, 107.61], ["Medan", "SU", 3.59, 98.67],
+    ["Semarang", "JT", -6.97, 110.42], ["Makassar", "SN", -5.15, 119.43], ["Palembang", "SS", -2.99, 104.76], ["Denpasar", "BA", -8.65, 115.22],
+    ["Balikpapan", "KS", -1.27, 116.83], ["Padang", "SB", -0.95, 100.35], ["Manado", "SA", 1.47, 124.84], ["Pontianak", "KB", -0.03, 109.33],
   ] },
   { name: "East US", sites: 60, hub: "DAL1", country: "US", cities: [
     ["New York", "NY", 40.71, -74.01], ["Philadelphia", "PA", 39.95, -75.17], ["Boston", "MA", 42.36, -71.06], ["Newark", "NJ", 40.74, -74.17],
@@ -62,8 +67,8 @@ const REGIONS: { name: string; sites: number; hub: string; cities: CityRow[]; co
 ];
 
 type DcSpec = [key: string, role: string, model: string, cpu: number];
-const BASE_DCS: { code: string; name: string; uf: string; lat: number; lon: number; specs: DcSpec[]; country?: "BR" | "US"; region?: string }[] = [
-  { code: "SPO1", name: "Data Center São Paulo", uf: "SP", lat: -23.55, lon: -46.63, specs: [
+const BASE_DCS: { code: string; name: string; uf: string; lat: number; lon: number; specs: DcSpec[]; country: string; region?: string }[] = [
+  { code: "FRA1", name: "Data Center Frankfurt", uf: "HE", lat: 50.11, lon: 8.68, country: "DE", region: "Central Europe", specs: [
     ["CON1", "core", "Cisco ASR 1002-HX", 46], ["CON2", "core", "Cisco ASR 1002-HX", 39], ["COR1", "core", "Cisco Nexus 9336C", 22],
     ["FWL1", "firewall", "Palo Alto PA-5220", 34], ["FWL2", "firewall", "Palo Alto PA-5220", 29], ["LBL1", "lb", "F5 BIG-IP i5800", 18],
     ["SWT1", "switch", "Cisco Nexus 93180YC", 9], ["SWT2", "switch", "Cisco Nexus 93180YC", 8],
@@ -73,14 +78,14 @@ const BASE_DCS: { code: string; name: string; uf: string; lat: number; lon: numb
     ["FWL1", "firewall", "Palo Alto PA-5250", 37], ["FWL2", "firewall", "Palo Alto PA-5250", 31], ["LBL1", "lb", "F5 BIG-IP i7800", 20],
     ["SWT1", "switch", "Cisco Nexus 93180YC", 11], ["SWT2", "switch", "Cisco Nexus 93180YC", 9],
   ] },
-  { code: "CPS1", name: "Data Center Campinas", uf: "SP", lat: -22.91, lon: -47.06, specs: [
+  { code: "MUM1", name: "Data Center Mumbai", uf: "MH", lat: 19.08, lon: 72.88, country: "IN", region: "South Asia", specs: [
     ["CON1", "core", "Cisco ASR 1002-HX", 41], ["COR1", "core", "Cisco Nexus 9336C", 24], ["FWL1", "firewall", "Palo Alto PA-3260", 78],
     ["LBL1", "lb", "F5 BIG-IP i4800", 21], ["SWT1", "switch", "Cisco Nexus 93180YC", 10],
   ] },
 ];
 // an estate of the extra-large size runs regional data centers too
 const XL_DCS: typeof BASE_DCS = [
-  { code: "RIO1", name: "Data Center Rio de Janeiro", uf: "RJ", lat: -22.91, lon: -43.17, specs: [
+  { code: "WAW1", name: "Data Center Warsaw", uf: "MZ", lat: 52.23, lon: 21.01, country: "PL", region: "Eastern Europe", specs: [
     ["CON1", "core", "Cisco ASR 1006-X", 44], ["CON2", "core", "Cisco ASR 1006-X", 37], ["COR1", "core", "Cisco Nexus 9364C", 26],
     ["FWL1", "firewall", "Palo Alto PA-5250", 41], ["LBL1", "lb", "F5 BIG-IP i7800", 23], ["SWT1", "switch", "Cisco Nexus 93180YC", 11],
   ] },
@@ -88,7 +93,7 @@ const XL_DCS: typeof BASE_DCS = [
     ["CON1", "core", "Cisco ASR 1006-X", 40], ["COR1", "core", "Cisco Nexus 9364C", 23], ["FWL1", "firewall", "Palo Alto PA-5250", 35],
     ["LBL1", "lb", "F5 BIG-IP i7800", 19], ["SWT1", "switch", "Cisco Nexus 93180YC", 10],
   ] },
-  { code: "REC1", name: "Data Center Recife", uf: "PE", lat: -8.05, lon: -34.88, specs: [
+  { code: "JKT1", name: "Data Center Jakarta", uf: "JK", lat: -6.21, lon: 106.85, country: "ID", region: "Southeast Asia", specs: [
     ["CON1", "core", "Cisco ASR 1002-HX", 38], ["COR1", "core", "Cisco Nexus 9336C", 21], ["FWL1", "firewall", "Palo Alto PA-3260", 33],
     ["SWT1", "switch", "Cisco Nexus 93180YC", 9],
   ] },
@@ -151,11 +156,12 @@ export function buildExampleNetwork(now = new Date(), size: ExampleSize = "enter
   const xl = size === "xl";
   const K = xl ? XL : size === "mid" ? MID : 1;
   const DCS = xl ? [...BASE_DCS, ...XL_DCS] : BASE_DCS;
-  // which data center a branch's WAN terminates on: the extra-large estate splits the Southeast between
-  // São Paulo and Rio and sends the North and Northeast to Recife
+  // which data center a branch's WAN terminates on: the extra-large estate splits the largest region
+  // between Frankfurt and Warsaw and gives Southeast Asia its own data center in Jakarta
   const hubOf = (region: string, k: number) => (!xl ? REGIONS.find((r) => r.name === region)!.hub
     : region === "East US" ? "ASH1" : region === "Central US" || region === "West US" ? "DAL1"
-      : region === "Southeast" ? (k % 2 ? "RIO1" : "SPO1") : region === "Northeast" || region === "North" ? "REC1" : region === "Midwest" ? "CPS1" : "SPO1");
+      : region === "Central Europe" ? (k % 2 ? "WAW1" : "FRA1") : region === "Eastern Europe" ? "WAW1"
+        : region === "Southeast Asia" ? "JKT1" : region === "South Asia" ? "MUM1" : "FRA1");
   const rnd = mulberry32(xl ? 20260919 : size === "mid" ? 20261023 : 20260914);
   const uni = (a: number, b: number) => a + rnd() * (b - a);
   const int = (a: number, b: number) => Math.floor(uni(a, b + 1));
@@ -296,9 +302,9 @@ export function buildExampleNetwork(now = new Date(), size: ExampleSize = "enter
   };
 
   DCS.forEach((dc) => {
-    const dcRegion = dc.region ?? (dc.uf === "PE" ? "Northeast" : "Southeast");
+    const dcRegion = dc.region ?? (dc.uf === "PE" ? "South Asia" : "Central Europe");
     sites[dc.code] = { code: dc.code, name: dc.name, city: dc.name.replace("Data Center ", ""), uf: dc.uf, id: String(1001 + DCS.indexOf(dc)), dc: true, lat: dc.lat, lon: dc.lon, region: dcRegion,
-      tags: { "primary_tags.country": (dc.country ?? "BR").toLowerCase(), "primary_tags.region": dcRegion.toLowerCase(), "primary_tags.federativeunit": dc.uf.toLowerCase(), "primary_tags.city": dc.name.replace("Data Center ", ""), "primary_tags.site_type": "data center", "primary_tags.site": dc.code.toLowerCase() } };
+      tags: { "primary_tags.country": dc.country.toLowerCase(), "primary_tags.region": dcRegion.toLowerCase(), "primary_tags.state": dc.uf.toLowerCase(), "primary_tags.city": dc.name.replace("Data Center ", ""), "primary_tags.site_type": "data center", "primary_tags.site": dc.code.toLowerCase() } };
     dcEvents[dc.code] = [ev(int(20, 90), "INFO", "%SYS-5-CONFIG_I", 5, "Configured from console by netops on vty0")];
   });
   const firewallCpuEvent = ev(38, "WARN", "%PAN-4-DP_CPU", 4, "Dataplane CPU above 75% for 30 minutes on FWL1 (SSL decryption)");
@@ -309,8 +315,8 @@ export function buildExampleNetwork(now = new Date(), size: ExampleSize = "enter
     const roll = rnd();
     const size: Size = roll < 0.08 ? "L" : roll < 0.38 ? "M" : "S";
     const carrier = reg.country === "US" ? (reg.name === "Central US" ? "Carrier A" : rnd() < 0.7 ? "Carrier D" : "Carrier A")
-      : reg.name === "South" ? "Carrier B" : reg.name === "Midwest" ? (rnd() < 0.65 ? "Carrier B" : "Carrier A") : "Carrier A";
-    const satellite = reg.name === "North" && size === "S" && rnd() < 0.4;
+      : reg.name === "Eastern Europe" ? "Carrier B" : reg.name === "Southern Europe" ? (rnd() < 0.65 ? "Carrier B" : "Carrier A") : "Carrier A";
+    const satellite = reg.name === "Southeast Asia" && size === "S" && rnd() < 0.4;
     return { reg, city, uf, lat: lat + uni(-0.12, 0.12) * Math.sqrt(K), lon: lon + uni(-0.12, 0.12) * Math.sqrt(K), size, carrier, satellite, hub: hubOf(reg.name, k) };
   }));
   type Spec = (typeof specs)[number];
@@ -322,20 +328,20 @@ export function buildExampleNetwork(now = new Date(), size: ExampleSize = "enter
     specs.forEach((s, i) => { if (left > 0 && !scen.has(i) && !s.satellite && when(s, i)) { scen.set(i, make(s)); left--; } });
   };
   // A regional Carrier B outage: sites with a backup run degraded, sites without one go dark.
-  pick(14, (s, i) => s.reg.name === "South" && i % 2 === 0, (s) => (s.size === "S" ? { circuitsDown: 47, incident: "INC-DEMO-3101" } : { primaryDown: 47, incident: "INC-DEMO-3101" }), true);
-  pick(3, (s, i) => s.reg.name === "Midwest" && s.carrier === "Carrier B" && i % 5 === 1, () => ({ degraded: { latencyMs: 104, lossPct: 4.2, jitterMs: 31 }, app: { p90Ms: 2600, errPct: 1.1 } }));
-  pick(1, (s, i) => s.reg.name === "Southeast" && s.size === "M" && i % 7 === 3, () => ({ routerDown: 132, incident: "INC-DEMO-3093" }));
-  pick(1, (s, i) => s.reg.name === "Southeast" && i % 11 === 5, () => ({ switchDown: 18, incident: "INC-DEMO-3111" }));
-  pick(2, (s, i) => s.reg.name === "Southeast" && i % 13 === 2, () => ({ apDown: 65, incident: "INC-DEMO-3102" }));
-  pick(1, (s, i) => s.reg.name === "Southeast" && i % 17 === 9, () => ({ cpu: 88 }));
-  pick(1, (s, i) => s.reg.name === "Southeast" && s.size === "L" && i % 3 === 0, () => ({ wanSaturated: 97.6, app: { p90Ms: 4600, errPct: 2.8 } }));
-  pick(1, (s, i) => s.reg.name === "Southeast" && i % 19 === 4, () => ({ optic: true }));
-  pick(2, (s, i) => s.reg.name === "Southeast" && i % 23 === 7, () => ({ routerBlind: true }));
-  pick(1, (s, i) => s.reg.name === "Southeast" && s.size !== "S" && i % 29 === 11, () => ({ backupDown: 260, incident: "INC-DEMO-3076" }));
-  pick(1, (s, i) => s.reg.name === "Northeast" && i % 9 === 4, () => ({ routerDown: 75, incident: "INC-DEMO-3120" }));
-  pick(1, (s, i) => s.reg.name === "Northeast" && i % 7 === 2, () => ({ apDown: 31 }));
-  pick(1, (s, i) => s.reg.name === "North" && i % 5 === 3, () => ({ routerBlind: true }));
-  // the American arm has its own weather: a smaller carrier problem, so the Brazilian outage stays the
+  pick(14, (s, i) => s.reg.name === "Eastern Europe" && i % 2 === 0, (s) => (s.size === "S" ? { circuitsDown: 47, incident: "INC-DEMO-3101" } : { primaryDown: 47, incident: "INC-DEMO-3101" }), true);
+  pick(3, (s, i) => s.reg.name === "Southern Europe" && s.carrier === "Carrier B" && i % 5 === 1, () => ({ degraded: { latencyMs: 104, lossPct: 4.2, jitterMs: 31 }, app: { p90Ms: 2600, errPct: 1.1 } }));
+  pick(1, (s, i) => s.reg.name === "Central Europe" && s.size === "M" && i % 7 === 3, () => ({ routerDown: 132, incident: "INC-DEMO-3093" }));
+  pick(1, (s, i) => s.reg.name === "Central Europe" && i % 11 === 5, () => ({ switchDown: 18, incident: "INC-DEMO-3111" }));
+  pick(2, (s, i) => s.reg.name === "Central Europe" && i % 13 === 2, () => ({ apDown: 65, incident: "INC-DEMO-3102" }));
+  pick(1, (s, i) => s.reg.name === "Central Europe" && i % 17 === 9, () => ({ cpu: 88 }));
+  pick(1, (s, i) => s.reg.name === "Central Europe" && s.size === "L" && i % 3 === 0, () => ({ wanSaturated: 97.6, app: { p90Ms: 4600, errPct: 2.8 } }));
+  pick(1, (s, i) => s.reg.name === "Central Europe" && i % 19 === 4, () => ({ optic: true }));
+  pick(2, (s, i) => s.reg.name === "Central Europe" && i % 23 === 7, () => ({ routerBlind: true }));
+  pick(1, (s, i) => s.reg.name === "Central Europe" && s.size !== "S" && i % 29 === 11, () => ({ backupDown: 260, incident: "INC-DEMO-3076" }));
+  pick(1, (s, i) => s.reg.name === "South Asia" && i % 9 === 4, () => ({ routerDown: 75, incident: "INC-DEMO-3120" }));
+  pick(1, (s, i) => s.reg.name === "South Asia" && i % 7 === 2, () => ({ apDown: 31 }));
+  pick(1, (s, i) => s.reg.name === "Southeast Asia" && i % 5 === 3, () => ({ routerBlind: true }));
+  // the American arm has its own weather: a smaller carrier problem, so the European outage stays the
   // headline, plus the single-site faults that make the other pages worth opening
   pick(5, (s, i) => s.reg.name === "East US" && s.carrier === "Carrier D" && i % 3 === 0,
     () => ({ degraded: { latencyMs: 88, lossPct: 2.6, jitterMs: 24 }, app: { p90Ms: 2300, errPct: 0.8 }, incident: "INC-DEMO-3140" }), true);
@@ -368,7 +374,7 @@ export function buildExampleNetwork(now = new Date(), size: ExampleSize = "enter
     const name = `${s.city} · ${kind} ${nth}`;
     const hub = DCS.find((d) => d.code === s.hub)!;
     sites[code] = { code, name, city: s.city, uf: s.uf, id: String(2000 + i), dc: false, lat: r2(s.lat), lon: r2(s.lon), region: s.reg.name, hub: hub.code,
-      tags: { "primary_tags.country": (s.reg.country ?? "BR").toLowerCase(), "primary_tags.region": s.reg.name.toLowerCase(), "primary_tags.federativeunit": s.uf.toLowerCase(), "primary_tags.city": s.city, "primary_tags.site_type": kind.toLowerCase(), "primary_tags.site": code.toLowerCase() } };
+      tags: { "primary_tags.country": s.reg.country.toLowerCase(), "primary_tags.region": s.reg.name.toLowerCase(), "primary_tags.state": s.uf.toLowerCase(), "primary_tags.city": s.city, "primary_tags.site_type": kind.toLowerCase(), "primary_tags.site": code.toLowerCase() } };
 
     // circuits
     const baseLat = r1(6 + km(s.lat, s.lon, hub.lat, hub.lon) * 0.011 + uni(0, 4));
@@ -394,7 +400,7 @@ export function buildExampleNetwork(now = new Date(), size: ExampleSize = "enter
     if (sc.routerDown) circ.forEach((c) => Object.assign(c, { latencyMs: null, lossPct: null, jitterMs: null, rttTs: [], note: "not measured: the branch router is not responding" }));
     circuits.push(...circ);
 
-    const P = `${s.reg.country ?? "BR"}-${s.uf}-${code}`;
+    const P = `${s.reg.country}-${s.uf}-${code}`;
     const net = `10.${20 + (i >> 8)}.${i & 255}`;
     const allDown = !!sc.circuitsDown;
     const offline = sc.circuitsDown ?? sc.routerDown;
@@ -418,7 +424,7 @@ export function buildExampleNetwork(now = new Date(), size: ExampleSize = "enter
     });
     if (offline) {
       dcEvents[hub.code].unshift(ev(offline, "WARN", "%BGP-5-ADJCHANGE", 5, `neighbor ${net}.1 Down BGP Notification sent (hold time expired) · ${code}`));
-      traps.push({ t: ago(offline), ip: `10.${DCS.indexOf(hub)}.0.11`, device: `${hub.country ?? "BR"}-${hub.uf}-${hub.code}-CON1`, oid: "IF-MIB::linkDown" });
+      traps.push({ t: ago(offline), ip: `10.${DCS.indexOf(hub)}.0.11`, device: `${hub.country}-${hub.uf}-${hub.code}-CON1`, oid: "IF-MIB::linkDown" });
     }
 
     // switches
@@ -465,9 +471,9 @@ export function buildExampleNetwork(now = new Date(), size: ExampleSize = "enter
   DCS.forEach((dc, k) => {
     dc.specs.forEach(([key, role, hw, cpu], j) => {
       const ifs = [iface("Hu1/0/1", 100000, r1(uni(5, 30)), true), iface("Hu1/0/2", 100000, r1(uni(5, 30)), true)];
-      addDevice(`${dc.country ?? "BR"}-${dc.uf}-${dc.code}-${key}`, dc.code, role, `10.${k}.0.${11 + j}`, hw, ifs, {
+      addDevice(`${dc.country}-${dc.uf}-${dc.code}-${key}`, dc.code, role, `10.${k}.0.${11 + j}`, hw, ifs, {
         cpu, rtt: 0.4, vendor: role === "firewall" ? "paloalto" : role === "lb" ? "f5" : "cisco",
-        events: key === "CON1" ? dcEvents[dc.code] : key === "FWL1" && dc.code === "CPS1" ? [firewallCpuEvent] : undefined, location: `${dc.name.replace("Data Center ", "")} · ${dc.uf}`,
+        events: key === "CON1" ? dcEvents[dc.code] : key === "FWL1" && dc.code === "MUM1" ? [firewallCpuEvent] : undefined, location: `${dc.name.replace("Data Center ", "")} · ${dc.uf}`,
       });
     });
   });
@@ -601,9 +607,9 @@ export function buildExampleNetwork(now = new Date(), size: ExampleSize = "enter
     { eventId: "EX-SVC-1", eventKind: "DAVIS_PROBLEM", displayId: "P-24012", name: "Response time degradation", start: new Date(t0 - 25 * 60000).toISOString().slice(0, 16) + "Z", category: "SLOWDOWN", scope: "service", entities: ["checkout-api"] },
   ];
 
-  // ---------- traffic of the last hour: the core at São Paulo exports what crosses it ----------
+  // ---------- traffic of the last hour: the core at Frankfurt exports what crosses it ----------
   const traffic = (() => {
-    const core = devices.find((d) => d.site === "SPO1" && d.role === "core");
+    const core = devices.find((d) => d.site === "FRA1" && d.role === "core");
     if (!core) return undefined;
     const net24 = (ip: string) => `${ip.split(".").slice(0, 3).join(".")}.0`;
     // one branch in ten, so every region shows up
@@ -620,7 +626,7 @@ export function buildExampleNetwork(now = new Date(), size: ExampleSize = "enter
         { exp: core.ip, s24: "10.1.0.0", d24: net24(d.ip), proto: "tcp", dport: "445", bytes: (6e7 + i * 2e6) * 0.35, flows: 260 + i * 3 },
       ]),
       // the same five-minute series the exporters send, for the bandwidth over the hour
-      flowTs: [core, devices.find((d) => d.site === "CPS1" && d.role === "core")].filter(Boolean).map((d, k) => {
+      flowTs: [core, devices.find((d) => d.site === "MUM1" && d.role === "core")].filter(Boolean).map((d, k) => {
         const step = 5 * 60e3, n = 15, from = Math.floor((t0 - (n - 1) * step) / step) * step;
         const base = k === 0 ? 5.2e9 : 1.1e9;
         return {

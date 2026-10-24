@@ -11,7 +11,7 @@ import { familyOfToken } from "./formats";
 import { keep, loadKeptParts, mergeRows, planFor, type Plan } from "./logCache";
 import { inBuckets, useLogBuckets, useLogBucketGate } from "../hooks/useLogBucket";
 import { buildRealModel, type QueryResults } from "./buildRealModel";
-import { placesVersion, subscribePlaces } from "./geo/places";
+import { placesVersion, subscribePlaces } from "./places";
 
 export type Source = "live" | "example";
 

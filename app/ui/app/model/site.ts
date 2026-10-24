@@ -3,6 +3,7 @@
 import type { Circuit, Device, E2EPath, Hop, NetworkModel, Site, Verdict } from "./types";
 import { ORDER, worst, isBad } from "./verdict";
 import { stripDevice } from "../utils/format";
+import { isCountryWord } from "../utils/countries";
 
 export const ROLE_LABEL: Record<string, string> = {
   core: "Core", edge: "Edge router", firewall: "Firewall", lb: "Load balancer", switch: "Switch", compute: "Compute",
@@ -58,24 +59,16 @@ export const siteVerdict = (m: NetworkModel, code: string): Verdict =>
  *
  * At map scale the city identifies the site and the street does not, so an address is cut to the
  * city and the region that follow it. Nothing else is touched. A name that is a name — `Durham DC`,
- * `São Paulo, BR` — comes back as it was, because a name the team chose says more than anything
+ * `Springfield, IL` — comes back as it was, because a name the team chose says more than anything
  * this could derive from it, and the full string stays on the hover and on the site page.
  */
 // A part of an address, by what it is: the ones that place the site are kept and the rest go.
 const POSTAL = /^\d{4,6}(-\d{3,4})?$|^[A-Z]\d[A-Z] ?\d[A-Z]\d$/;
-// Three letters and up, never two: `CA`, `IN`, `DE`, `SC` and `MS` are state codes as well as
-// country codes, and reading them as countries would drop the state from `Sacramento, CA` while
-// keeping it on `Fairview, KS` — the same estate labelled two different ways. A two-letter token is
-// a region here, and `London, UK` is then a name with a comma in it, which is left alone.
-const COUNTRY = /^(USA|U\.?S\.?A\.?|GBR|CAN|CANADA|MEX|MEXICO|BRA|BRASIL|BRAZIL|DEU|GERMANY|DEUTSCHLAND|FRA|FRANCE|ESP|SPAIN|ITA|ITALY|NLD|NETHERLANDS|IND|INDIA|CHN|CHINA|JPN|JAPAN|AUS|AUSTRALIA|SGP|SINGAPORE|IRL|IRELAND|POL|POLAND|SWE|SWEDEN|CHE|SWITZERLAND|AUT|AUSTRIA)$/i;
 const STREET = /\b(st|street|ave|avenue|rd|road|dr|drive|blvd|boulevard|ln|lane|way|hwy|highway|pkwy|parkway|ct|court|pl|place|ter|terrace|cir|circle|sq|square|suite|ste|floor|fl|unit|bldg|building|rua|av|avenida|alameda|estrada|rodovia|praca|praça|strasse|straße|str|weg|platz|calle|avenida|carrera)\b\.?/i;
 /** A two-letter state, province or prefecture code: the token a city is named against. */
 const REGION = /^[A-Z]{2}$/;
 /** A facility or room code: upper case with a digit in it, or three to six upper-case letters. */
 const CODE = /^(?=[A-Z0-9.\-/]*\d)[A-Z0-9.\-/]{2,12}$|^[A-Z]{3,6}$/;
-
-/** The part with its digits taken out, so `USA 66000` can be read as the country it is. */
-const withoutNumbers = (part: string) => part.replace(/\d[\d\-/]*/g, " ").replace(/[.,]/g, " ").replace(/\s+/g, " ").trim();
 
 /**
  * A site name broken into the fields it is written in.
@@ -95,7 +88,9 @@ export function shortSiteName(name: string | null | undefined): string {
   const parts = addressParts(raw);
   if (parts.length < 2) return raw;
   const postal = (p: string) => POSTAL.test(p);
-  const country = (p: string) => COUNTRY.test(withoutNumbers(p).replace(/\./g, ""));
+  // every country, in English and in the reader's language, asked of the platform rather than
+  // listed here: a hand-written list is a view on whose addresses the app expects to read
+  const country = isCountryWord;
   const street = (p: string) => /\d/.test(p) && STREET.test(p);
   const region = (p: string) => REGION.test(p);
   // Only an address is shortened. Without a postal code, a street or a country in it, the name is

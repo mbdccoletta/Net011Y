@@ -258,7 +258,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
    * The camera refits when the focus changes, and switching between the geographic and the
    * schematic layout changes neither the focus nor the insets — so it kept the frame it had
    * over coordinates that are not the same coordinates. The schematic places its discs on a
-   * ring centred at nought, and the frame left over from Brazil showed two of thirteen
+   * ring centred at nought, and the frame left over from the previous view showed two of thirteen
    * sites, with the rest off the edge and no way to tell they were there.
    */
   /** false until the reader pans or zooms: see the refit effect below. */
