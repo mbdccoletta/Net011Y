@@ -32,6 +32,21 @@ type Entry = { state: "loading" } | { state: "done"; text: string } | { state: "
 const cache = new Map<string, Entry>();
 const DOCS_INTELLIGENCE = "https://docs.dynatrace.com/docs/dynatrace-intelligence";
 
+/**
+ * Once the environment has answered that this reader may not run a conversation, it will answer the
+ * same to every question on every page until someone changes a policy.
+ *
+ * An error entry is deliberately re-asked on the next click, because most of the reasons a question
+ * fails are momentary. A missing permission is not one of them: a reader clicked five questions on
+ * an environment without the grant and sent five requests that could not succeed, each one logged
+ * as a 403. The refusal is remembered for the session instead — the question says what is missing
+ * rather than asking again — and nothing is cached across reloads, so a grant made while the app is
+ * open takes effect on the next load.
+ */
+const PERMISSION = "Explanations need the davis-copilot:conversations:execute permission. Ask your Dynatrace administrator to grant it.";
+const isPermission = (msg: string) => /403|scope|permission/i.test(msg);
+let refused = false;
+
 const asQuestion = (q: AssistQuestion | string): AssistQuestion => (typeof q === "string" ? { label: q, prompt: q } : q);
 
 /**
@@ -77,6 +92,8 @@ export function AssistPanel({ subject, questions, context, object }: Props) {
   const ask = (q: AssistQuestion) => {
     setQuestion(q);
     const k = `${subject}|${q.prompt}`;
+    // the grant is missing: say so without spending a request that is already known to fail
+    if (refused) { cache.set(k, { state: "error", text: PERMISSION }); rerender((n) => n + 1); return; }
     const cached = cache.get(k);
     if (cached && cached.state !== "error") return;
     abort.current?.abort();
@@ -89,8 +106,9 @@ export function AssistPanel({ subject, questions, context, object }: Props) {
       .catch((e: unknown) => {
         if (ctrl.signal.aborted) { cache.delete(k); return; }
         const msg = String((e as { message?: string })?.message ?? e);
-        cache.set(k, { state: "error", text: /403|scope|permission/i.test(msg)
-          ? "Explanations need the davis-copilot:conversations:execute permission. Ask your Dynatrace administrator to grant it."
+        if (isPermission(msg)) refused = true;
+        cache.set(k, { state: "error", text: isPermission(msg)
+          ? PERMISSION
           : /429|high demand/i.test(msg)
           ? "Dynatrace Assist is busy right now. Try again in a minute."
           : "Couldn't reach Dynatrace Assist. Check your connection and try again." });

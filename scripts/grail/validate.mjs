@@ -1168,6 +1168,15 @@ check("A device naming convention is read whatever subdivision code the country 
   }),
   NAMED.map(([name]) => { const d = deriveTags(name); return `${name}→${d.matched ? `${d.site}/${d.role}` : "no match"}`; }).join(" · "));
 
+// The version the tooling prints is package.json's, and the version the environment installs is
+// app.config.json's. They drifted four months apart, and the line a customer saw on their own
+// console named a different product at a version that did not exist any more.
+const pkg = JSON.parse(readFileSync(new URL("../../app/package.json", import.meta.url), "utf8"));
+const appCfg = JSON.parse(readFileSync(new URL("../../app/app.config.json", import.meta.url), "utf8"));
+check("The package and the app agree on what this is and which version it is",
+  pkg.version === appCfg.app.version && pkg.name === appCfg.app.id.split(".").slice(1).join("-"),
+  `package ${pkg.name}@${pkg.version} · app ${appCfg.app.id}@${appCfg.app.version}`);
+
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 
 writeFileSync("out/validation.json", JSON.stringify(report, null, 1));
