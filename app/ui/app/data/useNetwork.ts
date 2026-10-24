@@ -1,7 +1,7 @@
 // One hook feeds every screen. "live" runs the validated DQL set in parallel through
 // useDql (cached and cancellable by the SDK); "example" returns the bundled, clearly
 // labelled simulated network so the experience can be shown at branch scale.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useDql } from "@dynatrace-sdk/react-hooks";
 import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
 import { clearSourceMemory, setAbsent as rememberAbsent, setBarren as rememberBarren, setPresent as rememberPresent, sourceMemory, useSourceMemory, type Stamps } from "./sourceMemory";
@@ -11,6 +11,7 @@ import { familyOfToken } from "./formats";
 import { keep, loadKeptParts, mergeRows, planFor, type Plan } from "./logCache";
 import { inBuckets, useLogBuckets, useLogBucketGate } from "../hooks/useLogBucket";
 import { buildRealModel, type QueryResults } from "./buildRealModel";
+import { placesVersion, subscribePlaces } from "./geo/places";
 
 export type Source = "live" | "example";
 
@@ -563,6 +564,12 @@ export function useNetwork(source: Source, scale: "mid" | "xl" | null = null, vi
   useEffect(() => { setDone2((had) => (settled2 > had ? settled2 : had)); }, [settled2]);
   const stamp = results.map((r, i) => (r.isSuccess ? 1 : r.isError ? 2 : skipped(i) ? 3 : 0)).join("");
 
+  /**
+   * The table of region centres is fetched on demand, so a model built before it arrives has sites
+   * it could not place. This changes once when it lands, and the model is built again with it.
+   */
+  const places = useSyncExternalStore(subscribePlaces, placesVersion, placesVersion);
+
   const model = useMemo<NetworkModel | null>(() => {
     if (!live) return demo;
     if (!requiredOk || (!coreSettled && !overdue)) return null;
@@ -576,7 +583,7 @@ export function useNetwork(source: Source, scale: "mid" | "xl" | null = null, vi
     return buildRealModel(data, tenantName());
     // results change identity on every render; the stamp captures what matters
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live, demo, coreSettled, overdue, requiredOk, stamp, truncated.join(",")]);
+  }, [live, demo, coreSettled, overdue, requiredOk, stamp, truncated.join(","), places]);
 
   const counts = Object.fromEntries(NAMES.map((n, i) => [n, results[i].isSuccess ? (results[i].data?.records ?? []).length : null]));
   /**

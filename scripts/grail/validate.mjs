@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES } from "./out/queries.mjs";
-import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
+import { buildRealModel, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -1058,6 +1058,94 @@ check("Room is measured for the estate, against a demonstrated ceiling only wher
   && portOf("dropsEarly")?.room?.source === "stated" && portOf("dropsEarly")?.room?.dropsAt < 50,
   `${subjects.filter((s) => s.room).length}/${subjects.length} with a room · ${shownRooms.length} against a ceiling they showed`
   + ` · the policed port drops at ${portOf("dropsEarly")?.room?.dropsAt} and keeps its stated limit`);
+
+// The name the map writes, for an estate whose site names are mailing addresses. Both shapes below
+// are the shapes real site_name tags are written in — deliberately not anyone's actual address:
+// written in
+// full they are three hundred pixels of text, so the map dropped most of its labels and the ones it
+// kept read as a column of addresses. The city and the region place the site; the street does not.
+const SHORT = [
+  ["100 Example Road, Fairview, KS, USA 66000", "Fairview, KS"],
+  ["SDC:A000.00:200 Example Parkway:Brookfield:NC:27000", "Brookfield, NC"],
+  ["Rua Vergueiro 1000, Sao Paulo, SP, Brasil 04101-000", "Sao Paulo, SP"],
+  ["100 Main Street, Springfield, Illinois, USA", "Springfield, Illinois"],
+  // the state code and the country code are the same two letters in half the estate: `CA`, `IN`,
+  // `DE`, `SC`. Both of these keep their state, or the same estate is labelled two ways.
+  ["500 Capitol Mall, Sacramento, CA, USA 95814", "Sacramento, CA"],
+  ["1 Monument Circle, Indianapolis, IN, USA 46204", "Indianapolis, IN"],
+];
+check("An address-shaped site name is cut to the city and the region the map needs",
+  SHORT.every(([raw, want]) => shortSiteName(raw) === want),
+  SHORT.map(([raw, want]) => `${shortSiteName(raw)}${shortSiteName(raw) === want ? "" : ` (wanted ${want})`}`).join(" · "));
+
+// A name the team chose is better than anything this can derive from it, so only an address is
+// touched: no street, no postal code and no country means the string goes to the map as it is.
+const KEPT = ["Durham DC", "Sao Paulo, BR", "HQ", "Fairview, KS", "Dallas Hub, Texas", "Site 42", "", "   "];
+check("A site name that is a name reaches the map unchanged",
+  KEPT.every((n) => shortSiteName(n) === n.trim()),
+  KEPT.filter((n) => shortSiteName(n) !== n.trim()).map((n) => `${n} became ${shortSiteName(n)}`).join(" · ") || "all kept");
+
+// Whatever it returns has to be a name a reader can act on: never empty, never longer than it
+// started, and never the postal code or the facility code on its own.
+check("The shortened name is shorter, non-empty, and never only a code",
+  SHORT.every(([raw]) => {
+    const out = shortSiteName(raw);
+    return out.length > 0 && out.length < raw.length && !/^\d+$/.test(out) && /[a-z]/.test(out);
+  }),
+  SHORT.map(([raw]) => `${raw.length} → ${shortSiteName(raw).length}`).join(" · "));
+
+// Placing a site that nobody tagged. The table of every admin-1 centre is fetched on demand, so
+// the suite waits for it the way the app rebuilds its model when it lands.
+await ensurePlaces();
+check("The centre of every region on earth loads", placesReady(), placesReady() ? "loaded" : "not loaded");
+
+const near = (p, lat, lon) => !!p && Math.abs(p.lat - lat) < 0.5 && Math.abs(p.lon - lon) < 0.5;
+check("A state code places a site at the centre of that state, anywhere in the world",
+  near(regionOf("KS", ["US"]), 39.18, -96.19) && near(regionOf("NC", ["US"]), 35.47, -77.62)
+  && near(regionOf("SP", ["BR"]), -22.55, -48.01) && !!regionOf("Bayern", ["DE"]) && !!regionOf("Hokkaido", ["JP"]),
+  ["US/KS", "US/NC", "BR/SP", "DE/Bayern", "JP/Hokkaido"].map((k) => {
+    const [cc, t] = k.split("/"); const r = regionOf(t, [cc]); return `${k}=${r ? r.region : "none"}`;
+  }).join(" · "));
+
+// A code is not unique: KS is Kansas, Kassala, Kasungu, Kissidougou, Krsko and Kalimantan Selatan.
+// Resolving it inside the wrong country would put a site in the wrong hemisphere, which is worse
+// than leaving it off the map, so two candidates means none.
+check("An ambiguous region code is refused rather than guessed",
+  regionOf("KS", ["US", "SD"]) === null && regionOf("KS", []) === null && regionOf("SP", ["BR", "IT"]) === null
+  && near(regionOf("KS", ["SD"]), 11.2, 29.6),
+  `with US+SD ${regionOf("KS", ["US", "SD"]) ? "placed" : "refused"} · with nothing known ${regionOf("KS", []) ? "placed" : "refused"}`
+  + ` · with SD alone ${regionOf("KS", ["SD"])?.region ?? "refused"}`);
+
+// The country is read off the same name, digits and all: the last field of a US address is the
+// country and the postal code in one part, and reading it whole found no country.
+check("The country is read from the name, including when a postal code is stuck to it",
+  countryOf("USA 66000") === "US" && countryOf("USA") === "US" && countryOf("U.S.A.") === "US"
+  && countryOf("Germany") === "DE" && countryOf("DEU") === "DE" && countryOf("Brazil") === "BR"
+  && countryOf("KS") === null && countryOf("CA") === null,
+  `USA 66000=${countryOf("USA 66000")} · DEU=${countryOf("DEU")} · two letters refused: ${countryOf("CA") === null}`);
+
+// End to end on the shapes a site name is actually written in: the parts, the country in them, and
+// the region those two together resolve to.
+const PLACES = [
+  ["100 Example Road, Fairview, KS, USA 66000", "US", "Kansas"],
+  ["SDC:A000.00:200 Example Parkway:Brookfield:NC:27000", null, "North Carolina"],
+  ["Rua Exemplo 100, Centro, SP, Brazil 01000-000", "BR", "São Paulo"],
+];
+check("A site name that names a state is placed in it, with the country from the name or the estate",
+  PLACES.every(([name, cc, want]) => {
+    const parts = addressParts(name);
+    const own = parts.map(countryOf).filter(Boolean);
+    if (cc !== null && own[0] !== cc) return false;
+    // the second shape states no country: the estate's own anchor stands in, as it does in the model
+    const scope = own.length ? own : ["US"];
+    return parts.map((t) => regionOf(t, scope)).find(Boolean)?.region === want;
+  }),
+  PLACES.map(([name]) => {
+    const parts = addressParts(name);
+    const own = parts.map(countryOf).filter(Boolean);
+    const r = parts.map((t) => regionOf(t, own.length ? own : ["US"])).find(Boolean);
+    return r ? `${r.cc}/${r.region}` : "unplaced";
+  }).join(" · "));
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 

@@ -856,7 +856,7 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
 
   const labels = useMemo<Label[]>(() => [
     ...sites.map((s) => ({ key: `s:${s.code}`, kind: "site" as const, lon: s.lon, lat: s.lat,
-      text: s.name, rank: 0, dc: !!s.dc, picked: !!focusCodes?.has(s.code) })),
+      text: s.label ?? s.name, rank: 0, dc: !!s.dc, picked: !!focusCodes?.has(s.code) })),
     ...(regions ?? []).filter((r) => r.sites).map((r) => ({
       key: `r:${r.code}|${r.name}`, kind: "region" as const, lon: r.lon, lat: r.lat, rank: r.sites,
       /* the count is ink; only the words that report alerts wear the status colour */

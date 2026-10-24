@@ -1,7 +1,8 @@
 export { buildRealModel } from "../../app/ui/app/data/buildRealModel";
 export { buildExampleNetwork } from "../../app/ui/app/data/exampleNetwork";
 export { evaluateNeeds, VIEW_NEEDS } from "../../app/ui/app/data/requirements";
-export { allSites } from "../../app/ui/app/model/site";
+export { allSites, shortSiteName, addressParts } from "../../app/ui/app/model/site";
+export { ensurePlaces, countryOf, regionOf, placesReady } from "../../app/ui/app/data/geo/places";
 export { buildCauses, splitCauses } from "../../app/ui/app/model/causes";
 export { isBad, appVerdict, deviceVerdict, worst, ORDER } from "../../app/ui/app/model/verdict";
 export { portCounts, portsDown } from "../../app/ui/app/model/ports";

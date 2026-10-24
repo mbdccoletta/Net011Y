@@ -2,7 +2,7 @@
 // selected one on the right. Every action drills down into the native Dynatrace apps.
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Device, Iface, NetworkModel, Verdict } from "../model/types";
-import type { SiteInfo } from "../model/site";
+import { shortSiteName, type SiteInfo } from "../model/site";
 import { isBad, worst } from "../model/verdict";
 import { buildCauses, type Cause, splitCauses } from "../model/causes";
 import { LiveMapGeo } from "../components/LiveMapGeo";
@@ -132,6 +132,15 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   // is drawn in a schematic layout — data centres in the middle, each region a cluster around them — so the
   // map works in any environment. The reader can switch between the two when both make sense.
   const placedShare = infos.length ? infos.filter((i) => i.site.lat != null && i.site.lon != null).length / infos.length : 0;
+/**
+ * Why the two geographic layouts are off, in the words of the tag that would turn them on.
+ *
+ * Said in three places that a reader can reach without moving: the two buttons that will not
+ * respond, and a note on the bar beside them. The Setup page carries the same step with this
+ * environment's own count of untagged sites; this is the short form, at the click.
+ */
+const NO_COORDS = "No site in this environment has coordinates. Geographic and Regions draw sites by position, which comes from the geo_lat and geo_lon primary tags on the SNMP monitoring configurations (Settings · Sites, regions and locations). Schematic holds every site and needs no coordinates.";
+
   const [layout, setLayout] = useState<"geo" | "states" | "schematic" | null>(null);
   // Geography is the default the moment any site can be placed: a reader opens the map to see where the
   // network is. Only an environment that gives no coordinates at all starts on the schematic layout, and
@@ -152,7 +161,7 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
   // over through a ref, which is how the page came to read a const above its own declaration and die on
   // every render: one value out of one memo cannot go out of step with itself.
   const placed = useMemo<{ sites: MapSite[]; groups: { name: string; lon: number; lat: number; sites: number; bad: number; verdict: Verdict }[] }>(() => {
-    const base = (i: SiteInfo) => ({ code: i.code, name: i.site.name, verdict: i.verdict, dc: i.site.dc, region: i.site.region, cause: i.cause ? i.cause : siteCause.get(i.code) ?? null });
+    const base = (i: SiteInfo) => ({ code: i.code, name: i.site.name, label: shortSiteName(i.site.name), verdict: i.verdict, dc: i.site.dc, region: i.site.region, cause: i.cause ? i.cause : siteCause.get(i.code) ?? null });
     if (!schematic) return { sites: infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({ ...base(i), lat: i.site.lat!, lon: i.site.lon! })), groups: [] };
     const dcs = infos.filter((i) => i.site.dc), rest = infos.filter((i) => !i.site.dc);
     /**
@@ -453,16 +462,23 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
           : <span className="lm-pill lm-pill--note">Example data</span>)}
         {!model.demo && failed.length > 0 && <span className="lm-pill lm-pill--note" title={failed.join(", ")}>{failed.length} data source(s) unavailable</span>}
         <span className="vz-seg" role="group" aria-label="Map layout" title={placedShare < 1 ? `${Math.round(placedShare * 100)}% of the sites have coordinates (geo_lat / geo_lon tags or a known place)` : undefined}>
-          <button type="button" className={chosen === "geo" ? "is-on" : ""} aria-pressed={chosen === "geo"} disabled={placedShare === 0} onClick={() => setLayout("geo")}>Geographic</button>
+          <button type="button" className={chosen === "geo" ? "is-on" : ""} aria-pressed={chosen === "geo"} disabled={placedShare === 0}
+            title={placedShare === 0 ? NO_COORDS : undefined} onClick={() => setLayout("geo")}>Geographic</button>
           <button type="button" className={states ? "is-on" : ""} aria-pressed={states} disabled={placedShare === 0}
             /* "States" read as a misspelling of "Status" — and the pill beside this button
                already counts them as regions ("27 regions in 1 countries"), which is also
                the word the rest of the app uses for a subdivision. Same layout, the name the
                app was already using for it. */
-            title="States, provinces and prefectures of the countries the sites are in, outlined, with the share of each one that is alerting drawn on its edge. The outlines are fetched when this view is opened, one country at a time."
+            title={placedShare === 0 ? NO_COORDS : "States, provinces and prefectures of the countries the sites are in, outlined, with the share of each one that is alerting drawn on its edge. The outlines are fetched when this view is opened, one country at a time."}
             onClick={() => setLayout("states")}>Regions</button>
           <button type="button" className={schematic ? "is-on" : ""} aria-pressed={schematic} onClick={() => setLayout("schematic")}>Schematic</button>
         </span>
+        {/* Two of the three layouts are off, and a grey button says nothing about why.
+            An environment that tags no coordinates — which is most of them before anyone has been
+            asked to — showed a reader three tabs, let them click one, and left them to conclude the
+            app was broken. The bar says what is missing and what to tag, where the clicking happens:
+            the same thing the Setup step "Tag each site" says, at the moment it is wanted. */}
+        {placedShare === 0 && <span className="lm-pill lm-pill--note" title={NO_COORDS}>Geographic and Regions need site coordinates</span>}
         {states && (
           <span className="lm-pill" title="The outlines are fetched per country, only for the countries the sites fall in.">
             {shapes === null ? "Loading outlines…"

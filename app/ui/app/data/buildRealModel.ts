@@ -9,6 +9,9 @@ import { deviceHop, internetHop, circuitHop, cloudHop, makePath } from "../model
 import { buildAddressing, isIpv4, type Addressing } from "../model/addressing";
 import { appName, buildFlowMap } from "./buildFlowMap";
 import { FAMILIES } from "./formats";
+import { addressParts } from "../model/site";
+import { countriesOf } from "./geo/admin1/load";
+import { countryOf, ensurePlaces, regionOf } from "./geo/places";
 
 type Rec = Record<string, any>;
 export type QueryResults = Partial<Record<string, Rec[]>>;
@@ -1064,6 +1067,49 @@ const pingsFailing = (d: Device, failing: Set<string>) =>
     // nothing gives coordinates: place the site at the centre of its state and say it is approximate
     if (sites[code].lat == null && state) Object.assign(sites[code], { lat: state[1], lon: state[2], approx: "state" as const });
   }
+  // ---------- sites nothing placed: the centre of the region the name already states ----------
+  //
+  // An estate that has not been tagged still says where it is. `100 Example Road, Fairview, KS, USA
+  // 66000` names a state, `SDC:A000.00:200 Example Parkway:Brookfield:NC:27000` names one too,
+  // and until this existed the app read a table of 27 Brazilian states and placed nothing else:
+  // a US estate opened on a schematic with two of the three map layouts switched off.
+  //
+  // The table of every admin-1 centre on earth is fetched, not bundled, so this is empty on the
+  // first build and the model is built again when it lands (`placesVersion` in useNetwork).
+  const unplaced = Object.values(sites).filter((x) => x.lat == null);
+  if (unplaced.length) {
+    void ensurePlaces();
+    const partsOf = new Map<string, string[]>(unplaced.map((x) => [x.code, addressParts(x.name)]));
+    /**
+     * The countries this estate is known to be in.
+     *
+     * A region code is not unique — `KS` is Kansas and Kassala — so one is only resolved inside a
+     * country the estate has already demonstrated: a country word in a site's own name, the
+     * country a device naming convention states, or the countries the sites that do carry
+     * coordinates fall in. Nothing known means nothing placed.
+     */
+    const anchors = new Set<string>();
+    partsOf.forEach((parts) => parts.forEach((p) => { const cc = countryOf(p); if (cc) anchors.add(cc); }));
+    siteHints.forEach((h) => { const cc = h.country?.toUpperCase(); if (cc?.length === 2) anchors.add(cc); });
+    countriesOf(Object.values(sites).filter((x) => x.lat != null && x.lon != null)
+      .map((x) => ({ lat: x.lat as number, lon: x.lon as number }))).forEach((cc) => anchors.add(cc));
+
+    for (const site of unplaced) {
+      const parts = partsOf.get(site.code) ?? [];
+      // the country this site's own name states wins over the estate's: one site abroad is still
+      // placed in the country it names
+      const own = parts.map(countryOf).filter((x): x is string => !!x);
+      const scope = own.length ? own : [...anchors];
+      if (!scope.length) continue;
+      const hit = parts.map((p) => regionOf(p, scope)).find((x) => !!x);
+      if (!hit) continue;
+      Object.assign(site, { lat: hit.lat, lon: hit.lon, approx: "state" as const });
+      // the region the site is in is a better grouping than "No region", and it is the same word
+      // the Regions view writes on the outline
+      if (!site.region) site.region = hit.region;
+    }
+  }
+
   // sites that share a state centre are spread a little around it, so none hides another
   const byCentre = new Map<string, Site[]>();
   Object.values(sites).filter((x) => x.approx === "state").forEach((x) => { const k = `${x.lat},${x.lon}`; { const l = byCentre.get(k); if (l) l.push(x); else byCentre.set(k, [x]); } });

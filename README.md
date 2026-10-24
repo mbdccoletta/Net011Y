@@ -26,6 +26,55 @@ demand-drop threshold they set in Settings.
 **Nothing the environment reports disappears.** An alert the app cannot place is still listed, with the
 reason.
 
+## What the environment has to provide
+
+Nothing here fails because something is missing. Every page reports what it has, names what it does
+not, and says which tag or permission would turn the rest on. Two of those gaps are worth knowing
+before the first run, because they are the two that make the app look broken when it is not.
+
+**Permissions.** `app.config.json` declares every scope the app uses, but declaring a scope is not
+being granted it: the user running the app still needs an IAM policy that allows it. Two are not
+part of a standard viewer role and have to be added by hand.
+
+| Statement | Without it |
+|---|---|
+| `ALLOW davis-copilot:conversations:execute;` | Every Intelligence question answers 403. The panel says the permission is missing; nothing else is affected |
+| `ALLOW settings:objects:read;` | The app cannot read `builtin:geo-settings` to see whether this environment shows the world map, and assumes it does. `dt-app dev` warns about it on every start |
+
+A first run also prints one `Unknown key: net-o11y.*` per setting the app stores. That is a 404 for a
+setting nobody has saved yet, which is what an empty environment is supposed to answer. It is not an
+error and it stops once anything is saved.
+
+**Site tags.** Sites exist without tags — they come from sysLocation, the autodiscovery group or the
+management network — but a site has no position until someone gives it one, and two of the three map
+layouts place sites by position. An estate with no coordinates has those two layouts switched off and
+the schematic left, which holds every site and needs nothing.
+
+| Primary tag | Turns on |
+|---|---|
+| `primary_tags.geo_lat`, `primary_tags.geo_lon` | **The Geographic and Regions layouts.** Decimal degrees. Without them neither can be opened |
+| `primary_tags.region` | Grouping by region, on the map and in the site list. Without it every site is "No region" |
+| `primary_tags.site` | One site per code. Without it a site is inferred per device, and an estate reads as more sites than it has |
+| `primary_tags.site_name` | The name on the map and in every list. An address works, and is shortened to its city and region for the map label only (`shortSiteName`) |
+| `primary_tags.site_type` | `datacenter` draws as a hub; `branch` as a site |
+| `primary_tags.hub` | The data centre a site's WAN terminates on, which is what the schematic draws between them |
+| `primary_tags.site_cidr` | Which user sessions and flows belong to which site |
+
+They go on the devices in each SNMP monitoring configuration (up to 20 per device, keys starting with
+`primary_tags.`), and Dynatrace copies them to the device and interface nodes, the metrics and the
+logs. It needs ActiveGate 1.343 or later with enrichment for extensions enabled. Dynatrace defines
+primary tags but no key names: the ones above are this app's convention and the only names it reads.
+
+Both are verifiable from a notebook before opening the app at all:
+
+```dql
+smartscapeNodes EXT_NETWORK_DEVICE
+| summarize devices = count(), by:{primary_tags.site, primary_tags.region}
+```
+
+Settings › Data holds the same thing for every other source, with the query that verifies it, and
+Settings › Next steps counts this environment's own gaps.
+
 ## Where the data comes from
 
 | What | Works with | Enriched by |

@@ -11,6 +11,14 @@ import { clusterPoints, worstOf, type Cluster } from "../model/mapClusters";
 export interface MapSite {
   code: string;
   name: string;
+  /**
+   * What the map writes beside the mark, where that is not the whole name.
+   *
+   * An estate whose `site_name` tags are postal addresses gets the city and the region out of
+   * them (`shortSiteName`), computed once with the layout rather than per frame in the draw. The
+   * name itself is unchanged and is what the hover and the panel show.
+   */
+  label?: string;
   lat: number;
   lon: number;
   verdict: Verdict;
@@ -676,7 +684,10 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
           const b = { x0: x + 8 - 10, y0: y - (s.dc ? 7 : 6) - 3, x1: x + 12 + tw + 10, y1: y + (s.dc ? 7 : 6) + 3 };
           return !taken.some((t2) => b.x0 < t2.x1 && b.x1 > t2.x0 && b.y0 < t2.y1 && b.y1 > t2.y0);
         };
-        const text = fits(s.name) ? s.name : s.code;
+        // the name is what a reader is after, shortened where it is an address; the code is the
+        // fallback for when even that will not fit
+        const named = s.label ?? s.name;
+        const text = fits(named) ? named : s.code;
         const w = ctx.measureText(text).width, h = s.dc ? 14 : 12;
         const box = { x0: x + 8, y0: y - h / 2, x1: x + 12 + w, y1: y + h / 2 };
         // boxes that merely touch still read as one name — two neighbouring sites ran together into one

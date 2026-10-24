@@ -47,6 +47,68 @@ export const pathOf = (m: NetworkModel, code: string) => {
 export const siteVerdict = (m: NetworkModel, code: string): Verdict =>
   m.siteVerdicts?.[code] ?? worst(devicesAt(m, code).filter((d) => d.verdict !== "Not monitored").map((d) => d.verdict));
 
+/**
+ * The name to write on a map, for an estate whose site names are postal addresses.
+ *
+ * `site_name` is whatever the team tagged, and in a real estate that is often the mailing address of
+ * the building — `100 Example Road, Fairview, KS, USA 66000` — or a facility code with the address
+ * inside it — `SDC:A000.00:200 Example Parkway:Brookfield:NC:27000`. Written in full on a canvas
+ * those are three hundred pixels of text each: the labels collide, the collision pass drops most of
+ * them, and the few that survive read as a column of addresses rather than as a map.
+ *
+ * At map scale the city identifies the site and the street does not, so an address is cut to the
+ * city and the region that follow it. Nothing else is touched. A name that is a name — `Durham DC`,
+ * `São Paulo, BR` — comes back as it was, because a name the team chose says more than anything
+ * this could derive from it, and the full string stays on the hover and on the site page.
+ */
+// A part of an address, by what it is: the ones that place the site are kept and the rest go.
+const POSTAL = /^\d{4,6}(-\d{3,4})?$|^[A-Z]\d[A-Z] ?\d[A-Z]\d$/;
+// Three letters and up, never two: `CA`, `IN`, `DE`, `SC` and `MS` are state codes as well as
+// country codes, and reading them as countries would drop the state from `Sacramento, CA` while
+// keeping it on `Fairview, KS` — the same estate labelled two different ways. A two-letter token is
+// a region here, and `London, UK` is then a name with a comma in it, which is left alone.
+const COUNTRY = /^(USA|U\.?S\.?A\.?|GBR|CAN|CANADA|MEX|MEXICO|BRA|BRASIL|BRAZIL|DEU|GERMANY|DEUTSCHLAND|FRA|FRANCE|ESP|SPAIN|ITA|ITALY|NLD|NETHERLANDS|IND|INDIA|CHN|CHINA|JPN|JAPAN|AUS|AUSTRALIA|SGP|SINGAPORE|IRL|IRELAND|POL|POLAND|SWE|SWEDEN|CHE|SWITZERLAND|AUT|AUSTRIA)$/i;
+const STREET = /\b(st|street|ave|avenue|rd|road|dr|drive|blvd|boulevard|ln|lane|way|hwy|highway|pkwy|parkway|ct|court|pl|place|ter|terrace|cir|circle|sq|square|suite|ste|floor|fl|unit|bldg|building|rua|av|avenida|alameda|estrada|rodovia|praca|praça|strasse|straße|str|weg|platz|calle|avenida|carrera)\b\.?/i;
+/** A two-letter state, province or prefecture code: the token a city is named against. */
+const REGION = /^[A-Z]{2}$/;
+/** A facility or room code: upper case with a digit in it, or three to six upper-case letters. */
+const CODE = /^(?=[A-Z0-9.\-/]*\d)[A-Z0-9.\-/]{2,12}$|^[A-Z]{3,6}$/;
+
+/** The part with its digits taken out, so `USA 66000` can be read as the country it is. */
+const withoutNumbers = (part: string) => part.replace(/\d[\d\-/]*/g, " ").replace(/[.,]/g, " ").replace(/\s+/g, " ").trim();
+
+/**
+ * A site name broken into the fields it is written in.
+ *
+ * A colon-delimited facility string has three or more parts; everything else reads as commas. Both
+ * the map label and the approximate placement read a name this way, so they agree on what the
+ * parts of it are.
+ */
+export const addressParts = (name: string | null | undefined): string[] => {
+  const raw = (name ?? "").trim();
+  return (raw.split(":").length >= 3 ? raw.split(":") : raw.split(",")).map((p) => p.trim()).filter(Boolean);
+};
+
+export function shortSiteName(name: string | null | undefined): string {
+  const raw = (name ?? "").trim();
+  if (!raw) return raw;
+  const parts = addressParts(raw);
+  if (parts.length < 2) return raw;
+  const postal = (p: string) => POSTAL.test(p);
+  const country = (p: string) => COUNTRY.test(withoutNumbers(p).replace(/\./g, ""));
+  const street = (p: string) => /\d/.test(p) && STREET.test(p);
+  const region = (p: string) => REGION.test(p);
+  // Only an address is shortened. Without a postal code, a street or a country in it, the name is
+  // just a name with a comma in it and the team's own words are what goes on the map.
+  if (!parts.some((p) => postal(p) || street(p) || country(p))) return raw;
+  const kept = parts.filter((p) => !postal(p) && !country(p) && !street(p) && (region(p) || !CODE.test(p)));
+  if (!kept.length) return raw;
+  const i = kept.map(region).lastIndexOf(true);
+  if (i > 0) return `${kept[i - 1]}, ${kept[i]}`;
+  if (i === 0) return kept[0];
+  return kept.slice(-2).join(", ");
+}
+
 export interface SiteInfo {
   code: string;
   site: Site;
