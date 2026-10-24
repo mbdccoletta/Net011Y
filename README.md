@@ -52,18 +52,61 @@ extensions it sends, and the permissions the app needs.
 
 ## What it costs to run
 
-Log and event queries are billed by the data Grail scans, and a window of logs costs the same whatever the
-filter. The app keeps that low without changing what it shows:
+Grail bills a query by the bytes it scans, and only for some tables. Of the hundred queries this app
+makes, seventy-four are metrics and five are Smartscape: those are included and cost nothing. Fifteen
+read logs, events or user sessions, and those are the bill.
 
-- one read of the metric series says which extension families the environment sends, and only their queries run;
-- optional sources (device logs, neighbours, NetFlow, OneAgent flows) are probed and remembered empty for 12 h;
-- device logs, traps, neighbours, the NetFlow timeline and the applications' network series are kept in the viewer's
-  browser: the next open reads only what arrived since the last one (from ten minutes before it, for late records) and
-  puts the two together. Values are kept exactly as Grail returned them, empty buckets included, so the answer is the
-  one the full query gives;
-- Settings › Data › What the app reads shows what each load read and what it costs at list price, and — since a log
-  query reads every record of its buckets in its window — how much a bucket of their own for the network's logs would
-  save. The syslog, traps, NetFlow and neighbour guides explain the OpenPipeline route, and Settings takes the bucket names.
+Measured on a live environment in October 2026 — 198 devices, 4.4 million NetFlow records an hour
+through the OpenTelemetry collector, 1.7 million syslog and trap records every six hours — one
+opening of the Live map:
+
+| Read | Window | Scanned |
+|---|---|---|
+| NetFlow conversations | 1 h | 8.05 GB |
+| NetFlow fan-in | 1 h | 8.06 GB |
+| Syslog and trap counts | 6 h | 5.19 GB |
+| NetFlow timeline (incremental) | 70 min | 1.54 GB |
+| Syslog records, neighbours (incremental) | 3 h, 20 min | 0.29 GB |
+| Problems, Davis events, user sessions | 24 h – 7 d | 0.29 GB |
+| **One load** | | **23.4 GB — US$ 0.076 at list price** |
+
+A hundred people opening it once a working day is about **US$ 168 a month** on an environment of that
+shape. The whole app's real billed consumption on that environment over the previous week, with four
+people using it, was **US$ 0.33**.
+
+**What drives the figure is log and flow volume, not the size of the estate.** The same hundred users
+on an estate of a thousand devices with no NetFlow would cost a fraction of it; the device count moves
+metric and Smartscape queries, which are free.
+
+What the app does to keep it down, each measured rather than assumed:
+
+- **a read that a metric can answer uses the metric.** Counting syslog lines per device and flows per
+  exporter is arithmetic over a stream, which is what a metric is: where the environment publishes one
+  (an OpenPipeline extraction rule — Settings names the rule for each read still being paid for), the
+  app uses it and the read becomes free. 13.6 GB of the 23.4 above. It is used only once the metric
+  reaches the start of the window, because a rule made this morning has no yesterday;
+- **the part of a window already read is not read again.** Kept in the reader's own app state, with an
+  expiry equal to the window — never in shared state, because log records carry content another user
+  may not be allowed to read, and never in the browser;
+- **optional sources are probed once and remembered empty for twelve hours**, in state the whole team
+  shares, so the second reader of the day does not re-probe what the first found absent;
+- **every read carries a scan limit of 50 GB.** A read that reaches it does not come back smaller, it
+  comes back truncated with a warning nothing downstream can see — so the app compares what was scanned
+  against the limit it set and reports that read as one it does not have;
+- **naming the buckets that hold the network's logs** scopes every log query to them. Settings lists the
+  environment's log buckets, and a button reads five minutes of logs to say which ones the records are
+  actually in. It needs a bucket and an OpenPipeline routing rule to exist first;
+- **per-interface reads stop above 3,000 devices or 40,000 ports** and the app works from per-device
+  summaries, fetching one device's interfaces when somebody opens it.
+
+**Dynatrace Intelligence is the other half of the bill, and the larger one per act:** one question costs
+three AI units — US$ 0.30 at list price, measured on real calls. Twenty-five questions a day cost more
+than all the scanning above.
+
+Settings › Data › What the app reads shows what the current load read, in gigabytes and in dollars, with
+the heaviest queries named. `docs/metric-substitution.md` has the per-read analysis: cost, latency, what
+a metric can and cannot answer, the measured cardinality of every metric proposed, and the sampling
+experiment that was implemented and then refused by its own measurement.
 
 ## Running it
 
@@ -114,10 +157,19 @@ on any Node other than 24; it deploys anyway.
 
 ## Example networks
 
-Settings › General › Data source opens two simulated networks, so the app can be explored before any data
-arrives: a retail group with about 550 sites across two countries and 2,700 devices, and the same group at extra-large scale
-(`?source=example&scale=xl`) with about 4,200 sites, 20,000 devices and five data centers, read the way the
-app reads an estate that size — per-device summaries instead of every port.
+Settings › General › Data source opens three simulated networks, so the app can be explored before any data
+arrives — a Brazilian and American retail group, at the three sizes a reader is likely to be sizing against:
+
+| | Sites | Devices | Interfaces | WAN links |
+|---|---|---|---|---|
+| `?source=example&scale=mid` | 211 | 1,007 | 2,200 | 282 |
+| `?source=example` | 551 | 2,667 | 5,826 | 772 |
+| `?source=example&scale=xl` | 4,170 | 20,060 | per-device summaries | 5,762 |
+
+All three carry the same faults in proportion — an outage, a carrier degrading, ports discarding — and
+none of them queries Grail: they are built in the browser, so they cost nothing and say nothing about
+query cost. The extra-large one is read the way the app reads an estate that size, with per-device
+summaries instead of every port.
 
 ## How it was built
 

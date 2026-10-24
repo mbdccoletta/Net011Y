@@ -6,9 +6,12 @@ costs today, what the substitution would cost in correctness, and where the line
 
 Nothing here is estimated. Every figure was measured on two live environments in October 2026:
 
-* **eob14444** — about 4.4 million NetFlow records an hour through the OpenTelemetry collector and
-  1.7 million syslog and trap records every six hours; no OneAgent network flows.
-* **guu84124** — OneAgent network flows (2.1 million events a day), light syslog, no NetFlow.
+* **the NetFlow environment** — about 4.4 million NetFlow records an hour through the OpenTelemetry
+  collector and 1.7 million syslog and trap records every six hours; no OneAgent network flows.
+* **the OneAgent-flow environment** — 2.1 million network-flow events a day, light syslog, no NetFlow.
+
+They are named by what they carry rather than by their identifiers, because the identifier adds
+nothing to a measurement and this file is published.
 
 Cost and latency come from the tenants' own `dt.system.query_executions` and `BILLING_USAGE_EVENT`
 records, over the app's real traffic. Cardinality comes from running the grouping of each proposed
@@ -17,7 +20,7 @@ metric against the live stream.
 ## What a read costs today
 
 The app makes 100 queries. Seventy-four are metric queries and five read Smartscape; those are
-included and cost nothing. Fifteen are billed. On eob14444, at the 90th percentile:
+included and cost nothing. Fifteen are billed. On the NetFlow environment, at the 90th percentile:
 
 | Read | What it is | Window | Scanned | Server time |
 |---|---|---|---|---|
@@ -29,10 +32,10 @@ included and cost nothing. Fifteen are billed. On eob14444, at the 90th percenti
 | `deviceLogsRecent` | the latest records themselves | 3 h | 0.34 GB | 0.2 s |
 | `neighbors` | CDP/LLDP pairs | 20 min | 0.14 GB | 0.06 s |
 | `sessions`, `sessionsTypical`, `sessionNets` | user sessions | 24 h / 7 d | ~0 GB | 0.04–0.4 s |
-| `appPaths`, `appNet`, `appNetBy`, `cloud`, `cloudTop` | OneAgent flows | 1–24 h | 0 GB here, 10.4 GB on guu84124 | — |
+| `appPaths`, `appNet`, `appNetBy`, `cloud`, `cloudTop` | OneAgent flows | 1–24 h | 0 GB here, 10.4 GB on the OneAgent-flow one | — |
 
-A session that opens the map and the traffic page scans about 39 GB on eob14444 and 11 GB on
-guu84124. The three slowest reads in the app are the three most expensive ones, which is not a
+A session that opens the map and the traffic page scans about 39 GB on the NetFlow environment and 11 GB on
+the other. The three slowest reads in the app are the three most expensive ones, which is not a
 coincidence: both numbers are the same scan.
 
 ## What a metric can and cannot answer
@@ -105,7 +108,7 @@ The developer documentation names four levers for a log query — `filter`, `sca
 `samplingRatio`, `limit` — and the app was using one of them.
 
 **Sampling is the lever this analysis missed.** `fetch logs, samplingRatio: 100` reads one record in
-a hundred. Measured on eob14444, the same NetFlow question over the same hour:
+a hundred. Measured on the NetFlow environment, the same question over the same hour:
 
 | | Scanned | Records | Server time |
 |---|---|---|---|
@@ -185,7 +188,7 @@ discovering the metric was there is the one outcome this mechanism exists to pre
 
 ## What it saves, measured
 
-On eob14444, with both rules in place and covering their windows:
+On the NetFlow environment, with both rules in place and covering their windows:
 
 | | Scanned per session | Query cost per session | Slowest read |
 |---|---|---|---|
@@ -196,7 +199,7 @@ On eob14444, with both rules in place and covering their windows:
 ### Naming the buckets has a prerequisite
 
 The app's bucket field restricts its log queries to the buckets named in it, which only saves
-anything if those buckets hold the network's logs and little else. On eob14444 they do not exist:
+anything if those buckets hold the network's logs and little else. On the NetFlow environment they do not exist:
 the environment has two log buckets, `default_logs` with 4.65 billion records and one for database
 monitoring, so naming either would scan exactly what is being scanned now. The lever needs, in
 order: a bucket, an OpenPipeline routing rule that sends syslog, traps, NetFlow and autodiscovery
@@ -221,7 +224,7 @@ measured — so twenty-five questions a day cost more than all the scanning in e
 
 ## Where this leaves the app
 
-| Lever | Status | Measured effect on eob14444 |
+| Lever | Status | Measured effect on the NetFlow environment |
 |---|---|---|
 | Metric instead of scan, where the environment publishes one | implemented, 0.1.80–0.1.81 | −15.6 GB and −5.9 s per session |
 | Coverage guard, so a young metric is not trusted | implemented, 0.1.81 | correctness, no cost change |
