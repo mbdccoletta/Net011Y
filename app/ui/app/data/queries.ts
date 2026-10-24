@@ -86,6 +86,21 @@ export const DEVICE_LOG_HOURS = 6;
  */
 export const DETAIL_MAX_DEVICES = 3000;
 /**
+ * And the same ceiling counted in ports, because devices are not the thing that gets large.
+ *
+ * The device gate was written for an estate of small switches and says nothing about how many ports
+ * each one has. Measured on a real environment: 198 devices declaring 23,236 interfaces — a hundred
+ * and seventeen each, one chassis with four thousand — so a thousand devices of that shape would be
+ * a hundred and seventeen thousand ports, against per-interface reads that cap at fifty and sixty
+ * thousand. The app would have pulled what fits and reported the rest as truncated, which is honest
+ * and useless.
+ *
+ * The inventory already carries `interface_count` per device and costs nothing, so the gate counts
+ * ports as well: above this the app works from the per-device summaries and fetches one device's
+ * interfaces when somebody opens it, which is what it already does for a large estate.
+ */
+export const DETAIL_MAX_PORTS = 40000;
+/**
  * Syslog reaches Grail by more than one road, and the attributes carry the prefix of the road it took.
  * The ActiveGate's syslog ingest writes `dt.openpipeline.source` and `dt.ingest.source.ip`; an
  * environment whose devices send through a OneAgent gets the same two under `custom.`. Filtering only

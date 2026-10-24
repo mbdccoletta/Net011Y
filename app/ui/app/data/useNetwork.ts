@@ -6,7 +6,7 @@ import { useDql } from "@dynatrace-sdk/react-hooks";
 import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
 import { clearSourceMemory, setAbsent as rememberAbsent, setBarren as rememberBarren, setPresent as rememberPresent, sourceMemory, useSourceMemory, type Stamps } from "./sourceMemory";
 import type { NetworkModel } from "../model/types";
-import { DETAIL_MAX_DEVICES, QUERIES, SCAN_LIMIT_GB } from "./queries";
+import { DETAIL_MAX_DEVICES, DETAIL_MAX_PORTS, QUERIES, SCAN_LIMIT_GB } from "./queries";
 import { familyOfToken } from "./formats";
 import { keep, loadKeptParts, mergeRows, planFor, type Plan } from "./logCache";
 import { inBuckets, useLogBuckets, useLogBucketGate } from "../hooks/useLogBucket";
@@ -156,7 +156,7 @@ const FAMILY_CORE = Object.keys(QUERIES).filter((k) => /^(ifSummary|errSummary):
 const CORE = ["devices", "interfaces", "families", ...FAMILY_CORE, "problems", "alerts", "icmp", "lldp", "neighbors", "routing"];
 const NAMES = Object.keys(QUERIES);
 const STALE_MS = 5 * 60 * 1000;
-export { DETAIL_MAX_DEVICES } from "./queries";
+export { DETAIL_MAX_DEVICES, DETAIL_MAX_PORTS } from "./queries";
 
 function tenantName(): string {
   try {
@@ -188,7 +188,11 @@ export function useNetwork(source: Source, scale: "mid" | "xl" | null = null, vi
     { enabled: live, staleTime: STALE_MS, runInBackground: true },
   );
   const estate = inventory.isSuccess ? (inventory.data?.records ?? []).length : null;
-  const detailOk = estate != null && estate <= DETAIL_MAX_DEVICES;
+  /* what the devices say they have, from the inventory that has already answered and cost nothing */
+  const ports = inventory.isSuccess
+    ? (inventory.data?.records ?? []).reduce((a, r) => a + (Number(r?.interface_count) || 0), 0)
+    : null;
+  const detailOk = estate != null && estate <= DETAIL_MAX_DEVICES && (ports ?? 0) <= DETAIL_MAX_PORTS;
   /**
    * Grail runs a limited number of queries per user at a time, so firing all of them at once leaves the
    * last ones queued behind the slow ones and the app waits on an environment that is already answering.
