@@ -377,7 +377,8 @@ export const QUERIES: Record<string, NetQuery> = {
     query: 'fetch metric.series | filter contains(metric.key, "cbgp.peer") or contains(metric.key, "ospf.nbr") | fields metric.key, sys.name, cbgp.remote.identifier, cbgp.remote.as, cbgp.peer.state, ospf.nbr.ip.addr, ospf.nbr.state',
     maxResultRecords: 2000,
   },
-  flowTs: { heavy: true,
+  flowTs: {
+    heavy: true,
     metric: {
       keys: ["log.net.flow.records", "log.net.flow.bytes"],
       /* the dimension is the field the extraction took it from — a rule cannot rename one — so the
@@ -405,7 +406,8 @@ export const QUERIES: Record<string, NetQuery> = {
   },
   // many talking to one: a range reached from an unusual number of distinct Internet sources (a busy
   // internal service reached by every branch is normal, so private sources are left out)
-  flowFanIn: { heavy: true,
+  flowFanIn: {
+    heavy: true,
     query: 'fetch logs, from:now()-1h | filter otel.scope.name == "otelcol/netflowreceiver" | filter not(ipIn(source.address, array("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10"))) | summarize srcs = countDistinct(source.address), dsts = countDistinct(destination.address), bytes = sum(toLong(flow.io.bytes)), flows = count(), by:{exp = flow.sampler_address, dst = ipMask(destination.address, 24), dport = destination.port} | filter srcs >= 100 | sort srcs desc | limit 20',
     maxResultRecords: 20,
     views: ["traffic", "site"],
