@@ -237,7 +237,7 @@ export function useNetwork(source: Source, scale: "mid" | "xl" | null = null, vi
    */
   const viewWants = (name: string) => {
     const q = QUERIES[name];
-    return !q.detail || !q.views || q.views.some((v) => reading.includes(v));
+    return (!q.detail && !q.heavy) || !q.views || q.views.some((v) => reading.includes(v));
   };
   const openNow = (name: string) => { const v = QUERIES[name].views; return !v || v.some((x) => reading.includes(x)); };
   /**

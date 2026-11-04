@@ -1203,6 +1203,26 @@ check("A cut back to before the last gap is kept as the fallback, never as the f
   }),
   WINDOWS.map(([n, p]) => { const w = forecastWindow(run(p)); return `${n}: ${w.ends}→${w.before}`; }).join(" · "));
 
+// What the Live map costs, and what it pays for a page nobody has opened. Measured on an
+// environment with NetFlow: flowTs scans 9.4 GB and flowFanIn 8.0 GB, half of a 35 GB load, and
+// neither is drawn anywhere but Traffic and the site panel. A read that says which views show it
+// and is marked heavy now waits for one of them; everything else still runs from the first render.
+const heavy = Object.keys(QUERIES).filter((n) => QUERIES[n].heavy);
+check("Every heavy read names the views that show it, and no view-less read is marked heavy",
+  heavy.length > 0 && heavy.every((n) => (QUERIES[n].views ?? []).length > 0),
+  heavy.map((n) => `${n} → ${(QUERIES[n].views ?? []).join("/")}`).join(" · "));
+
+// Deferred, not dropped: `detail` brings the estate-size rule with it and `heavy` must not, or a
+// large estate would open Traffic and find the reading missing rather than late.
+check("A heavy read is deferred by the open view, never by the size of the estate",
+  heavy.every((n) => !QUERIES[n].detail),
+  heavy.map((n) => `${n}: detail=${!!QUERIES[n].detail}`).join(" · "));
+
+// The Live map draws its routes from NetFlow, so the read that feeds them stays on it.
+check("The read the map draws routes from is not deferred",
+  !QUERIES.flowNets.heavy && (QUERIES.flowNets.views ?? []).includes("map"),
+  `flowNets heavy=${!!QUERIES.flowNets.heavy} views=${(QUERIES.flowNets.views ?? []).join("/")}`);
+
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 
 writeFileSync("out/validation.json", JSON.stringify(report, null, 1));
