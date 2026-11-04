@@ -455,3 +455,17 @@ export const QUERIES: Record<string, NetQuery> = {
 };
 
 export type QueryName = keyof typeof QUERIES;
+
+/**
+ * Does a read run for the pages currently being read?
+ *
+ * A read waits for a view only when it names its views *and* is marked `detail` or `heavy`.
+ * Everything else runs everywhere, which is what keeps a page switch instant — and for a metric
+ * read it costs nothing to run it early.
+ *
+ * It lives here, as a function of its two inputs, so the suite can ask the rule itself whether a
+ * Live map load reads flowTs. The useNetwork closure it came from could only be re-stated in a
+ * test, and a re-statement is the one thing a check like that must not be.
+ */
+export const readWanted = (q: NetQuery, reading: readonly string[]): boolean =>
+  (!q.detail && !q.heavy) || !q.views || q.views.some((v) => reading.includes(v));

@@ -2,7 +2,7 @@
 import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
-import { QUERIES } from "./out/queries.mjs";
+import { QUERIES, readWanted } from "./out/queries.mjs";
 import { buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
@@ -1222,6 +1222,29 @@ check("A heavy read is deferred by the open view, never by the size of the estat
 check("The read the map draws routes from is not deferred",
   !QUERIES.flowNets.heavy && (QUERIES.flowNets.views ?? []).includes("map"),
   `flowNets heavy=${!!QUERIES.flowNets.heavy} views=${(QUERIES.flowNets.views ?? []).join("/")}`);
+
+// The three checks above read the flags. These three ask the rule: `readWanted` is the function
+// useNetwork's own viewWants calls, so what it answers here is what a load does. A check that
+// re-stated the rule instead would pass a broken one.
+const askedOn = (views) => Object.keys(QUERIES).filter((n) => readWanted(QUERIES[n], views));
+const onMap = askedOn(["map"]);
+check("A Live map load does not ask for the two reads nothing but Traffic and the site panel draws",
+  !onMap.includes("flowTs") && !onMap.includes("flowFanIn") && onMap.includes("flowNets"),
+  `map asks ${onMap.length} of ${Object.keys(QUERIES).length} reads · flowTs=${onMap.includes("flowTs")} flowFanIn=${onMap.includes("flowFanIn")} flowNets=${onMap.includes("flowNets")}`);
+
+// Late, never missing: the page that draws them must still get them.
+const onTraffic = askedOn(["traffic"]), onSite = askedOn(["site"]);
+check("Opening Traffic, or a site, asks for both of them",
+  ["flowTs", "flowFanIn"].every((n) => onTraffic.includes(n) && onSite.includes(n)),
+  `traffic ${onTraffic.length} reads · site ${onSite.length} reads`);
+
+// And nothing else moved. Under the rule as it stood, `heavy` was not consulted at all.
+const asWas = (q, views) => !q.detail || !q.views || q.views.some((v) => views.includes(v));
+const mapAsWas = Object.keys(QUERIES).filter((n) => asWas(QUERIES[n], ["map"]));
+const nowWaiting = mapAsWas.filter((n) => !onMap.includes(n)).sort();
+check("The map load loses exactly those two reads, and no third",
+  nowWaiting.join(",") === "flowFanIn,flowTs",
+  `${mapAsWas.length} → ${onMap.length} reads · now waiting: ${nowWaiting.join(", ") || "none"}`);
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 

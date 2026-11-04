@@ -6,7 +6,7 @@ import { useDql } from "@dynatrace-sdk/react-hooks";
 import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
 import { clearSourceMemory, setAbsent as rememberAbsent, setBarren as rememberBarren, setPresent as rememberPresent, sourceMemory, useSourceMemory, type Stamps } from "./sourceMemory";
 import type { NetworkModel } from "../model/types";
-import { DETAIL_MAX_DEVICES, DETAIL_MAX_PORTS, QUERIES, SCAN_LIMIT_GB } from "./queries";
+import { DETAIL_MAX_DEVICES, DETAIL_MAX_PORTS, QUERIES, SCAN_LIMIT_GB, readWanted } from "./queries";
 import { familyOfToken } from "./formats";
 import { keep, loadKeptParts, mergeRows, planFor, type Plan } from "./logCache";
 import { inBuckets, useLogBuckets, useLogBucketGate } from "../hooks/useLogBucket";
@@ -230,15 +230,13 @@ export function useNetwork(source: Source, scale: "mid" | "xl" | null = null, vi
    * that on a page that never shows it, to make a later visit instant, is the wrong way
    * round at this scale.
    *
-   * So the rule is narrow: a query that is marked `detail` *and* names its views waits for
-   * one of them. Everything else still runs everywhere, which is what keeps the page
+   * So the rule is narrow: a query that names its views and is marked `detail` or `heavy` waits
+   * for one of them. Everything else still runs everywhere, which is what keeps the page
    * switches instant. The absent-source memory still applies, so a source this environment
-   * does not send is still not read.
+   * does not send is still not read. The rule itself is `readWanted` in queries.ts, so the suite
+   * can ask it directly.
    */
-  const viewWants = (name: string) => {
-    const q = QUERIES[name];
-    return (!q.detail && !q.heavy) || !q.views || q.views.some((v) => reading.includes(v));
-  };
+  const viewWants = (name: string) => readWanted(QUERIES[name], reading);
   const openNow = (name: string) => { const v = QUERIES[name].views; return !v || v.some((x) => reading.includes(x)); };
   /**
    * `openNow` answers "does the open page need this", and for a query that names no view the

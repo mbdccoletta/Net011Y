@@ -84,3 +84,27 @@ so a reader is shown a list with no sign that 93% of the groups are not in it.
 
 Not fixed here. Fixing it means either saying so on the page or raising the limit, and the second
 costs transfer rather than scanning.
+
+## Confirmed after the change
+
+Re-measured on the same environment once 0.1.91 was deployed, with `scripts/grail/scan_split.mjs`,
+which asks the environment for each billed read and splits them by `readWanted` — the rule the app
+itself applies:
+
+| | Reads | Scanned |
+|---|---|---|
+| billed reads the Live map asks for | 13 | **16.58 GB** |
+| billed reads that now wait for Traffic or a site panel | 2 | **13.52 GB** |
+| all billed reads | 15 | 30.10 GB |
+
+**45% of the load, gone from the opening screen** — `flowTs` 7.27 GB and `flowFanIn` 6.24 GB.
+
+The totals are lower than the table above because NetFlow volume differs by the hour, and all three
+NetFlow reads ask for `now()-1h`: 30.1 GB in this hour against 35 GB in the earlier one. The share
+is what to read, not the absolute figure, and a measurement of this is only ever an hour's.
+
+`scan_split.mjs --views traffic` measures the other direction: what opening Traffic asks for.
+
+The behaviour is held by three checks in the suite that call `readWanted` itself rather than
+re-stating it — a Live map load asks for neither, Traffic and the site panel ask for both, and the
+map load loses exactly those two reads and no third (88 reads → 86).
