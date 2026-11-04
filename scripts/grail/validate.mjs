@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES } from "./out/queries.mjs";
-import { buildRealModel, deriveTags, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
+import { buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -1176,6 +1176,32 @@ const appCfg = JSON.parse(readFileSync(new URL("../../app/app.config.json", impo
 check("The package and the app agree on what this is and which version it is",
   pkg.version === appCfg.app.version && pkg.name === appCfg.app.id.split(".").slice(1).join("-"),
   `package ${pkg.name}@${pkg.version} · app ${appCfg.app.id}@${appCfg.app.version}`);
+
+// Where the forecast window ends, which is the difference between an estate having a forecast and
+// being told it has none. Measured on a live environment whose collection had stopped for two days:
+// a window ending now answered OK over 49 empty hours followed by 23 recorded ones, and the same
+// series cut back to before that gap FAILED, because the shortened window ends inside the outage.
+const run = (pattern) => [...pattern].map((c) => (c === "." ? null : 1));
+const WINDOWS = [
+  // the measured environment: the gap is at the far edge of the last day and the record resumed
+  ["gap then a day of record", ".#######################", 0, 24],
+  // collection is still down: the empty hours are at the end and have to come off
+  ["collection still down", "###################.....", 5, 5],
+  // nothing missing: ask for now and never cut
+  ["unbroken", "########################", 0, 0],
+  // a hole a few hours short of now: ask for now first, and the fallback cuts back to before it
+  ["hole near the end", "########.............###", 0, 16],
+];
+check("The forecast window reaches now unless the empty hours are at the end",
+  WINDOWS.every(([, p, ends]) => forecastWindow(run(p)).ends === ends),
+  WINDOWS.map(([n, p]) => `${n}: ends ${forecastWindow(run(p)).ends}`).join(" · "));
+
+check("A cut back to before the last gap is kept as the fallback, never as the first ask",
+  WINDOWS.every(([, p, ends, before]) => {
+    const w = forecastWindow(run(p));
+    return w.before === before && w.before >= w.ends;
+  }),
+  WINDOWS.map(([n, p]) => { const w = forecastWindow(run(p)); return `${n}: ${w.ends}→${w.before}`; }).join(" · "));
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 

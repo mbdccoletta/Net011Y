@@ -420,6 +420,26 @@ export interface NetworkDemand {
   endsHoursAgo?: number;
 }
 
+/**
+ * Where to end the forecast window, given the hourly record.
+ *
+ * `ends` is how many hours back from now the window stops; `before` is the fallback, the cut
+ * back to before the most recent empty hour. Both are read from the last `recentHours` of the
+ * record. Pure, so the three shapes that matter are checked rather than reasoned about.
+ */
+export function forecastWindow(series: readonly (number | null)[], recentHours = RECENT_HOURS): { ends: number; before: number } {
+  const tail = series.slice(-recentHours);
+  let trailing = 0;
+  while (trailing < tail.length && tail[tail.length - 1 - trailing] == null) trailing += 1;
+  // the fallback ends before the most recent gap *begins* — stopping at its last empty hour
+  // would leave the rest of the same gap at the end of the window, which is the one thing the
+  // analyzer refuses
+  const lastHole = tail.reduce<number>((at, v, i) => (v == null ? i : at), -1);
+  let start = lastHole;
+  while (start > 0 && tail[start - 1] == null) start -= 1;
+  return { ends: trailing, before: lastHole >= 0 ? tail.length - start : 0 };
+}
+
 const cacheDemand = new Map<string, NetworkDemand | null>();
 
 export function useNetworkDemand(families: string[], hours: number): { data: NetworkDemand | null; loading: boolean; error: string | null } {
@@ -464,15 +484,38 @@ export function useNetworkDemand(families: string[], hours: number): { data: Net
     }).then((r) => r.json())
       .then(async (h) => {
         const series = (h?.result?.records?.[0]?.total ?? []) as (number | null)[];
-        /* the last stretch the analyzer can work with: back to the most recent empty hour
-           inside the window it looks at, or none when there is not one */
-        const tail = series.slice(-RECENT_HOURS);
-        const firstHole = tail.findIndex((v) => v == null);
-        const ends = firstHole >= 0 ? tail.length - firstHole : 0;
-        const j = await forecast({ timeSeriesData: { expression },
+        /**
+         * Ask for the run that reaches now, and only cut the window if that is refused.
+         *
+         * What the analyzer objects to is a gap *at the end* of the window, and it is more
+         * tolerant of one further back than this assumed. Measured on an environment whose
+         * collection had stopped for two days: 49 empty hours followed by 23 recorded ones,
+         * ending the window at now, answered OK — while the same series cut back to before
+         * that gap FAILED, because the end of the shortened window lands inside it.
+         *
+         * This used to cut at the *first* empty hour in the last day, which is the right
+         * move only when the gap is still open. Once collection resumes, the first hole is
+         * at the far edge of the window and the cut throws away every recorded hour since,
+         * landing the window end in the middle of the outage. That environment had a working
+         * forecast available all along and the page said it had none.
+         *
+         * So: trim only the empty hours at the end, ask, and fall back to the old cut when
+         * the analyzer still refuses — which is the case of a gap a few hours short of now,
+         * measured separately, where the run after it is too short to carry the end.
+         */
+        const win = forecastWindow(series);
+        let ends = win.ends;
+        let j = await forecast({ timeSeriesData: { expression },
           forecastHorizon: horizonFor(hours),
           forecastOffset: 1,
           generalParameters: { timeframe: { startTime: `now-${days}d`, endTime: since(ends) } } }, ctrl.signal);
+        if (j?.result?.output?.[0]?.analysisStatus !== "OK" && win.before > ends) {
+          ends = win.before;
+          j = await forecast({ timeSeriesData: { expression },
+            forecastHorizon: horizonFor(hours),
+            forecastOffset: 1,
+            generalParameters: { timeframe: { startTime: `now-${days}d`, endTime: since(ends) } } }, ctrl.signal);
+        }
         return [h, j, ends] as const;
       })
       .then(async ([h, j, ends]) => {
