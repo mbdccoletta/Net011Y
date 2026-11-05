@@ -166,3 +166,16 @@ without the exporter rates. Answers are cached per subject and question, so that
 been handed back for the rest of the visit. Both contexts now carry the same note as the map's, with
 wording that covers a read that is waiting, in flight or failed — the context cannot tell them
 apart — and the subject an answer is cached under moves when the evidence lands, which drops it.
+
+### And the two pages that do not read them
+
+Keying the cached answer to the measurement state fixed Traffic and the site panel and left the Live
+map and Sites holding the same stale answer, for a reason that is only visible from the hook:
+`reading` keeps every view the reader has *opened*, not only the one on screen. So the two reads stay
+in once Traffic has been visited — and coming back to the map, the evidence is there while the
+cached answer still says it was not read. Both subjects carry the key now.
+
+The check behind it reads the pages rather than the model, because a subject is composed in the
+page: every `AssistPanel` whose context can carry the note must have `measuredKey` in its subject.
+Against the commit before the fix it names the two panels that did not, and against the one before
+that, all four.

@@ -1302,6 +1302,20 @@ check("The subject an explanation is cached under moves when the traffic evidenc
   new Set(assistSubjects).size === 3 && measuredKey(mRead.flowMap?.measured) === measuredKey({ fanIn: true, rate: true }),
   `both read "${assistSubjects[0]}" · neither "${assistSubjects[1]}" · no NetFlow at all "${assistSubjects[2]}"`);
 
+// …on every panel, not only the ones that read them. `reading` keeps every view the reader has
+// opened, so the two reads stay in once Traffic has been visited: the Live map and Sites can be
+// holding an answer written when they were out. This reads the pages rather than the model, which
+// is the only way to check where a subject is composed — and it is how that omission was found.
+const CARRIES_NOTE = ["networkContext", "trafficContext", "siteContext"];
+const panels = ["pages/LiveMapPage.tsx", "pages/VisualPages.tsx", "pages/TrafficPage.tsx", "components/EntityDetails.tsx"]
+  .flatMap((f) => readFileSync(new URL(`../../app/ui/app/${f}`, import.meta.url).pathname, "utf8")
+    .split("<AssistPanel").slice(1).map((seg) => ({ file: f, tag: seg.slice(0, seg.indexOf("/>") + 2) })))
+  .filter((p) => CARRIES_NOTE.some((c) => p.tag.includes(`${c}(`)));
+const unkeyed = panels.filter((p) => !p.tag.includes("measuredKey("));
+check("Every explanation whose context can carry the note is cached under the measurement state",
+  panels.length >= 4 && unkeyed.length === 0,
+  `${panels.length} panels state traffic findings · without the key: ${unkeyed.map((p) => p.file).join(", ") || "none"}`);
+
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 
 writeFileSync("out/validation.json", JSON.stringify(report, null, 1));

@@ -8,7 +8,7 @@ import { isBad, ORDER } from "../model/verdict";
 import { bubbleRadius } from "../model/mapClusters";
 import { fmtInt, stripDevice } from "../utils/format";
 import { NativeDrill } from "../components/NativeDrill";
-import { carrierContext, changeContext, devicesContext, networkContext } from "../utils/assist";
+import { carrierContext, changeContext, devicesContext, measuredKey, networkContext } from "../utils/assist";
 import { carrierQuestions, devicesQuestions, sitesQuestions } from "../utils/prompts";
 import { AssistPanel } from "../components/AssistPanel";
 import { DeviceBubbles } from "../components/DeviceBubbles";
@@ -88,7 +88,9 @@ export function SitesVisual(p: VisualProps) {
               thing on Sites, on WAN links and on Devices, so the one control that answers a
               question about the page was the one you had to scroll past the page to reach. */}
           <Tile className="vz-assist-row">
-            <AssistPanel subject={`sites|${filters.status}|${filters.carrier}|${kind}`} questions={sitesQuestions()} object="sites"
+            {/* …|measured: the same reason as on the Live map — the traffic evidence can land
+                after an answer was written without it, once the reader has opened Traffic */}
+            <AssistPanel subject={`sites|${filters.status}|${filters.carrier}|${kind}|${measuredKey(model.flowMap?.measured)}`} questions={sitesQuestions()} object="sites"
               context={() => ({ ...networkContext(model, infos, buildCauses(model, infos)), filter: { status: filters.status, carrier: filters.carrier, type: kind } })} />
           </Tile>
           <div className="vz-k4">

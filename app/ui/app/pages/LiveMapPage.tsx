@@ -13,7 +13,7 @@ import { logsQuery, openLogs } from "../utils/drilldown";
 import { NativeDrill } from "../components/NativeDrill";
 import { SiteTree } from "../components/SiteTree";
 import { useSiteHierarchy } from "../hooks/useSiteHierarchy";
-import { causeContext, isolationContext, networkContext } from "../utils/assist";
+import { causeContext, isolationContext, measuredKey, networkContext } from "../utils/assist";
 import { causeQuestions, isolationQuestions, networkQuestions } from "../utils/prompts";
 import { AssistPanel } from "../components/AssistPanel";
 import { appNetExpressions, demandExpression, useAnomaly } from "../hooks/useAnomaly";
@@ -680,7 +680,11 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
               with forty evidence lines put "explain this" a screen and a half below the
               thing to be explained. */}
           {!cause && (
-            <AssistPanel subject="network" questions={networkQuestions()} object="network"
+            /* the subject carries whether the two deferred traffic reads have landed. They are
+               not read for this page — but `reading` keeps every view the reader has opened, so
+               coming back from Traffic they are in, and an answer that said fan-in had not been
+               read must not be handed back once it has. */
+            <AssistPanel subject={`network|${measuredKey(model.flowMap?.measured)}`} questions={networkQuestions()} object="network"
               context={() => networkContext(model, infos, causes)} />
           )}
         </aside>
