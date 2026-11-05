@@ -7,7 +7,7 @@ import { ownsPath, ROLE_LABEL, type SiteInfo } from "../model/site";
 import { isBad, ORDER } from "../model/verdict";
 import { portCounts, portsDown } from "../model/ports";
 import { fmtInt, fmtNum, hhmm, unitOf } from "../utils/format";
-import { deviceContext, isolationContext, siteContext } from "../utils/assist";
+import { deviceContext, isolationContext, measuredKey, siteContext } from "../utils/assist";
 import { deviceQuestions, isolationQuestions, siteQuestions } from "../utils/prompts";
 import { NativeDrill } from "./NativeDrill";
 import { SuspicionStrip } from "./Suspicion";
@@ -298,7 +298,9 @@ function SiteDetails({ model, info, needs, onSelect, onClose }: { model: Network
         * is wrong.
         */}
       <Tile tone={TONE.violet}>
-        <AssistPanel subject={`site|${info.code}`} object="site"
+        {/* the subject carries whether the two deferred traffic reads have landed: an answer
+            written in the seconds before they do is not the answer once they have */}
+        <AssistPanel subject={`site|${info.code}|${measuredKey(model.flowMap?.measured)}`} object="site"
           questions={[...siteQuestions(info.site.name, info.circuits.some((c) => c.kind === "backup"), !!model.flowMap?.sites[info.code]),
             ...(hasFaultDomain ? isolationQuestions(info.site.name) : [])]}
           context={() => ({ ...siteContext(model, info),

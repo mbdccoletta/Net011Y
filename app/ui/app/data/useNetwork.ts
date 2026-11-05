@@ -287,6 +287,8 @@ export function useNetwork(source: Source, scale: "mid" | "xl" | null = null, vi
   const blocked = bucketGate.held ? NAMES.filter(readsLogs) : [];
   const remembered = useSourceMemory();
   const absent = fresh(remembered.absent, SOURCE_RECHECK_MS);
+  /* what the app knows about which sources this environment does not send, as one value a memo can depend on */
+  const absentKey = Object.entries(absent).map(([g, at]) => `${g}:${at ?? ""}`).sort().join("|");
   const barren = remembered.barren;
   const isBarren = (name: string) => BARREN_MEASURES.test(name)
     && !REQUIRED.includes(name) && Date.now() - (barren[name] ?? 0) < BARREN_MS;
@@ -638,19 +640,38 @@ export function useNetwork(source: Source, scale: "mid" | "xl" | null = null, vi
       const { scanned, h } = perHour(i);
       return scanned ? { net: n / h, all: scanned } : null;
     };
-    // A count that was not read is not a zero. `flowTs` waits for Traffic, so on every other page
-    // its records are missing from the numerator while the denominator still holds all of them:
-    // the share comes out low and the saving offered for a bucket of its own comes out high, both
-    // by exactly the part nobody measured. Absent from the environment is a real zero and counts.
-    const counted = (name: string) => {
-      const i = NAMES.indexOf(name), g = groupOf(name);
-      return i >= 0 && (raw[i].isSuccess || asMetric(name) || (!!g && absent[g] != null));
-    };
+    /*
+     * A count that was not read is not a zero. `flowTs` waits for Traffic, so on every other page
+     * its records are missing from the numerator while the denominator still holds all of them:
+     * the share comes out low and the saving offered for a bucket of its own comes out high, both
+     * by exactly the part nobody measured.
+     *
+     * The test is whether the figure is in, not whether the read could have produced one. A
+     * metric serving `flowTs` is not the same as having the count: the metric counts flows, while
+     * the share is over the log records `deviceLogs` scans — which still include the NetFlow ones
+     * unless they were routed elsewhere — and a metric answer carries no `scannedRecords` at all.
+     * So a metric-served read leaves the share unmeasured, as a pending one does.
+     *
+     * Absent from the environment is the one real zero: no NetFlow means no NetFlow records, and
+     * the share of the rest can be stated.
+     */
+    const sourceAbsent = (name: string) => { const g = groupOf(name); return !!g && absent[g] != null; };
     const logs = matched("deviceLogs", "n"), flows = matched("flowTs", "flows");
-    c.networkShare = networkLogShare(logs, flows, { logsCounted: counted("deviceLogs"), flowsCounted: counted("flowTs") });
+    c.networkShare = networkLogShare(logs, flows, {
+      logsCounted: !!logs || sourceAbsent("deviceLogs"),
+      flowsCounted: !!flows || sourceAbsent("flowTs"),
+    });
     return c;
+    /*
+     * `absentKey` is in the dependencies because `stamp` does not move when an absence is
+     * recorded. A probe that answers with no rows makes its companions skipped through
+     * `probeSaysNo` in the same render, so by the time the effect writes `absent.netflow` the
+     * stamp already reads 3 for every one of them — and the share would stay unmeasured on an
+     * environment that had just proved it sends no NetFlow at all, until some unrelated read
+     * happened to settle.
+     */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live, stamp]);
+  }, [live, stamp, absentKey]);
   return {
     model,
     counts,

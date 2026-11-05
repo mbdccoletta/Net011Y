@@ -141,3 +141,28 @@ remade plan is a new query string, and that fired reads twice for 48 GB.
 
 Found by review on the pull request, not by the suite — the three checks there tested the flags, and
 these are consequences a flag cannot show. Four checks were added that ask the functions themselves.
+
+### Three more from the second review
+
+**A metric serving the read is not the same as having its count.** The first fix accepted
+`asMetric("flowTs")` as the count being accounted for, on the reasoning that a metric-served read
+is no longer a log read. It is not the same thing: the share is over the log records `deviceLogs`
+scans, and those still include the NetFlow ones unless the extraction also routed them away — and a
+metric answer carries no `scannedRecords` at all, so `matched()` returns null either way. The test
+is now whether the figure is in, not whether the read could have produced one, which leaves the
+share unmeasured on an environment with the metrics and states it on one without.
+
+**An absence recorded after the cost was computed never reached it.** The `cost` memo depends on
+`stamp`, which records each read as answered, failed or skipped. A probe that comes back with no
+rows makes its companions skipped through `probeSaysNo` in the same render, so by the time the
+effect writes `absent.netflow` the stamp already reads *skipped* for every one of them and the memo
+does not run again. The share then stayed unmeasured on an environment that had just proved it sends
+no NetFlow — until some unrelated read happened to settle. The absence stamps are in the
+dependencies now.
+
+**The pages that do read them are also without them, for a few seconds.** Opening Traffic starts
+the two reads it defers, and an explanation asked in that window was written without fan-in and
+without the exporter rates. Answers are cached per subject and question, so that answer would have
+been handed back for the rest of the visit. Both contexts now carry the same note as the map's, with
+wording that covers a read that is waiting, in flight or failed — the context cannot tell them
+apart — and the subject an answer is cached under moves when the evidence lands, which drops it.

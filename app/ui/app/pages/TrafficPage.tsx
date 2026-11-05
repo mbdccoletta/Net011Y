@@ -13,7 +13,7 @@ import { PageEmpty } from "../components/PageEmpty";
 import { AssistPanel } from "../components/AssistPanel";
 import { useElementWidth } from "../hooks/useElementWidth";
 import { fmtBytes, fmtInt } from "../utils/format";
-import { trafficContext } from "../utils/assist";
+import { measuredKey, trafficContext } from "../utils/assist";
 import { trafficQuestions } from "../utils/prompts";
 import type { Need, NeedKey } from "../data/requirements";
 
@@ -92,7 +92,9 @@ export function TrafficPage({ model, needs, onSettings, onSite, onExample }: {
           end of each — is a filter this page already has at the top. What they were for is a
           question, and the question is right here. */}
       <Tile className="vz-assist-row">
-        <AssistPanel subject={`traffic|${site}`} questions={trafficQuestions(site ? nameOf(site) : "this network")} object="traffic"
+        {/* the subject carries whether the two deferred reads have landed: an answer written in
+            the seconds before they do is not the answer once they have */}
+        <AssistPanel subject={`traffic|${site}|${measuredKey(model.flowMap?.measured)}`} questions={trafficQuestions(site ? nameOf(site) : "this network")} object="traffic"
           context={() => trafficContext(model, site || undefined)} />
       </Tile>
 

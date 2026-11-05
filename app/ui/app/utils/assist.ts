@@ -156,15 +156,31 @@ export function causeContext(model: NetworkModel, cause: Cause) {
  * What a flow map could not be asked, said in the context rather than left as an empty list.
  *
  * Omitted when both reads answered, so the usual case carries nothing extra; the model is told what
- * is missing only when something is.
+ * is missing only when something is. The wording covers every way a read can be missing — it waits
+ * for a page that is not open, it is still in flight on the page that just opened, or it failed —
+ * because the context cannot tell them apart and an explanation must not guess which.
  */
 function notMeasured(m: FlowMap["measured"]) {
   const gaps = [
     m.fanIn ? null : "fan-in: which destinations are reached by an unusual number of distinct sources",
     m.rate ? null : "each exporter's flow rate, and so whether any exporter is falling silent",
   ].filter((x): x is string => !!x);
-  return gaps.length ? { notMeasuredOnThisPage: gaps, notMeasuredMeans: "these reads belong to the Traffic page and the site panel, so they have not run here: unmeasured, not absent. Do not state that nothing was found for them — say they were not read, and that Traffic would show them." } : {};
+  return gaps.length ? {
+    notMeasuredYet: gaps,
+    notMeasuredYetMeans: "these reads have not answered for this view: they run when Traffic or a site panel is open, and may be waiting for that, still in flight, or failed. Unmeasured, not absent. Do not state that nothing was found for them — say they have not been read yet, and that the answer will change once they land.",
+  } : {};
 }
+
+/**
+ * A key that changes when the traffic evidence lands, for the subject an explanation is cached under.
+ *
+ * Answers are cached per subject and question. Opening Traffic starts the two reads it defers, so
+ * for the seconds before they answer an explanation is written without fan-in and without the
+ * exporter rates — and without this, that answer would be handed back unchanged for the rest of the
+ * visit. Moving the subject drops it, which is visible, and which is the point: the ground changed.
+ */
+export const measuredKey = (m?: FlowMap["measured"]): string =>
+  m ? `${m.fanIn ? "f" : "-"}${m.rate ? "r" : "-"}` : "-";
 
 export function networkContext(model: NetworkModel, infos: SiteInfo[], causes: Cause[]) {
   const open = model.devices.filter((d) => (d.problems ?? []).some((p) => !p.muted)).length;
@@ -352,6 +368,7 @@ function siteTrafficFacts(model: NetworkModel, code: string) {
     talksTo: t.peers.map((p) => ({ peer: p.kind === "site" ? model.sites[p.site!]?.name ?? p.name : p.name, kind: p.kind, volume: gb(p.bytes), flows: p.flows })),
     applications: t.apps.map((a) => ({ app: a.name ?? `${a.proto}/${a.port}`, port: `${a.proto}/${a.port}`, volume: gb(a.bytes), flows: a.flows })),
     insights: trafficInsights(t, f, code),
+    ...notMeasured(f.measured),
   };
 }
 
@@ -375,6 +392,7 @@ export function trafficContext(model: NetworkModel, site?: string) {
       .map((l) => ({ through: label(l.from), to: label(l.to), volume: gb(l.bytes), count: l.count })) : [],
     sourcesOfTraffic: j ? j.nodes.filter((n) => n.col === 0).sort((a, b) => b.bytes - a.bytes).map((n) => ({ from: n.label, kind: n.kind, volume: gb(n.bytes) })) : [],
     findings: environmentFindings(model).filter((x) => !site || x.site === site).map((x) => x.text),
+    ...(f ? notMeasured(f.measured) : {}),
     retransmissionsByWorkload: (model.appNet?.workloads ?? []).slice(0, 8).map((w) => ({ workload: w.name, lastHourPct: w.retrNow, usualPct: w.retrUsual })),
     // path quality: each workload and the network at the other end, worst first
     paths: (model.paths ?? []).filter((p) => !site || p.remoteSite === site)

@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES, planWanted, readWanted } from "./out/queries.mjs";
-import { networkContext, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
+import { networkContext, trafficContext, siteContext, measuredKey, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -1276,11 +1276,31 @@ check("A log share nobody could measure is null, and NetFlow absent from the env
 // traffic findings for reads that never ran, or it will answer that nothing stands out.
 const flowsRead = { ...R }, flowsDeferred = { ...R };
 delete flowsDeferred.flowTs; delete flowsDeferred.flowFanIn;
-const ctxRead = networkContext(buildRealModel(flowsRead, "flows-read"), infos, causes);
-const ctxDeferred = networkContext(buildRealModel(flowsDeferred, "flows-deferred"), infos, causes);
+const mRead = buildRealModel(flowsRead, "flows-read"), mDeferred = buildRealModel(flowsDeferred, "flows-deferred");
+const ctxRead = networkContext(mRead, infos, causes);
+const ctxDeferred = networkContext(mDeferred, infos, causes);
 check("An explanation is told which traffic reads did not run, and told nothing when both did",
-  !("notMeasuredOnThisPage" in ctxRead.traffic) && (ctxDeferred.traffic.notMeasuredOnThisPage ?? []).length === 2,
-  `both read: ${Object.keys(ctxRead.traffic).join(", ")} · deferred: ${(ctxDeferred.traffic.notMeasuredOnThisPage ?? []).length} named`);
+  !("notMeasuredYet" in ctxRead.traffic) && (ctxDeferred.traffic.notMeasuredYet ?? []).length === 2,
+  `both read: ${Object.keys(ctxRead.traffic).join(", ")} · deferred: ${(ctxDeferred.traffic.notMeasuredYet ?? []).length} named`);
+
+// Traffic and the site panel are where the deferred reads do run — and for the seconds after the
+// page opens they have not answered yet, which is the same gap under a different name. Both pages
+// state findings, so both carry the same note.
+const site = infos.find((i) => mRead.flowMap?.sites[i.code])?.code;
+const trRead = trafficContext(mRead), trDeferred = trafficContext(mDeferred);
+const stRead = siteContext(mRead, infos.find((i) => i.code === site)).traffic;
+const stDeferred = siteContext(mDeferred, infos.find((i) => i.code === site)).traffic;
+check("The pages that do read them say so too while they are still in flight",
+  !("notMeasuredYet" in trRead) && (trDeferred.notMeasuredYet ?? []).length === 2
+    && !("notMeasuredYet" in stRead) && (stDeferred.notMeasuredYet ?? []).length === 2,
+  `traffic ${(trDeferred.notMeasuredYet ?? []).length} named · site ${site} ${(stDeferred.notMeasuredYet ?? []).length} named`);
+
+// An answer written before the evidence landed must not be handed back after it does: the subject
+// an answer is cached under moves when it lands.
+const assistSubjects = [measuredKey(mRead.flowMap?.measured), measuredKey(mDeferred.flowMap?.measured), measuredKey(undefined)];
+check("The subject an explanation is cached under moves when the traffic evidence lands",
+  new Set(assistSubjects).size === 3 && measuredKey(mRead.flowMap?.measured) === measuredKey({ fanIn: true, rate: true }),
+  `both read "${assistSubjects[0]}" · neither "${assistSubjects[1]}" · no NetFlow at all "${assistSubjects[2]}"`);
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 
