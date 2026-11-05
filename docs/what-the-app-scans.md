@@ -179,3 +179,26 @@ The check behind it reads the pages rather than the model, because a subject is 
 page: every `AssistPanel` whose context can carry the note must have `measuredKey` in its subject.
 Against the commit before the fix it names the two panels that did not, and against the one before
 that, all four.
+
+### Three from a typing-and-timing pass
+
+**A share of zero was reported as unmeasured.** `networkLogShare` tested the numerator for
+truthiness, so both counts arriving as zero — every record those log queries read belonging to
+something else — came out as null. That is the *strongest* case the bucket step has, and it was the
+one case the function hid. Only a denominator that is null or zero is unmeasurable now: nothing
+scanned is no share to take.
+
+**The plan was written during the render.** A ref mutated while rendering survives a render that is
+thrown away, and a thrown-away render can carry a `reading` that never commits — which would make a
+plan for a page the reader never opened and leave it to go stale exactly as before. It is made in an
+effect now, after the commit. That needs its other half: a read carrying a plan may not start
+without one, or the view opening would fire the full window and then fire again with the incremental
+one, which is the 48 GB all of this guards. A metric-served read is never planned and so is let
+through explicitly.
+
+**`notMeasured` returned a bare `{}`,** which infers as TypeScript's any-non-nullish object and
+widens every context that spreads it. It has an explicit `Partial<…>` return type now.
+
+The last two are in the hook, which the suite cannot call, so the check reads the hook: the
+`planFor` call must sit inside the effect, and the `enabled` expression must require a plan. Against
+the previous commit, both halves are absent.

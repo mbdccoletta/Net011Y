@@ -160,7 +160,7 @@ export function causeContext(model: NetworkModel, cause: Cause) {
  * for a page that is not open, it is still in flight on the page that just opened, or it failed —
  * because the context cannot tell them apart and an explanation must not guess which.
  */
-function notMeasured(m: FlowMap["measured"]) {
+function notMeasured(m: FlowMap["measured"]): Partial<{ notMeasuredYet: string[]; notMeasuredYetMeans: string }> {
   const gaps = [
     m.fanIn ? null : "fan-in: which destinations are reached by an unusual number of distinct sources",
     m.rate ? null : "each exporter's flow rate, and so whether any exporter is falling silent",

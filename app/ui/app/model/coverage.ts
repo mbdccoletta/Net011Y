@@ -96,6 +96,9 @@ export function networkLogShare(
 ): number | null {
   if (!logsCounted || !flowsCounted) return null;
   const all = logs?.all ?? flows?.all;
-  if (!all || !(logs?.net || flows?.net)) return null;
+  // nothing scanned is no share to take, not a share of nothing — but a numerator of zero is an
+  // answer, and the strongest one the bucket step can be given: every record those queries read
+  // was somebody else's
+  if (all == null || all <= 0) return null;
   return Math.min(1, ((logs?.net ?? 0) + (flows?.net ?? 0)) / all);
 }

@@ -411,16 +411,40 @@ export function useNetwork(source: Source, scale: "mid" | "xl" | null = null, vi
    * for. So the two are separated: a plan is made the moment its read becomes wanted, and kept
    * from then on. `planWanted` in queries.ts is the rule, so the suite can ask it.
    */
-  const planned = useRef<{ key: string; plans: Record<string, Plan> }>({ key: "", plans: {} });
+  /*
+   * It is made after the commit, not during the render.
+   *
+   * A plan written during a render survives a render that is thrown away, and a render can be
+   * thrown away with a different `reading` than the one that commits — which would make a plan for
+   * a page the reader never opened, and leave it to go stale exactly as before. So the plan is made
+   * in an effect, and a read that carries one is not allowed to start without it: that is what
+   * keeps the query string from changing under a read that is already in flight.
+   */
   const planKey = planReady ? `${gen}|${bucketKey}` : "";
-  if (planned.current.key !== planKey) planned.current = { key: planKey, plans: {} };
-  if (planReady) {
-    for (const n of NAMES) {
-      if (!planWanted(QUERIES[n], reading, asMetric(n)) || planned.current.plans[n]) continue;
-      planned.current.plans[n] = planFor(n, inBuckets(QUERIES[n].query, buckets), QUERIES[n].incremental!);
+  const wantsPlan = (n: string) => planWanted(QUERIES[n], reading, asMetric(n));
+  const wantedPlans = NAMES.filter(wantsPlan).join(",");
+  const [plans, setPlans] = useState<Record<string, Plan>>({});
+  const plannedUnder = useRef("");
+  useEffect(() => {
+    if (!planKey) {
+      plannedUnder.current = "";
+      setPlans((prev) => (Object.keys(prev).length ? {} : prev));
+      return;
     }
-  }
-  const plans = planned.current.plans;
+    const restart = plannedUnder.current !== planKey;
+    plannedUnder.current = planKey;
+    setPlans((prev) => {
+      const next = restart ? {} : { ...prev };
+      let changed = restart && Object.keys(prev).length > 0;
+      for (const n of NAMES) {
+        if (!wantsPlan(n) || next[n]) continue;
+        next[n] = planFor(n, inBuckets(QUERIES[n].query, buckets), QUERIES[n].incremental!);
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planKey, wantedPlans]);
   /* the queue of the last wave, in the order the registry declares them, and the gate that
      lets a query in once the three ahead of it are out of the way */
   const wave2 = NAMES.filter((n) => waveOf(n) === 2);
@@ -437,7 +461,7 @@ export function useNetwork(source: Source, scale: "mid" | "xl" | null = null, vi
     // eslint-disable-next-line react-hooks/rules-of-hooks
     return useDql(
       { query: asMetric(name) ? QUERIES[name].metric!.query : plans[name]?.query ?? inBuckets(QUERIES[name].query, buckets), maxResultRecords: QUERIES[name].maxResultRecords ?? 1000, defaultScanLimitGbytes: QUERIES[name].scanLimitGb ?? SCAN_LIMIT_GB, requestTimeoutMilliseconds: INLINE_MS },
-      { enabled: live && !gated && !waitsForBuckets(name) && !metricWaits(name) && (planReady || !QUERIES[name].incremental) && !familyWaits(name) && !familyAbsent(name) && !isBarren(name) && (!QUERIES[name].detail || detailOk) && viewWants(name) && waveOf(name) <= phase && inLane(name), staleTime: STALE_MS, runInBackground: true },
+      { enabled: live && !gated && !waitsForBuckets(name) && !metricWaits(name) && (!QUERIES[name].incremental || asMetric(name) || !!plans[name]) && !familyWaits(name) && !familyAbsent(name) && !isBarren(name) && (!QUERIES[name].detail || detailOk) && viewWants(name) && waveOf(name) <= phase && inLane(name), staleTime: STALE_MS, runInBackground: true },
     );
   });
   // what the rest of the app sees of an incremental query is the whole window: the kept part and the new one

@@ -1272,6 +1272,14 @@ check("A log share nobody could measure is null, and NetFlow absent from the env
   shareBoth === 0.5 && shareDeferred === null && shareAbsent === 0.3,
   `both counted ${shareBoth} · flow count unread ${shareDeferred} · no NetFlow in the environment ${shareAbsent}`);
 
+// None of it being the network's is an answer, and the strongest one the bucket step can be given:
+// every record those queries read was somebody else's. Nothing scanned at all is not an answer.
+const shareNone = networkLogShare({ net: 0, all: 50000 }, { net: 0, all: 50000 }, { logsCounted: true, flowsCounted: true });
+const shareNothingRead = networkLogShare({ net: 0, all: 0 }, null, { logsCounted: true, flowsCounted: true });
+check("A share of zero is a measurement, and nothing scanned is not",
+  shareNone === 0 && shareNothingRead === null,
+  `none of it the network's ${shareNone} · nothing scanned ${shareNothingRead}`);
+
 // The same rule where it reaches the reader: an explanation must not be handed an empty list of
 // traffic findings for reads that never ran, or it will answer that nothing stands out.
 const flowsRead = { ...R }, flowsDeferred = { ...R };
@@ -1315,6 +1323,18 @@ const unkeyed = panels.filter((p) => !p.tag.includes("measuredKey("));
 check("Every explanation whose context can carry the note is cached under the measurement state",
   panels.length >= 4 && unkeyed.length === 0,
   `${panels.length} panels state traffic findings · without the key: ${unkeyed.map((p) => p.file).join(", ") || "none"}`);
+
+// Where the plan is made, and what may not start without one. Both are in the hook, so this reads
+// it: a plan written during a render survives a render that is thrown away — with a `reading` that
+// never committed — and a read allowed to start before its plan would run the full window and then
+// run again with the incremental one, which is the 48 GB this is all guarding.
+const hook = readFileSync(new URL("../../app/ui/app/data/useNetwork.ts", import.meta.url).pathname, "utf8");
+const effect = hook.slice(hook.indexOf("const plannedUnder"), hook.indexOf("}, [planKey, wantedPlans]);"));
+const gate = hook.slice(hook.indexOf("{ enabled: live && !gated"), hook.indexOf("waveOf(name) <= phase"));
+check("The plan is made after the commit, and no incremental read starts without one",
+  effect.includes("useEffect(") && effect.includes("planFor(") && hook.split("planFor(").length === 3
+    && gate.includes("!QUERIES[name].incremental || asMetric(name) || !!plans[name]"),
+  `planFor inside the effect: ${effect.includes("planFor(")} · call sites: ${hook.split("planFor(").length - 1} · gate: ${gate.includes("!!plans[name]")}`);
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 
