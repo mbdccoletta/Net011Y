@@ -108,3 +108,36 @@ is what to read, not the absolute figure, and a measurement of this is only ever
 The behaviour is held by three checks in the suite that call `readWanted` itself rather than
 re-stating it — a Live map load asks for neither, Traffic and the site panel ask for both, and the
 map load loses exactly those two reads and no third (88 reads → 86).
+
+## What deferring the two reads broke, and what fixed it
+
+Three defects, all the same defect: a read that no longer runs on a page leaves something behind
+that was computed as though it had. `pageCoverage` already carries the rule — *unmeasured is null,
+not zero* — and it was written for the Ahead reads for exactly this reason. Deferring `flowTs` and
+`flowFanIn` created three new instances of it.
+
+**The network's share of the log bill was computed from the syslog count alone.** Two reads count
+what they match: `deviceLogs` the syslog records, `flowTs` the NetFlow ones, over a denominator that
+is every record those queries scanned. With `flowTs` waiting for Traffic, its half of the numerator
+went missing while the denominator kept all of it — so the network looked like a smaller part of the
+bucket than it is, and the saving Settings offers for a bucket of its own was overstated by exactly
+the part nobody measured. `networkLogShare` (coverage.ts) now answers null unless every count is
+accounted for; a count absent from the environment is a real zero and still counts.
+
+**An explanation on the Live map was handed an empty list of traffic findings.** Fan-in comes from
+`flowFanIn` and a falling-silent exporter from `flowTs`, and `networkContext` presented the result as
+findings — so an answer could say nothing stands out about traffic on evidence nobody had read. The
+flow map now records which of the two reads answered (`measured`), told apart from answering with no
+rows, and the context names what was not read instead of showing none.
+
+**A deferred read could ask for a far wider window than it meant to.** An incremental plan carries an
+absolute `from` — where the kept part ends — so it is only true at the moment it is made. Plans were
+all made when the page loaded, `flowTs` among them, and the read then ran whenever Traffic was
+opened: an hour on the map made it ask for an hour and a half of NetFlow, a morning on the map made
+it ask for the morning, up to the scan limit. Deferring a read made its window grow with how long
+the reader waited, which is the opposite of what deferring it was for. A plan is now made when its
+read is first wanted (`planWanted`) and never remade, which keeps the other half of the rule: a
+remade plan is a new query string, and that fired reads twice for 48 GB.
+
+Found by review on the pull request, not by the suite — the three checks there tested the flags, and
+these are consequences a flag cannot show. Four checks were added that ask the functions themselves.

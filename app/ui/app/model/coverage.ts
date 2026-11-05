@@ -73,3 +73,29 @@ export function pageCoverage(model: NetworkModel | null, unread: readonly string
     traffic: unread.includes("flowNets") && !model.paths?.length ? null : traffic,
   };
 }
+
+/**
+ * The share of what the log queries read that is the network's own records — or null, if a count
+ * it is made of was never read.
+ *
+ * The same rule as `pageCoverage` above, applied to money rather than to coverage. Two reads count
+ * what they match: `deviceLogs` the syslog and trap records, `flowTs` the NetFlow ones. The
+ * denominator is every record those queries scanned in the window, which is table-wide and the
+ * same for either of them.
+ *
+ * `flowTs` waits for Traffic or a site panel now, so on the Live map its count is not in. Treating
+ * that as a zero is the defect this function exists to stop: the share comes out as the syslog part
+ * alone, the network looks like a smaller fraction of the bucket than it is, and the saving offered
+ * for a bucket of its own is overstated by exactly the part that was never measured. A count that
+ * is absent from the environment is a real zero and does count; a count that was not read is not.
+ */
+export function networkLogShare(
+  logs: { net: number; all: number } | null,
+  flows: { net: number; all: number } | null,
+  { logsCounted, flowsCounted }: { logsCounted: boolean; flowsCounted: boolean },
+): number | null {
+  if (!logsCounted || !flowsCounted) return null;
+  const all = logs?.all ?? flows?.all;
+  if (!all || !(logs?.net || flows?.net)) return null;
+  return Math.min(1, ((logs?.net ?? 0) + (flows?.net ?? 0)) / all);
+}

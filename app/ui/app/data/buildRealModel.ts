@@ -1249,7 +1249,7 @@ const pingsFailing = (d: Device, failing: Set<string>) =>
     },
     appNet: buildAppNet(L),
     paths: buildPaths(L, addressing),
-    flowMap: buildFlowMap(L, devList, addressing, sites),
+    flowMap: buildFlowMap(L, devList, addressing, sites, (k) => r[k] !== undefined),
     oneagent: L("cloudTop").map((x) => ({ host: x.host, cluster: x.cluster ?? null, dst: x.dst, dport: String(x.dport ?? ""), bytes: num(x.bytes) ?? 0, retr: num(x.retr) ?? 0, resets: num(x.resets) ?? 0, rttMs: null })),
     e2e: { probe: "synthetic ICMP monitors", paths },
   };

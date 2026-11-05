@@ -639,7 +639,9 @@ export function buildExampleNetwork(now = new Date(), size: ExampleSize = "enter
       }),
     };
     const addressing = buildAddressing(DCS.map((dc, k) => ({ site: dc.code, cidr: `10.${k}.0.0/16` })), devices.map((d) => ({ site: d.site, ips: [d.ip] })));
-    return buildFlowMap((k) => (rows[k] ?? []) as Record<string, any>[], devices, addressing, sites);
+    // the example simulates the routes and the five-minute series, and no fan-in: told as it is,
+    // rather than as a map whose fan-in findings came back empty
+    return buildFlowMap((k) => (rows[k] ?? []) as Record<string, any>[], devices, addressing, sites, (k) => rows[k] !== undefined);
   })();
 
   // ---------- what changed today: restarts and alerts that already closed, besides what is open ----------

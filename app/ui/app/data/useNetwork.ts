@@ -6,11 +6,12 @@ import { useDql } from "@dynatrace-sdk/react-hooks";
 import { getEnvironmentUrl } from "@dynatrace-sdk/app-environment";
 import { clearSourceMemory, setAbsent as rememberAbsent, setBarren as rememberBarren, setPresent as rememberPresent, sourceMemory, useSourceMemory, type Stamps } from "./sourceMemory";
 import type { NetworkModel } from "../model/types";
-import { DETAIL_MAX_DEVICES, DETAIL_MAX_PORTS, QUERIES, SCAN_LIMIT_GB, readWanted } from "./queries";
+import { DETAIL_MAX_DEVICES, DETAIL_MAX_PORTS, QUERIES, SCAN_LIMIT_GB, planWanted, readWanted } from "./queries";
 import { familyOfToken } from "./formats";
 import { keep, loadKeptParts, mergeRows, planFor, type Plan } from "./logCache";
 import { inBuckets, useLogBuckets, useLogBucketGate } from "../hooks/useLogBucket";
 import { buildRealModel, type QueryResults } from "./buildRealModel";
+import { networkLogShare } from "../model/coverage";
 import { placesVersion, subscribePlaces } from "./places";
 
 export type Source = "live" | "example";
@@ -397,12 +398,27 @@ export function useNetwork(source: Source, scale: "mid" | "xl" | null = null, vi
    * for twice.
    */
   const planReady = keptReady && (!metricKeys.length || !catalogQ.isLoading) && bucketGate.released;
-  const plans = useMemo(() => (planReady
-    ? Object.fromEntries(NAMES.filter((n) => QUERIES[n].incremental && !asMetric(n))
-      .map((n) => [n, planFor(n, inBuckets(QUERIES[n].query, buckets), QUERIES[n].incremental!)] as const)) as Record<string, Plan>
-    : {} as Record<string, Plan>),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [gen, bucketKey, planReady]);
+  /**
+   * A read is planned when it is wanted, and a plan once made is never remade.
+   *
+   * Both halves matter and they pull against each other. Remaking a plan changes the query string,
+   * which fires the read again — that is the forty-eight gigabytes above. But a plan made before
+   * the read is wanted is stale by the time it runs: `flowTs` waits for Traffic now, and a plan
+   * made on the Live map two hours earlier asks for those two hours of NetFlow instead of its
+   * seventy minutes, which can reach the scan limit and is the opposite of what deferring it was
+   * for. So the two are separated: a plan is made the moment its read becomes wanted, and kept
+   * from then on. `planWanted` in queries.ts is the rule, so the suite can ask it.
+   */
+  const planned = useRef<{ key: string; plans: Record<string, Plan> }>({ key: "", plans: {} });
+  const planKey = planReady ? `${gen}|${bucketKey}` : "";
+  if (planned.current.key !== planKey) planned.current = { key: planKey, plans: {} };
+  if (planReady) {
+    for (const n of NAMES) {
+      if (!planWanted(QUERIES[n], reading, asMetric(n)) || planned.current.plans[n]) continue;
+      planned.current.plans[n] = planFor(n, inBuckets(QUERIES[n].query, buckets), QUERIES[n].incremental!);
+    }
+  }
+  const plans = planned.current.plans;
   /* the queue of the last wave, in the order the registry declares them, and the gate that
      lets a query in once the three ahead of it are out of the way */
   const wave2 = NAMES.filter((n) => waveOf(n) === 2);
@@ -622,9 +638,16 @@ export function useNetwork(source: Source, scale: "mid" | "xl" | null = null, vi
       const { scanned, h } = perHour(i);
       return scanned ? { net: n / h, all: scanned } : null;
     };
+    // A count that was not read is not a zero. `flowTs` waits for Traffic, so on every other page
+    // its records are missing from the numerator while the denominator still holds all of them:
+    // the share comes out low and the saving offered for a bucket of its own comes out high, both
+    // by exactly the part nobody measured. Absent from the environment is a real zero and counts.
+    const counted = (name: string) => {
+      const i = NAMES.indexOf(name), g = groupOf(name);
+      return i >= 0 && (raw[i].isSuccess || asMetric(name) || (!!g && absent[g] != null));
+    };
     const logs = matched("deviceLogs", "n"), flows = matched("flowTs", "flows");
-    const all = logs?.all ?? flows?.all;
-    if (all && (logs?.net || flows?.net)) c.networkShare = Math.min(1, ((logs?.net ?? 0) + (flows?.net ?? 0)) / all);
+    c.networkShare = networkLogShare(logs, flows, { logsCounted: counted("deviceLogs"), flowsCounted: counted("flowTs") });
     return c;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, stamp]);

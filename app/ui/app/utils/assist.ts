@@ -4,7 +4,7 @@ import { publicClient } from "@dynatrace-sdk/client-davis-copilot";
 import { CHANGE_LABEL, changesOf } from "../model/changes";
 import { aheadSubjects, aheadCensus, clusterChanges, type Subject } from "../model/ahead";
 import type { DavisForecast } from "../hooks/useDavisForecast";
-import type { DeviceProblem, NetworkModel } from "../model/types";
+import type { DeviceProblem, FlowMap, NetworkModel } from "../model/types";
 import type { Cause } from "../model/causes";
 import { trafficDrop, type Suspicion } from "../model/suspicion";
 import type { Anomaly } from "../hooks/useAnomaly";
@@ -152,6 +152,20 @@ export function causeContext(model: NetworkModel, cause: Cause) {
   };
 }
 
+/**
+ * What a flow map could not be asked, said in the context rather than left as an empty list.
+ *
+ * Omitted when both reads answered, so the usual case carries nothing extra; the model is told what
+ * is missing only when something is.
+ */
+function notMeasured(m: FlowMap["measured"]) {
+  const gaps = [
+    m.fanIn ? null : "fan-in: which destinations are reached by an unusual number of distinct sources",
+    m.rate ? null : "each exporter's flow rate, and so whether any exporter is falling silent",
+  ].filter((x): x is string => !!x);
+  return gaps.length ? { notMeasuredOnThisPage: gaps, notMeasuredMeans: "these reads belong to the Traffic page and the site panel, so they have not run here: unmeasured, not absent. Do not state that nothing was found for them — say they were not read, and that Traffic would show them." } : {};
+}
+
 export function networkContext(model: NetworkModel, infos: SiteInfo[], causes: Cause[]) {
   const open = model.devices.filter((d) => (d.problems ?? []).some((p) => !p.muted)).length;
   return {
@@ -172,10 +186,15 @@ export function networkContext(model: NetworkModel, infos: SiteInfo[], causes: C
       carriers: [...new Set(c.sites.flatMap((s) => s.circuits.filter((x) => x.status === "down").map((x) => x.carrier)))],
     })),
     // NetFlow of the last hour, reduced to what stands out: the heaviest routes and each site's findings
+    //
+    // The two reads the findings are made of belong to Traffic and the site panel, so on this page
+    // they may not have run. An empty list of findings would read as "nothing stands out", which is
+    // a claim about the network made from a query nobody asked for — so what was not read is named.
     traffic: model.flowMap ? {
       window: "last hour",
       routesBetweenSites: model.flowMap.pairs.slice(0, 5).map((p) => ({ between: [model.sites[p.a]?.name ?? p.a, model.sites[p.b]?.name ?? p.b], volume: `${(p.bytes / 1e9).toFixed(2)} GB` })),
       findings: Object.entries(model.flowMap.sites).flatMap(([code, t]) => trafficInsights(t, model.flowMap!, code).map((text) => ({ site: model.sites[code]?.name ?? code, text }))).slice(0, 10),
+      ...notMeasured(model.flowMap.measured),
     } : "no NetFlow in this environment",
   };
 }

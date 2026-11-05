@@ -469,3 +469,15 @@ export type QueryName = keyof typeof QUERIES;
  */
 export const readWanted = (q: NetQuery, reading: readonly string[]): boolean =>
   (!q.detail && !q.heavy) || !q.views || q.views.some((v) => reading.includes(v));
+
+/**
+ * Does a read need an incremental plan made for it right now?
+ *
+ * A plan carries an absolute `from` — the moment the kept part ends — so it is only true when it
+ * is made. Making one for a read that will not run for hours asks, when it finally runs, for every
+ * hour since: the window the reader pays for grows with how long the page was left open, which is
+ * the opposite of what deferring the read was for. So a read is planned when it is wanted, and a
+ * read served by a metric is never planned, because there is nothing to keep.
+ */
+export const planWanted = (q: NetQuery, reading: readonly string[], servedByMetric: boolean): boolean =>
+  !!q.incremental && !servedByMetric && readWanted(q, reading);

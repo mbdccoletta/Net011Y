@@ -26,7 +26,9 @@ export const appName = (proto: string, port: string) => PORTS[port] ?? `${proto.
 
 const empty = (): SiteTraffic => ({ bytes: 0, flows: 0, toSites: 0, internet: 0, private: 0, local: 0, peers: [], apps: [], fanIn: [], exporters: [] });
 
-export function buildFlowMap(L: (k: string) => Rec[], devices: Device[], addressing: Addressing, sitesOf: NetworkModel["sites"]): FlowMap | undefined {
+export function buildFlowMap(L: (k: string) => Rec[], devices: Device[], addressing: Addressing, sitesOf: NetworkModel["sites"],
+  /** did this read answer at all — told apart from answering with no rows, which is a real nothing */
+  answered: (k: string) => boolean = () => true): FlowMap | undefined {
   const nf = L("flowNets");
   if (!nf.length) return undefined;
   const devByIp = new Map<string, Device>();
@@ -153,7 +155,7 @@ export function buildFlowMap(L: (k: string) => Rec[], devices: Device[], address
   });
 
   return {
-    windowMs: 3600000, exporters, rate, pairs: [...pairs.values()].sort((x, y) => y.bytes - x.bytes), sites, unattributed,
+    windowMs: 3600000, measured: { rate: answered("flowTs"), fanIn: answered("flowFanIn") }, exporters, rate, pairs: [...pairs.values()].sort((x, y) => y.bytes - x.bytes), sites, unattributed,
     subnetsKnown: addressing.known, subnetsTagged: addressing.tagged,
     sources: { netflow: { exporters: new Set(conversations.map((c) => c.via)).size, bytes: conversations.reduce((a, c) => a + c.bytes, 0) } },
     conversations,

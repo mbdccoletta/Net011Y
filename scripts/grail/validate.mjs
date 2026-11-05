@@ -2,8 +2,8 @@
 import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
-import { QUERIES, readWanted } from "./out/queries.mjs";
-import { buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
+import { QUERIES, planWanted, readWanted } from "./out/queries.mjs";
+import { networkContext, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -1245,6 +1245,42 @@ const nowWaiting = mapAsWas.filter((n) => !onMap.includes(n)).sort();
 check("The map load loses exactly those two reads, and no third",
   nowWaiting.join(",") === "flowFanIn,flowTs",
   `${mapAsWas.length} → ${onMap.length} reads · now waiting: ${nowWaiting.join(", ") || "none"}`);
+
+// A plan carries an absolute `from`, so it is only true at the moment it is made. A read planned on
+// the map and run two hours later asks for those two hours: the window grows with how long the page
+// was left open, which is the opposite of deferring it. So the plan waits for the read.
+check("A deferred read is not planned until the page that reads it is open",
+  !planWanted(QUERIES.flowTs, ["map"], false) && planWanted(QUERIES.flowTs, ["traffic"], false)
+    && planWanted(QUERIES.flowTs, ["site"], false),
+  `flowTs planned on map=${planWanted(QUERIES.flowTs, ["map"], false)} traffic=${planWanted(QUERIES.flowTs, ["traffic"], false)} site=${planWanted(QUERIES.flowTs, ["site"], false)}`);
+
+// And nothing else waits: a read that runs from the first render is planned from the first render,
+// and a read a metric serves is never planned, because it keeps nothing.
+check("An un-deferred incremental read is planned at once, and a metric-served one never",
+  planWanted(QUERIES.deviceLogs, ["map"], false) && !planWanted(QUERIES.deviceLogs, ["map"], true)
+    && !planWanted(QUERIES.flowNets, ["map"], false),
+  `deviceLogs=${planWanted(QUERIES.deviceLogs, ["map"], false)} · as metric=${planWanted(QUERIES.deviceLogs, ["map"], true)} · flowNets (not incremental)=${planWanted(QUERIES.flowNets, ["map"], false)}`);
+
+// Unmeasured is null, not zero — the rule pageCoverage is built on, applied to the log bill. The
+// share is the network's records over every record those queries read, and flowTs carries half of
+// that numerator: counted as zero it makes the network look like a smaller part of the bucket than
+// it is, and overstates what a bucket of its own would save by exactly the part nobody read.
+const shareBoth = networkLogShare({ net: 300, all: 1000 }, { net: 200, all: 1000 }, { logsCounted: true, flowsCounted: true });
+const shareDeferred = networkLogShare({ net: 300, all: 1000 }, null, { logsCounted: true, flowsCounted: false });
+const shareAbsent = networkLogShare({ net: 300, all: 1000 }, null, { logsCounted: true, flowsCounted: true });
+check("A log share nobody could measure is null, and NetFlow absent from the environment is a real zero",
+  shareBoth === 0.5 && shareDeferred === null && shareAbsent === 0.3,
+  `both counted ${shareBoth} · flow count unread ${shareDeferred} · no NetFlow in the environment ${shareAbsent}`);
+
+// The same rule where it reaches the reader: an explanation must not be handed an empty list of
+// traffic findings for reads that never ran, or it will answer that nothing stands out.
+const flowsRead = { ...R }, flowsDeferred = { ...R };
+delete flowsDeferred.flowTs; delete flowsDeferred.flowFanIn;
+const ctxRead = networkContext(buildRealModel(flowsRead, "flows-read"), infos, causes);
+const ctxDeferred = networkContext(buildRealModel(flowsDeferred, "flows-deferred"), infos, causes);
+check("An explanation is told which traffic reads did not run, and told nothing when both did",
+  !("notMeasuredOnThisPage" in ctxRead.traffic) && (ctxDeferred.traffic.notMeasuredOnThisPage ?? []).length === 2,
+  `both read: ${Object.keys(ctxRead.traffic).join(", ")} · deferred: ${(ctxDeferred.traffic.notMeasuredOnThisPage ?? []).length} named`);
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 

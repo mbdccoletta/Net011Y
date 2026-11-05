@@ -69,6 +69,15 @@ export interface SiteTraffic {
 /** NetFlow / IPFIX over the last hour, attributed to sites through their exporters and address space. */
 export interface FlowMap {
   windowMs: number;
+  /**
+   * Which of the two reads behind this map answered for the page being drawn.
+   *
+   * `flowNets` draws the routes and runs everywhere. The rate of each exporter (and so whether one
+   * is falling silent) comes from `flowTs`, and fan-in from `flowFanIn`, and both of those wait for
+   * Traffic or a site panel. Where one has not answered, what it would have found is unmeasured —
+   * not absent — and anything stating findings from this map has to say so rather than show none.
+   */
+  measured: { rate: boolean; fanIn: boolean };
   exporters: { ip: string; device: string | null; site: string | null; flows5m: number | null; usual5m: number | null; falling: boolean }[];
   /**
    * Bytes per five minutes over the last hour, per exporter: the bandwidth over time every flow tool
