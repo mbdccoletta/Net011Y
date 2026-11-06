@@ -1457,6 +1457,14 @@ check("Both maps read the shape from the theme, and neither writes the numbers a
     && !/0\.38|0\.16|0\.025/.test(geoPaint) && /shape\.(line|fill|width)/.test(geoPaint),
   `geo paint reads the theme: ${/shape\.(line|fill|width)/.test(geoPaint)} · literals left in it: ${/0\.38|0\.16|0\.025/.test(geoPaint)}`);
 
+// The platform draws the countries itself, in Border.Neutral.Default at one pixel and four tenths
+// of one — #dadbe4 on the light shell, 1.26:1, which is not a line. Its layers are repainted with
+// the same tokens the region outlines use, so every boundary on the map carries one weight.
+check("The platform's own basemap is repainted with the theme's boundary tokens",
+  geoSrc.includes('m.setPaintProperty("geojson-line", "line-color", ink)')
+    && geoSrc.includes('m.on("styledata", paint)') && geoSrc.includes("<Basemap shape={shape} />"),
+  `repainted: ${geoSrc.includes('"geojson-line"')} · kept through a style reload: ${geoSrc.includes('m.on("styledata", paint)')}`);
+
 // Black on the light stage, asked for after three rounds of raising the alpha of a near-navy ink.
 check("The light stage draws the shape in black",
   /--lm-shape-ink:\s*#000000/.test(lightBlock) && alphaIn(lightBlock, "shape-line") >= 0.85,

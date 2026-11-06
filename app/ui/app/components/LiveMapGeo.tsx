@@ -345,6 +345,42 @@ function Labels({ labels }: { labels: Label[] }) {
 }
 
 /**
+ * The platform's own basemap, made legible.
+ *
+ * `MapView` draws the countries itself — its own GeoJSON, in `Border.Neutral.Default` at one pixel
+ * for a country and four tenths of one for a region. On the light stage that token is `#dadbe4`,
+ * which against the shell measures **1.26:1**, and four tenths of a pixel of it is not a line but a
+ * smear: reported four times as "the map lines are too light, bad resolution", and measured off a
+ * screenshot at `#e4e4e7` before the source of it was found in the package rather than in here.
+ *
+ * So the platform's layers are repainted with the same two tokens the region outlines above them
+ * use — one weight for every boundary on the map, black on the light stage. This overrides a
+ * platform default knowingly: the alternative is a map whose geography cannot be read, and the
+ * right long-term home for it is a fix in strato-geo.
+ *
+ * `styledata` because maplibre restores a layer's own paint whenever the style reloads.
+ */
+function Basemap({ shape }: { shape: { ink: string; lineEmpty: number; width: number; widthEmpty: number } }) {
+  const { current: map } = useMap();
+  const { ink, lineEmpty, width, widthEmpty } = shape;
+  useEffect(() => {
+    if (!map) return;
+    const m = map.getMap();
+    const paint = () => {
+      if (!m.getLayer("geojson-line")) return;
+      m.setPaintProperty("geojson-line", "line-color", ink);
+      m.setPaintProperty("geojson-line", "line-opacity", lineEmpty);
+      m.setPaintProperty("geojson-line", "line-width",
+        ["case", ["==", ["get", "region_type"], "REGION"], widthEmpty, width]);
+    };
+    paint();
+    m.on("styledata", paint);
+    return () => { m.off("styledata", paint); };
+  }, [map, ink, lineEmpty, width, widthEmpty]);
+  return null;
+}
+
+/**
  * The ground: the hotspot, the states, and their edges.
  *
  * It is a component of its own and not part of `Motion` because of paint order, which in
@@ -362,6 +398,7 @@ function Ground({ regions, share, routes, focus, colour, shape }: {
 }) {
   return (
     <>
+      <Basemap shape={shape} />
       {/**
         * The focus is a ring on each site, and it carries no colour.
         *
