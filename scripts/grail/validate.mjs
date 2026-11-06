@@ -1437,6 +1437,23 @@ check("The map opens on the regions, and on the schematic where nothing can be p
   defaultLayout[0] === "states" && defaultLayout[1] === "schematic",
   `placed → ${defaultLayout[0] ?? "?"} · nothing placed → ${defaultLayout[1] ?? "?"}`);
 
+// The outlines are fetched per country, and the effect that fetches them must not depend on the
+// site array: its identity changes on every render, and this app renders on every read that lands,
+// so each re-render cancelled the fetch in flight while the country stayed marked as fetched. The
+// map then said "No outlines for these sites" about outlines that had been fetched and dropped.
+const shapesEffect = pageSrc.slice(pageSrc.indexOf("const ccKey ="), pageSrc.indexOf("}, [states, ccKey]);"));
+check("The outlines are refetched when the countries change, not when the array does",
+  pageSrc.includes("}, [states, ccKey]);") && shapesEffect.includes("loadCountries(")
+    && !shapesEffect.includes("loadedCcs") && !/\}, \[states, infos/.test(pageSrc),
+  `keyed on ${pageSrc.includes("}, [states, ccKey];") ? "?" : "the country set"} · loadCountries: ${shapesEffect.includes("loadCountries(")}`);
+
+// And the layout switch keeps its place: it was pushed right by whatever pills the open layout
+// brought, so clicking Regions moved Regions out from under the pointer.
+const themeSrc2 = readFileSync(new URL("../../app/ui/app/styles/theme.css", import.meta.url).pathname, "utf8");
+check("The layout switch does not move when the layout changes",
+  themeSrc2.includes(".lm-bar > .vz-seg { margin-left: 0; }") && pageSrc.includes('className="lm-bar__spacer"'),
+  `switch unpinned from the right: ${themeSrc2.includes(".lm-bar > .vz-seg { margin-left: 0; }")} · spacer present: ${pageSrc.includes("lm-bar__spacer")}`);
+
 check("The plan is made after the commit, and no incremental read starts without one",
   effect.includes("useEffect(") && effect.includes("planFor(") && hook.split("planFor(").length === 3
     && gate.includes("!QUERIES[name].incremental || asMetric(name) || !!plans[name]"),

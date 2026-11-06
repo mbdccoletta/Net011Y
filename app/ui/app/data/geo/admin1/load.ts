@@ -78,11 +78,15 @@ export function countriesOf(points: { lat: number; lon: number }[]): string[] {
   return [...out];
 }
 
-/** The outlines for a set of sites. Countries already fetched are not fetched again. */
-export async function loadRegions(points: { lat: number; lon: number }[]): Promise<RegionShape[]> {
-  const ccs = countriesOf(points);
+/** The outlines of these countries. Ones already fetched are not fetched again. */
+export async function loadCountries(ccs: readonly string[]): Promise<RegionShape[]> {
   const all = await Promise.all(ccs.map(ofCountry));
   return all.flat();
+}
+
+/** The outlines for a set of sites. Countries already fetched are not fetched again. */
+export async function loadRegions(points: { lat: number; lon: number }[]): Promise<RegionShape[]> {
+  return loadCountries(countriesOf(points));
 }
 
 /** Is the point inside the ring? Ray casting, the ring being closed by construction. */

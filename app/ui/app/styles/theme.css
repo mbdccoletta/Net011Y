@@ -234,6 +234,15 @@
 .lm-boot__why { margin: 0 0 14px; max-width: 76ch; font-size: 14px; line-height: 1.5; color: var(--lm-ink-3); }
 
 .lm-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--lm-line); }
+/* The layout switch holds its place.
+   `.vz-seg` is pushed right by `margin-left: auto`, so its position was decided by the total width
+   of the pills *after* it — and those pills are the ones each layout brings: the outline count, the
+   sites-on-the-map count, the connection count. Clicking Regions moved Regions out from under the
+   pointer. In this bar the switch sits where the pills before it leave it, and the ones after it
+   are what move. */
+.lm-bar > .vz-seg { margin-left: 0; }
+.lm-bar__rest { display: contents; }
+.lm-bar > .lm-bar__spacer { margin-left: auto; width: 0; }
 .lm-pill { display: inline-flex; align-items: center; gap: 6px; font: 600 12px var(--lm-label); padding: 3px 10px; border-radius: 999px; border: 1px solid var(--lm-line); color: var(--lm-muted); white-space: nowrap; }
 .lm-pill--live { color: var(--lm-ink); }
 /* A remark that has to be noticed, and is not a state the network is in: example data,

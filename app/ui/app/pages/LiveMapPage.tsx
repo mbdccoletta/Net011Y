@@ -7,7 +7,7 @@ import { isBad, worst } from "../model/verdict";
 import { buildCauses, causeSummary, type Cause, splitCauses } from "../model/causes";
 import { LiveMapGeo } from "../components/LiveMapGeo";
 import { LiveMap, MAP_COLORS, type Insets, type MapLink, type MapRegion, type MapSite } from "../components/LiveMap";
-import { countriesOf, loadRegions, regionAt, type RegionShape } from "../data/geo/admin1/load";
+import { countriesOf, loadCountries, regionAt, type RegionShape } from "../data/geo/admin1/load";
 import { fmtInt, hhmm } from "../utils/format";
 import { logsQuery, openLogs } from "../utils/drilldown";
 import { NativeDrill } from "../components/NativeDrill";
@@ -226,17 +226,29 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
   // data source — this environment to the example, or the example to the extra-large one — brought
   // sites in countries the first answer never covered. A whole continent stayed blank because the map
   // had already decided. It loads what the sites in front of it need, and keeps what it has.
-  const loadedCcs = useRef(new Set<string>());
+  /**
+   * It reloads when the countries change, not when the array does.
+   *
+   * The effect depended on `infos`, whose identity changes on every render — and this app renders
+   * on every read that lands. So each re-render cancelled the load in flight, while the country had
+   * already been marked as fetched, and the next run skipped it: the outlines never arrived and the
+   * bar said "No outlines for these sites" about an estate whose outlines were sitting in the
+   * chunk, fetched and thrown away. It never showed while Regions was something a reader clicked
+   * after the model had settled; it showed the moment Regions became the layout the map opens on.
+   *
+   * The key is the set of countries, so a re-render that changes nothing re-runs nothing, and
+   * `ofCountry` keeps its own cache, so asking twice costs one fetch.
+   */
+  const ccKey = useMemo(() => countriesOf(infos
+    .filter((i) => i.site.lat != null && i.site.lon != null)
+    .map((i) => ({ lat: i.site.lat!, lon: i.site.lon! }))).sort().join(","), [infos]);
   useEffect(() => {
     if (!states) return;
-    const points = infos.filter((i) => i.site.lat != null && i.site.lon != null).map((i) => ({ lat: i.site.lat!, lon: i.site.lon! }));
-    const want = countriesOf(points).filter((cc) => !loadedCcs.current.has(cc));
-    if (!want.length) { if (!shapes) setShapes([]); return; }
+    if (!ccKey) { setShapes((had) => had ?? []); return; }
     let live = true;
-    want.forEach((cc) => loadedCcs.current.add(cc));
-    loadRegions(points).then((r) => { if (live) setShapes(r); });
+    loadCountries(ccKey.split(",")).then((r) => { if (live) setShapes(r); });
     return () => { live = false; };
-  }, [states, infos, shapes]);
+  }, [states, ccKey]);
 
   // what stands in each region: the sites inside its outline, and the worst of them
   const mapRegions = useMemo<MapRegion[]>(() => {
@@ -481,6 +493,7 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
           ? <button type="button" className="lm-pill lm-pill--note lm-pill--btn" onClick={onLive}>Example data · back to this environment</button>
           : <span className="lm-pill lm-pill--note">Example data</span>)}
         {!model.demo && failed.length > 0 && <span className="lm-pill lm-pill--note" title={failed.join(", ")}>{failed.length} data source(s) unavailable</span>}
+        {/* the switch keeps its place: what each layout brings goes after the spacer, not before */}
         <span className="vz-seg" role="group" aria-label="Map layout" title={placedShare < 1 ? `${Math.round(placedShare * 100)}% of the sites have coordinates (geo_lat / geo_lon tags or a known place)` : undefined}>
           <button type="button" className={chosen === "geo" ? "is-on" : ""} aria-pressed={chosen === "geo"} disabled={placedShare === 0}
             title={placedShare === 0 ? NO_COORDS : undefined} onClick={() => setLayout("geo")}>Geographic</button>
@@ -493,6 +506,7 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
             onClick={() => setLayout("states")}>Regions</button>
           <button type="button" className={schematic ? "is-on" : ""} aria-pressed={schematic} onClick={() => setLayout("schematic")}>Schematic</button>
         </span>
+        <span className="lm-bar__spacer" aria-hidden="true" />
         {/* Two of the three layouts are off, and a grey button says nothing about why.
             An environment that tags no coordinates — which is most of them before anyone has been
             asked to — showed a reader three tabs, let them click one, and left them to conclude the
