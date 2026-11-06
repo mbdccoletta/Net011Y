@@ -57,7 +57,7 @@ export function NativeDrill({ devices, circuits = [], focus, focusCircuit, since
         <Menu>
           <Menu.Trigger>
             <button type="button" className="lm-btn lm-btn--primary" disabled={demo} title={`${problems.length} open problems on these components`}>
-              <b>Problems · {problems.length}</b><small>pick one</small><ExternalLinkIcon />
+              <b>Network problems · {problems.length}</b><small>pick one</small><ExternalLinkIcon />
             </button>
           </Menu.Trigger>
           <Menu.Content>

@@ -35,11 +35,13 @@ export function SuspicionStrip({ s, users, model, assist }: { s: Suspicion; user
   const out = model && !model.demo ? outsideAlerts(model).filter((p) => p.eventKind === "DAVIS_PROBLEM" && p.eventId) : [];
   const drop = trafficDrop(users, 0);
   const pct = drop.pct;
+  // the badge says what the headline says: an implication the sentence goes on to retract is not one
+  const mark = s.kind === "network-implicated" && s.unfelt ? "Timing only" : MARK[s.kind];
   return (
     <section className={`sus ${TONE[s.kind]}`} aria-label="Fault domain">
       <div className="sus__head">
         <span className="sus__eyebrow">Fault domain · {about}</span>
-        <span className="sus__mark">{MARK[s.kind]}</span>
+        <span className="sus__mark">{mark}</span>
         {s.fromMeasurement && <em className="sus__hint" title="No traffic anomaly alert fired: this comes from the app's own measurement">suspicion, not a problem</em>}
       </div>
       <p className="sus__line">{s.headline}</p>
@@ -71,7 +73,10 @@ export function SuspicionStrip({ s, users, model, assist }: { s: Suspicion; user
           <Menu>
             <Menu.Trigger>
               <button type="button" className="lm-btn" title={`${out.length} problems open outside the network`}>
-                Problems · {out.length} <ExternalLinkIcon />
+                {/* "Problems · 8" sat a few pixels from the drill-down's "Problems · 2", which
+                    counts the network's own. Two true numbers under one word read as one wrong
+                    one, so each says what it counts. */}
+                Outside problems · {out.length} <ExternalLinkIcon />
               </button>
             </Menu.Trigger>
             <Menu.Content>

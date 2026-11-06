@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES, planWanted, readWanted } from "./out/queries.mjs";
-import { networkContext, trafficContext, siteContext, measuredKey, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
+import { causeSummary, causeSiteCount, regionsShown, networkContext, trafficContext, siteContext, measuredKey, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -1331,6 +1331,39 @@ check("Every explanation whose context can carry the note is cached under the me
 const hook = readFileSync(new URL("../../app/ui/app/data/useNetwork.ts", import.meta.url).pathname, "utf8");
 const effect = hook.slice(hook.indexOf("const plannedUnder"), hook.indexOf("}, [planKey, wantedPlans]);"));
 const gate = hook.slice(hook.indexOf("{ enabled: live && !gated"), hook.indexOf("waveOf(name) <= phase"));
+// What the panel prints above the cause list. Measured on a live environment: three Critical causes
+// stood above "3 causes · 0 sites" and three rows each reading "1", because the count was the sites
+// with a bad verdict and an alert on the monitoring configuration that pings a device is
+// deliberately not that device's verdict. The number beside a count of causes is now their sites.
+const twoCauses = [{ sites: [{ code: "a" }] }, { sites: [{ code: "a" }, { code: "b" }] }];
+const two = causeSummary(twoCauses, 0), one = causeSummary([{ sites: [{ code: "a" }] }], 0);
+check("The site count beside the causes is the sites those causes name, counted once each",
+  causeSiteCount(twoCauses) === 2 && two.headline === "2 causes · 2 sites" && two.sites === 2
+    && one.headline === "1 cause · 1 site" && one.sites === 1,
+  `${two.headline} · and one: ${one.headline}`);
+
+// "Nothing is alerting on this network" is a claim about the whole network, and it was printed
+// whenever no cause could be built — including with sites standing degraded, which is a different
+// thing and not that claim.
+const allQuiet = causeSummary([], 0), noCause = causeSummary([], 2);
+check("Nothing is alerting is said only when nothing is degraded either, and the row agrees with the ring",
+  allQuiet.headline === "Nothing is alerting on this network" && allQuiet.sites === 0
+    && noCause.headline === "2 sites degraded · no cause named" && noCause.sites === 2
+    && causeSummary([], 1).headline === "1 site degraded · no cause named",
+  `none: "${allQuiet.headline}" (${allQuiet.sites}) · degraded: "${noCause.headline}" (${noCause.sites})`);
+
+// The region list was unbounded: 23 regions made a 24-row table that pushed the fault domain and
+// the drill-downs below the fold. Bounded now — and a region with something alerting is never the
+// one left out, however long the tail is.
+const region = (n, bad) => ({ list: Array.from({ length: n }, (_, i) => ({ verdict: i < bad ? "Critical" : "Healthy" })) });
+const ranked = [region(5, 1), ...Array.from({ length: 22 }, () => region(4, 0)), region(3, 2)];
+const regionCut = regionsShown(ranked, 8);
+check("The region list is bounded, and never leaves out a region that is alerting",
+  regionCut.shown.length === 8 && regionCut.hidden === ranked.length - 8
+    && ranked.filter((g) => g.list.some((i) => i.verdict === "Critical")).every((g) => regionCut.shown.includes(g))
+    && regionsShown([region(2, 0)], 8).hidden === 0,
+  `${ranked.length} regions → ${regionCut.shown.length} shown, ${regionCut.hidden} hidden · alerting kept: ${regionCut.shown.filter((g) => g.list.some((i) => i.verdict === "Critical")).length}`);
+
 check("The plan is made after the commit, and no incremental read starts without one",
   effect.includes("useEffect(") && effect.includes("planFor(") && hook.split("planFor(").length === 3
     && gate.includes("!QUERIES[name].incremental || asMetric(name) || !!plans[name]"),

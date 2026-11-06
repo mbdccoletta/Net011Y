@@ -6,7 +6,7 @@ import {
 } from "@dynatrace/strato-icons";
 import type { Verdict } from "../model/types";
 import type { Cause, Evidence } from "../model/causes";
-import type { SiteInfo } from "../model/site";
+import { regionsShown, type SiteInfo } from "../model/site";
 import { isBad } from "../model/verdict";
 import { discardGroups } from "../model/discards";
 import { fmtInt } from "../utils/format";
@@ -324,7 +324,18 @@ export function CauseDetail({ cause, onDevice }: { cause: Cause; onDevice: (name
 }
 
 /** Status ring of all sites plus one stacked bar per region. */
-export function NetworkStatus({ infos, onRegion }: { infos: SiteInfo[]; onRegion?: (region: string) => void }) {
+/**
+ * How many regions this panel will list before it stops.
+ *
+ * It listed every one. On an estate of 282 sites in 23 regions that is a twenty-four row table
+ * filling the column, with the ring floating in the middle of it and the fault domain, Intelligence
+ * and the Dynatrace drill-downs pushed below the fold — the same component that reads as a summary
+ * on a twelve-site environment reads as a spreadsheet on that one. A region with something alerting
+ * is never one of the ones left out.
+ */
+const MAX_REGIONS = 8;
+
+export function NetworkStatus({ infos, onRegion }: { infos: SiteInfo[]; onRegion?: (region: string | null) => void }) {
   const order: Verdict[] = ["Critical", "Warning", "Healthy", "Not monitored"];
   const count = (list: SiteInfo[], v: Verdict) => list.filter((i) => i.verdict === v).length;
   const R = 44, C = 2 * Math.PI * R;
@@ -334,6 +345,7 @@ export function NetworkStatus({ infos, onRegion }: { infos: SiteInfo[]; onRegion
     .map((r) => ({ r, list: infos.filter((i) => !i.site.dc && (i.site.region ?? "Other") === r) }))
     .sort((a, b) => b.list.filter((i) => isBad(i.verdict)).length / b.list.length - a.list.filter((i) => isBad(i.verdict)).length / a.list.length);
   const widest = Math.max(1, ...regions.map((g) => g.list.length));
+  const { shown, hidden } = regionsShown(regions, MAX_REGIONS);
   return (
     <div className="lm-netstatus">
       <svg viewBox="0 0 120 120" className="lm-ring" role="img" aria-label={`${bad} of ${infos.length} sites with issues`}>
@@ -354,7 +366,7 @@ export function NetworkStatus({ infos, onRegion }: { infos: SiteInfo[]; onRegion
         <div className="lm-region lm-region--head" role="row" aria-hidden="true">
           <span>Region</span><span>Sites by status</span><b>Bad</b>
         </div>
-        {regions.map(({ r, list }) => (
+        {shown.map(({ r, list }) => (
           <button key={r} type="button" className="lm-region" onClick={() => onRegion?.(r)} disabled={!onRegion}
             aria-label={`${r}: ${list.filter((i) => isBad(i.verdict)).length} of ${list.length} sites with issues`}>
             {/* the column is narrower than "Rio Grande do Sul", and an ellipsis with nothing
@@ -366,6 +378,14 @@ export function NetworkStatus({ infos, onRegion }: { infos: SiteInfo[]; onRegion
             <b>{list.filter((i) => isBad(i.verdict)).length}</b>
           </button>
         ))}
+        {hidden > 0 && (
+          <button type="button" className="lm-region lm-region--more" onClick={() => onRegion?.(null)} disabled={!onRegion}
+            aria-label={`${hidden} more regions, none of them alerting — see every site`}>
+            <span className="lm-region__name">{fmtInt(hidden)} more region{hidden === 1 ? "" : "s"}</span>
+            <span className="lm-region__rest">nothing alerting in {hidden === 1 ? "it" : "them"}</span>
+            <b>0</b>
+          </button>
+        )}
       </div>
     </div>
   );

@@ -169,3 +169,18 @@ export function siteLayerState(info: SiteInfo, layers: string[]): (LayerCell | n
     return { verdict, cause, consequence: isBad(verdict) && !cause && hops.every((h) => h.consequenceOnly || !isBad(h.verdict)), hops };
   });
 }
+
+/**
+ * The regions a summary panel lists, and how many it leaves out.
+ *
+ * Every one was listed. On an estate of 282 sites in 23 regions that is a twenty-four row table
+ * filling the column, with the status ring floating in the middle of it and everything under the
+ * list — the fault domain, Intelligence, the drill-downs into Dynatrace — pushed below the fold.
+ * A region with something alerting is never one of the ones left out, however many there are.
+ */
+export function regionsShown<T extends { list: { verdict: Verdict }[] }>(ranked: T[], max: number): { shown: T[]; hidden: number } {
+  const alerting = ranked.filter((g) => g.list.some((i) => isBad(i.verdict)));
+  const quiet = ranked.filter((g) => !g.list.some((i) => isBad(i.verdict)));
+  const shown = [...alerting, ...quiet.slice(0, Math.max(0, max - alerting.length))];
+  return { shown, hidden: ranked.length - shown.length };
+}

@@ -390,3 +390,28 @@ function toCause(model: NetworkModel, byCode: Map<string, SiteInfo>, scope: Scop
 }
 
 export const sinceLabel = (c: Cause) => (c.since ? `since ${hhmm(c.since)}` : "ongoing");
+
+/** The sites a set of causes names, counted once each — what "N causes · M sites" means. */
+export const causeSiteCount = (causes: Cause[]): number =>
+  new Set(causes.flatMap((c) => c.sites.map((s) => s.code))).size;
+
+/**
+ * The line above the cause list, for each of the three states it can be in.
+ *
+ * It had two: causes, and "Nothing is alerting on this network". The second was printed whenever no
+ * cause could be built — including on an environment with sites standing degraded, where it is not
+ * true. And the first counted the sites with a bad verdict, which is a different question from the
+ * one the list below it answers: an alert on the monitoring configuration that pings a device is
+ * deliberately not the device's own verdict, so a real environment read "3 causes · 0 sites" above
+ * three rows that each said "1".
+ */
+export function causeSummary(causes: Cause[], degraded: number): { headline: string; sites: number } {
+  if (causes.length) {
+    const sites = causeSiteCount(causes);
+    return { sites, headline: `${causes.length} cause${causes.length > 1 ? "s" : ""} · ${sites} site${sites === 1 ? "" : "s"}` };
+  }
+  // With no cause, the sites standing degraded are the only thing the panel is about — and they are
+  // what the ring beside it counts, so the row reads the same number rather than a nought next to a two.
+  if (degraded > 0) return { sites: degraded, headline: `${degraded} site${degraded === 1 ? "" : "s"} degraded · no cause named` };
+  return { sites: 0, headline: "Nothing is alerting on this network" };
+}

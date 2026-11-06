@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { Device, Iface, NetworkModel, Verdict } from "../model/types";
 import { shortSiteName, type SiteInfo } from "../model/site";
 import { isBad, worst } from "../model/verdict";
-import { buildCauses, type Cause, splitCauses } from "../model/causes";
+import { buildCauses, causeSummary, type Cause, splitCauses } from "../model/causes";
 import { LiveMapGeo } from "../components/LiveMapGeo";
 import { LiveMap, MAP_COLORS, type Insets, type MapLink, type MapRegion, type MapSite } from "../components/LiveMap";
 import { countriesOf, loadRegions, regionAt, type RegionShape } from "../data/geo/admin1/load";
@@ -368,7 +368,18 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
 
   const dropPct = useDropThreshold();
   const suspicion = useMemo(() => suspicionFor(model, { dropPct }), [model, dropPct]);
-  const affected = infos.filter((i) => isBad(i.verdict));
+  /**
+   * Two different questions, and the panel used to answer both with one number.
+   *
+   * "N causes · M sites" and the Whole network row sit above a list of causes, so M is the sites
+   * those causes name. It was the sites with a bad verdict, which is a different question — and on
+   * a real environment it answers differently: an alert on the monitoring configuration that pings
+   * a device is deliberately not the device's own verdict (the evidence line says so in as many
+   * words), so three Critical causes stood above "3 causes · 0 sites" and three rows each reading
+   * "1". The ring on the right still answers the other question, under its own heading.
+   */
+  const degraded = infos.filter((i) => isBad(i.verdict));
+  const summary = causeSummary(causes, degraded.length);
   const regions = new Set(infos.map((i) => i.site.region).filter(Boolean)).size;
   const dcs = infos.filter((i) => i.site.dc).length;
   const lost = causes.reduce((a, c) => a + c.impact.sessionsLost, 0);
@@ -562,7 +573,10 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
               <Skeleton height="64px" />
             </div>
           ) : (<>
-          <h2 className="lm-h">{causes.length ? `${fmtInt(causes.length)} cause${causes.length > 1 ? "s" : ""} · ${fmtInt(affected.length)} sites` : "Nothing is alerting on this network"}</h2>
+          {/* "Nothing is alerting" is a claim about the whole network, and it was printed while
+              sites stood degraded: no cause could be built for them, which is not the same thing.
+              Each of the three states says what is true of it. */}
+          <h2 className="lm-h">{summary.headline}</h2>
           <div className="lm-stats">
             <span><b style={{ color: offline ? "var(--lm-bad)" : undefined }}>{fmtInt(offline)}</b>sites offline</span>
             {/* demand as measured, when the environment reports it; the example network carries its own loss */}
@@ -585,7 +599,7 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
             ) : null}
           </div>
           <button type="button" className={`lm-cause lm-cause--all${cause ? "" : " is-on"}`} aria-pressed={!cause} onClick={() => onCause("all")}>
-            <b><span className="lm-cause__title">Whole network</span><em>{fmtInt(affected.length)}/{fmtInt(infos.length)}</em></b>
+            <b><span className="lm-cause__title">Whole network</span><em>{fmtInt(summary.sites)}/{fmtInt(infos.length)}</em></b>
           </button>
           {/* The two headings sorted the list and said nothing about why. The rule is in the
               code right above — more than one site — and it is the whole reason this column is

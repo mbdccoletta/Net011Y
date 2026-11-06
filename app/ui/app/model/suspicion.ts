@@ -104,6 +104,14 @@ export interface Suspicion {
   /** true when the drop came from the app's own measurement, not from a platform alert */
   fromMeasurement: boolean;
   /**
+   * The burst came first and the applications never felt it.
+   *
+   * The headline already says so — "so it may be coincidence" — and the badge above it still read
+   * "Network implicated", which is the one thing that sentence retracts. The badge reads the same
+   * flag now, so the label and the line cannot disagree.
+   */
+  unfelt: boolean;
+  /**
    * Whose traffic the percentage is about. The per-hour curve exists for the environment; a site only has
    * the 24 h total of its own subnets, so a site reading borrows the environment curve and says so rather
    * than passing it off as this site's.
@@ -288,5 +296,5 @@ export function suspicionFor(
     ? `Nothing to compare in ${where}: no user sessions and nothing alerting outside the network`
     : `Nothing suspicious in ${where}`;
 
-  return { kind, headline, facts, scope, site: site?.code, outside, network, trafficScope, siteSessions, burst, app, fromMeasurement: drop.dropped && !(users?.anomalyWatched ?? false) };
+  return { kind, headline, facts, scope, site: site?.code, outside, network, trafficScope, siteSessions, burst, app, unfelt, fromMeasurement: drop.dropped && !(users?.anomalyWatched ?? false) };
 }
