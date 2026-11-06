@@ -1423,9 +1423,44 @@ const alphaIn = (block, name) => Number((block.match(new RegExp(`--lm-${name}:\\
 const darkBlock = blockOf("\n.lm {"), lightBlock = blockOf(':root:not([data-theme="dark"]) .lm {');
 const shapes = ["shape-line", "shape-line-empty", "shape-fill", "shape-fill-empty"];
 const pairs = shapes.map((n) => ({ n, dark: alphaIn(darkBlock, n), light: alphaIn(lightBlock, n) }));
-check("A region's shape is drawn with its own alpha on each stage, heavier on the light one",
-  pairs.every((p) => Number.isFinite(p.dark) && Number.isFinite(p.light) && p.light > p.dark),
-  pairs.map((p) => `${p.n} ${p.dark}→${p.light}`).join(" · "));
+
+/*
+ * What the two stages have to match is the contrast, not the alpha.
+ *
+ * The first version of this check required every light alpha to be the larger, which was true
+ * while both stages drew the shape in their own text ink. The light stage draws it in black now,
+ * and 7% of black carries further than 7% of a near-white on near-black — so the alpha rule
+ * started failing on a change that made the line stronger. Blend it and measure instead.
+ */
+const hex = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+const mix = (fg, bg, a) => fg.map((f, i) => a * f + (1 - a) * bg[i]);
+const relLum = (c) => { const ch = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * ch(c[0]) + 0.7152 * ch(c[1]) + 0.0722 * ch(c[2]); };
+const contrast = (a, b) => { const [x, y] = [relLum(a), relLum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+const DARK = { ink: hex("#e2e8f0"), bg: hex("#141419") }, LIGHT = { ink: hex("#000000"), bg: hex("#f2f2f5") };
+const reading = (stage, a) => contrast(mix(stage.ink, stage.bg, a), stage.bg);
+const lines = [["shape-line", "holding sites"], ["shape-line-empty", "holding none"]].map(([n, what]) => ({
+  what, dark: reading(DARK, alphaIn(darkBlock, n)), light: reading(LIGHT, alphaIn(lightBlock, n)) }));
+check("A region's shape reads at least as strongly on the light stage as on the dark one",
+  pairs.every((p) => Number.isFinite(p.dark) && Number.isFinite(p.light)) && lines.every((l) => l.light >= l.dark),
+  lines.map((l) => `${l.what}: dark ${l.dark.toFixed(2)}:1 · light ${l.light.toFixed(2)}:1`).join(" · "));
+
+// The numbers existed twice — once in the canvas map, once as literals in the WebGL paint — and
+// three releases raised the copy nobody was looking at, because the canvas draws the schematic
+// while the reports were all about Regions, which the platform's map draws. Neither file may
+// carry the literals again.
+const geoSrc = readFileSync(new URL("../../app/ui/app/components/LiveMapGeo.tsx", import.meta.url).pathname, "utf8");
+const canvasSrc = readFileSync(new URL("../../app/ui/app/components/LiveMap.tsx", import.meta.url).pathname, "utf8");
+const geoPaint = geoSrc.slice(geoSrc.indexOf('id="nf-regions-fill"'), geoSrc.indexOf('id="nf-share"'));
+check("Both maps read the shape from the theme, and neither writes the numbers again",
+  geoSrc.includes('"--lm-shape-ink"') && canvasSrc.includes('v("--lm-shape-ink"')
+    && !/0\.38|0\.16|0\.025/.test(geoPaint) && /shape\.(line|fill|width)/.test(geoPaint),
+  `geo paint reads the theme: ${/shape\.(line|fill|width)/.test(geoPaint)} · literals left in it: ${/0\.38|0\.16|0\.025/.test(geoPaint)}`);
+
+// Black on the light stage, asked for after three rounds of raising the alpha of a near-navy ink.
+check("The light stage draws the shape in black",
+  /--lm-shape-ink:\s*#000000/.test(lightBlock) && alphaIn(lightBlock, "shape-line") >= 0.85,
+  `light ink ${(lightBlock.match(/--lm-shape-ink:\s*(\S+);/) ?? [])[1]} at ${alphaIn(lightBlock, "shape-line")}`);
 
 // Which layout the map opens on. Geography opens on the platform's own basemap, whose country
 // outlines measure #e4e4e7 on a #f4f4f7 ground on the light stage — not ours to darken, and read

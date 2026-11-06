@@ -39,6 +39,18 @@ const INK = {
   "--lm-bad-fill": "#c82d40", "--lm-warn-fill": "#d7b43b", "--lm-good-fill": "#00bb7b",
   "--lm-neutral": "#7c7f9e", "--lm-series": "#00afbe", "--lm-ink": "#e2e8f0",
   "--lm-bg": "#141419",
+  /*
+   * How a region's shape is drawn, read here rather than written here.
+   *
+   * These four numbers and this colour existed twice — once in the canvas map and once in this
+   * file as literals in the paint — and three releases raised the canvas copy while every report
+   * was about this one, because the canvas draws the schematic and this draws Regions. One
+   * declaration in theme.css, read by both, is the fix for the mistake as much as for the colour.
+   */
+  "--lm-shape-ink": "#e2e8f0",
+  "--lm-shape-line": "0.38", "--lm-shape-line-empty": "0.16",
+  "--lm-shape-fill": "0.07", "--lm-shape-fill-empty": "0.025",
+  "--lm-shape-width": "1.1", "--lm-shape-width-empty": "0.7",
 };
 
 type Pt = [number, number];
@@ -340,11 +352,13 @@ function Labels({ labels }: { labels: Label[] }) {
  * mounted after them, the state fill covered the estate — so they are a separate child,
  * rendered before `ConnectionLayer`.
  */
-function Ground({ regions, share, routes, focus, colour }: {
+function Ground({ regions, share, routes, focus, colour, shape }: {
   regions: Feat[]; share: Feat[]; routes: Feat[];
   /** one point per site in the focus, each of which gets a ring */
   focus: Feat[];
   colour: Record<string, string>;
+  /** how a region's shape is drawn, from the theme rather than from this file */
+  shape: { ink: string; line: number; lineEmpty: number; fill: number; fillEmpty: number; width: number; widthEmpty: number };
 }) {
   return (
     <>
@@ -374,11 +388,11 @@ function Ground({ regions, share, routes, focus, colour }: {
           seven. The shape is context — the fill is ink, and the status lives on the edge. */}
       <Source id="nf-regions" type="geojson" data={fc(regions)}>
         <Layer id="nf-regions-fill" type="fill"
-          paint={{ "fill-color": colour.ink, "fill-opacity": ["case", [">", ["get", "sites"], 0], 0.07, 0.025] }} />
+          paint={{ "fill-color": shape.ink, "fill-opacity": ["case", [">", ["get", "sites"], 0], shape.fill, shape.fillEmpty] }} />
         <Layer id="nf-regions-line" type="line"
-          paint={{ "line-color": colour.ink,
-            "line-opacity": ["case", [">", ["get", "sites"], 0], 0.38, 0.16],
-            "line-width": ["case", [">", ["get", "sites"], 0], 1.1, 0.7] }} />
+          paint={{ "line-color": shape.ink,
+            "line-opacity": ["case", [">", ["get", "sites"], 0], shape.line, shape.lineEmpty],
+            "line-width": ["case", [">", ["get", "sites"], 0], shape.width, shape.widthEmpty] }} />
       </Source>
       <Source id="nf-share" type="geojson" data={fc(share)}>
         <Layer id="nf-share" type="line" paint={{
@@ -713,6 +727,14 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
     Healthy: ink["--lm-good-fill"], "Not monitored": ink["--lm-neutral"],
     series: ink["--lm-series"], ink: ink["--lm-ink"], bg: ink["--lm-bg"],
   };
+  /* the theme's own numbers; a failed read falls back to the value the declaration falls back to */
+  const num = (k: keyof typeof INK, fallback: number) => Number(ink[k]) || fallback;
+  const shape = {
+    ink: ink["--lm-shape-ink"],
+    line: num("--lm-shape-line", 0.38), lineEmpty: num("--lm-shape-line-empty", 0.16),
+    fill: num("--lm-shape-fill", 0.07), fillEmpty: num("--lm-shape-fill-empty", 0.025),
+    width: num("--lm-shape-width", 1.1), widthEmpty: num("--lm-shape-width-empty", 0.7),
+  };
   const byCode = useMemo(() => new Map(sites.map((s) => [s.code, s])), [sites]);
 
   /**
@@ -871,7 +893,7 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
             layers that move, then the sites on top of all of it */}
         {/* the hotspot belongs to a focus, not to the estate: with nothing picked the frame
             is the whole country and a glow in the middle of it points at nothing */}
-        <Ground regions={shapes} share={share} routes={routeFeats} focus={focusPoints} colour={colour} />
+        <Ground regions={shapes} share={share} routes={routeFeats} focus={focusPoints} colour={colour} shape={shape} />
         {/* the links, drawn by the platform */}
         {/* Every route wears the status of the link it stands for — a healthy one included.
             What the platform's layer cannot carry is the width: the canvas made a route as
