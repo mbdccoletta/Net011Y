@@ -344,36 +344,21 @@ function Labels({ labels }: { labels: Label[] }) {
   );
 }
 
-/**
- * The platform's own basemap, made legible.
+/*
+ * There is no layer of ours over the platform's basemap, and there was one for exactly one
+ * release.
  *
- * `MapView` draws the countries itself — its own GeoJSON on a source called `data`, in
- * `Border.Neutral.Default` at one pixel for a country and four tenths of one for a region. On the
- * light stage that token is `#dadbe4`, which against the shell measures 1.26:1, and four tenths of
- * a pixel of it is not a line but a smear: reported four times as "the map lines are too light,
- * bad resolution", and the colour measured off a screenshot at `#e4e4e7` is what finally pointed
- * at the package rather than at anything in here.
+ * The complaint was that the outlines read as blank on the light stage, and the first answer was
+ * to draw every country border in the world in black over the platform's own. Measured on the live
+ * app afterwards, with the layer switched off and on: at a country's zoom it changes nothing —
+ * 352 dark pixels either way, because the region outlines we draw cover the same ground — and at
+ * world zoom it triples the ink, 746 dark pixels to 2,728. Invisible where it was meant to help
+ * and overwhelming where it was not needed, and the map stopped looking like Dynatrace's.
  *
- * The first attempt repainted their layer with `setPaintProperty` and changed nothing on screen —
- * measured again, still `#e4e4e7`. A `<Layer>` writes its `paint` prop back to the map whenever
- * its component renders, so an imperative edit to a layer somebody else owns survives only until
- * their next render. This draws a line of our own over the same source instead, which nobody
- * else's render can undo, in the two tokens the region outlines above it already use: one weight
- * for every boundary on the map, black on the light stage.
- *
- * It overrides a platform default knowingly. The right long-term home is a fix in strato-geo.
+ * What the complaint was actually about is the subdivisions, and those are `nf-regions-line`
+ * below, which the theme's own tokens already draw black on the light stage. The world keeps the
+ * platform's own weight.
  */
-function Basemap({ shape }: { shape: { ink: string; lineEmpty: number; width: number; widthEmpty: number } }) {
-  return (
-    <Layer id="nf-world-line" type="line" source="data" beforeId={undefined}
-      filter={["any", ["==", "region_type", "COUNTRY"], ["==", "region_type", "REGION"]]}
-      paint={{
-        "line-color": shape.ink,
-        "line-opacity": shape.lineEmpty,
-        "line-width": ["case", ["==", ["get", "region_type"], "REGION"], shape.widthEmpty, shape.width],
-      }} />
-  );
-}
 
 /**
  * The ground: the hotspot, the states, and their edges.
@@ -393,7 +378,6 @@ function Ground({ regions, share, routes, focus, colour, shape }: {
 }) {
   return (
     <>
-      <Basemap shape={shape} />
       {/**
         * The focus is a ring on each site, and it carries no colour.
         *

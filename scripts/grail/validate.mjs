@@ -1460,11 +1460,15 @@ check("Both maps read the shape from the theme, and neither writes the numbers a
 // The platform draws the countries itself, in Border.Neutral.Default at one pixel and four tenths
 // of one — #dadbe4 on the light shell, 1.26:1, which is not a line. Its layers are repainted with
 // the same tokens the region outlines use, so every boundary on the map carries one weight.
-check("The boundary is a layer of ours over the platform's source, not an edit to its layer",
-  geoSrc.includes('<Layer id="nf-world-line"') && geoSrc.includes('source="data"')
-    && geoSrc.includes("<Basemap shape={shape} />")
-    && !geoSrc.includes('setPaintProperty("geojson-line"'),
-  `own layer: ${geoSrc.includes('id="nf-world-line"')} · imperative edit to theirs: ${geoSrc.includes('setPaintProperty("geojson-line"')}`);
+// Nothing of ours is drawn over the platform's basemap, and for one release something was: a black
+// border on every country in the world. Measured on the live app with it switched off and on, at a
+// country's zoom it changed nothing — 352 dark pixels either way — and at world zoom it tripled the
+// ink, 746 to 2,728, and the map stopped looking like Dynatrace's. The subdivisions are what the
+// complaint was about, and those are ours to draw.
+check("The world keeps the platform's own weight; only the subdivisions carry the theme's ink",
+  !geoSrc.includes("nf-world-line") && !geoSrc.includes("setPaintProperty(\"geojson-line\"")
+    && geoSrc.includes('id="nf-regions-line"') && /shape\.(line|fill|width)/.test(geoPaint),
+  `layer of ours over the basemap: ${geoSrc.includes("nf-world-line")} · subdivisions from the theme: ${/shape\.(line|fill|width)/.test(geoPaint)}`);
 
 // Black on the light stage, asked for after three rounds of raising the alpha of a near-navy ink.
 check("The light stage draws the shape in black",
