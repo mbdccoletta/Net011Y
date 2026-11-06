@@ -239,6 +239,7 @@ node scorecard.mjs dtctl:<ctx> # the same through a dtctl context
 DT_CONTEXT=<dtctl-context> node live_check.mjs
 DT_CONTEXT=<ctx> node scan_split.mjs  # what a Live map load is charged for, and what now waits
 node map_preview.mjs us > out/m.html  # draws the Live map outside the app, with its own functions
+node scenario.mjs > out/s.html        # the whole Live map screen at an estate size nobody has a tenant for
 node perf.mjs 20000 10         # scale test: 20k devices through the model
 ```
 
