@@ -1460,10 +1460,11 @@ check("Both maps read the shape from the theme, and neither writes the numbers a
 // The platform draws the countries itself, in Border.Neutral.Default at one pixel and four tenths
 // of one — #dadbe4 on the light shell, 1.26:1, which is not a line. Its layers are repainted with
 // the same tokens the region outlines use, so every boundary on the map carries one weight.
-check("The platform's own basemap is repainted with the theme's boundary tokens",
-  geoSrc.includes('m.setPaintProperty("geojson-line", "line-color", ink)')
-    && geoSrc.includes('m.on("styledata", paint)') && geoSrc.includes("<Basemap shape={shape} />"),
-  `repainted: ${geoSrc.includes('"geojson-line"')} · kept through a style reload: ${geoSrc.includes('m.on("styledata", paint)')}`);
+check("The boundary is a layer of ours over the platform's source, not an edit to its layer",
+  geoSrc.includes('<Layer id="nf-world-line"') && geoSrc.includes('source="data"')
+    && geoSrc.includes("<Basemap shape={shape} />")
+    && !geoSrc.includes('setPaintProperty("geojson-line"'),
+  `own layer: ${geoSrc.includes('id="nf-world-line"')} · imperative edit to theirs: ${geoSrc.includes('setPaintProperty("geojson-line"')}`);
 
 // Black on the light stage, asked for after three rounds of raising the alpha of a near-navy ink.
 check("The light stage draws the shape in black",

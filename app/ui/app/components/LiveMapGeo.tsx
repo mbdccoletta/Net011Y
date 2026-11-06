@@ -347,37 +347,32 @@ function Labels({ labels }: { labels: Label[] }) {
 /**
  * The platform's own basemap, made legible.
  *
- * `MapView` draws the countries itself — its own GeoJSON, in `Border.Neutral.Default` at one pixel
- * for a country and four tenths of one for a region. On the light stage that token is `#dadbe4`,
- * which against the shell measures **1.26:1**, and four tenths of a pixel of it is not a line but a
- * smear: reported four times as "the map lines are too light, bad resolution", and measured off a
- * screenshot at `#e4e4e7` before the source of it was found in the package rather than in here.
+ * `MapView` draws the countries itself — its own GeoJSON on a source called `data`, in
+ * `Border.Neutral.Default` at one pixel for a country and four tenths of one for a region. On the
+ * light stage that token is `#dadbe4`, which against the shell measures 1.26:1, and four tenths of
+ * a pixel of it is not a line but a smear: reported four times as "the map lines are too light,
+ * bad resolution", and the colour measured off a screenshot at `#e4e4e7` is what finally pointed
+ * at the package rather than at anything in here.
  *
- * So the platform's layers are repainted with the same two tokens the region outlines above them
- * use — one weight for every boundary on the map, black on the light stage. This overrides a
- * platform default knowingly: the alternative is a map whose geography cannot be read, and the
- * right long-term home for it is a fix in strato-geo.
+ * The first attempt repainted their layer with `setPaintProperty` and changed nothing on screen —
+ * measured again, still `#e4e4e7`. A `<Layer>` writes its `paint` prop back to the map whenever
+ * its component renders, so an imperative edit to a layer somebody else owns survives only until
+ * their next render. This draws a line of our own over the same source instead, which nobody
+ * else's render can undo, in the two tokens the region outlines above it already use: one weight
+ * for every boundary on the map, black on the light stage.
  *
- * `styledata` because maplibre restores a layer's own paint whenever the style reloads.
+ * It overrides a platform default knowingly. The right long-term home is a fix in strato-geo.
  */
 function Basemap({ shape }: { shape: { ink: string; lineEmpty: number; width: number; widthEmpty: number } }) {
-  const { current: map } = useMap();
-  const { ink, lineEmpty, width, widthEmpty } = shape;
-  useEffect(() => {
-    if (!map) return;
-    const m = map.getMap();
-    const paint = () => {
-      if (!m.getLayer("geojson-line")) return;
-      m.setPaintProperty("geojson-line", "line-color", ink);
-      m.setPaintProperty("geojson-line", "line-opacity", lineEmpty);
-      m.setPaintProperty("geojson-line", "line-width",
-        ["case", ["==", ["get", "region_type"], "REGION"], widthEmpty, width]);
-    };
-    paint();
-    m.on("styledata", paint);
-    return () => { m.off("styledata", paint); };
-  }, [map, ink, lineEmpty, width, widthEmpty]);
-  return null;
+  return (
+    <Layer id="nf-world-line" type="line" source="data" beforeId={undefined}
+      filter={["any", ["==", "region_type", "COUNTRY"], ["==", "region_type", "REGION"]]}
+      paint={{
+        "line-color": shape.ink,
+        "line-opacity": shape.lineEmpty,
+        "line-width": ["case", ["==", ["get", "region_type"], "REGION"], shape.widthEmpty, shape.width],
+      }} />
+  );
 }
 
 /**
