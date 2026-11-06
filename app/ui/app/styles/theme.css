@@ -125,6 +125,13 @@
   --lm-route: var(--lm-series);
   --lm-glow: 0.2;
   --lm-land-dot: 1;
+  /* How strongly a region's shape is drawn: the border of one that holds sites, the border of one
+     that holds none, and the two washes under them. A shape is context, so it is kept recessive —
+     but "recessive" is a different number on each stage, which is why these are tokens. */
+  --lm-shape-line: 0.38;
+  --lm-shape-line-empty: 0.16;
+  --lm-shape-fill: 0.07;
+  --lm-shape-fill-empty: 0.025;
   --lm-dim: 0.22;
   /* How much of a route survives when nothing is wrong with it. This was 0.2 against the light
      theme's 0.5, and multiplied by the out-of-focus fade it came to four per cent — a line nobody
@@ -196,6 +203,14 @@
      grid uses that token solid (4.5:1) with a 1.3x dot. */
   --lm-land: var(--dt-colors-text-neutral-subdued, #595a7d);
   --lm-land-dot: 1.3;
+  /* The same alpha is not the same contrast on the two stages. Dark ink at 16% over a near-white
+     shell blends to #d4d4da against #f2f2f5 — a step of 30 in luminance at the top of the range,
+     where the eye reads a difference worst, and the state borders came out all but invisible.
+     Raised until a shape with no sites is a line rather than a rumour, and left recessive. */
+  --lm-shape-line: 0.52;
+  --lm-shape-line-empty: 0.3;
+  --lm-shape-fill: 0.085;
+  --lm-shape-fill-empty: 0.04;
   /* a route at 4% alpha only reads over a dark stage; on light the fades and the stroke need weight */
   --lm-dim: 0.55;
   --lm-calm: 0.5;

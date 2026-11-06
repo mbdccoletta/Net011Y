@@ -88,7 +88,7 @@ interface Props {
 /** Status colours for DOM and SVG: the Delivery Chain tokens (Strato status fills). */
 export const MAP_COLORS: Record<Verdict, string> = { Critical: "var(--lm-bad-fill)", Warning: "var(--lm-warn-fill)", Healthy: "var(--lm-good-fill)", "Not monitored": "var(--lm-neutral)" };
 
-interface Palette { status: Record<Verdict, string>; route: string; land: string; landDot: number; bg: string; ink: string; ink2: string; halo: string; glow: number; dim: number; calm: number; stroke: number; mark: number; siteDim: number }
+interface Palette { status: Record<Verdict, string>; route: string; land: string; landDot: number; shapeLine: number; shapeLineEmpty: number; shapeFill: number; shapeFillEmpty: number; bg: string; ink: string; ink2: string; halo: string; glow: number; dim: number; calm: number; stroke: number; mark: number; siteDim: number }
 
 /** Any CSS colour with an alpha, via the canvas' own colour normalisation. */
 const alphaCtx = typeof document !== "undefined" ? document.createElement("canvas").getContext("2d") : null;
@@ -111,6 +111,11 @@ function readPalette(el: HTMLElement): Palette {
     halo: v("--lm-halo", v("--lm-bg", "#141419")), glow: Number(v("--lm-glow", "0.2")) || 0.2,
     // how heavy the dotted continents are drawn: a light stage needs a bigger dot to read as land
     landDot: Number(v("--lm-land-dot", "1")) || 1,
+    // a region's shape is context on both stages, and that costs a different alpha on each
+    shapeLine: Number(v("--lm-shape-line", "0.38")) || 0.38,
+    shapeLineEmpty: Number(v("--lm-shape-line-empty", "0.16")) || 0.16,
+    shapeFill: Number(v("--lm-shape-fill", "0.07")) || 0.07,
+    shapeFillEmpty: Number(v("--lm-shape-fill-empty", "0.025")) || 0.025,
     // How much of the drawing survives when it is not the focus. On a dark stage a route at 4% alpha still
     // glows; on a light one it disappears, so both fades and the stroke width come from the theme.
     dim: Number(v("--lm-dim", "0.22")) || 0.22,
@@ -412,9 +417,9 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
           // A state is a container, not a thing with a status: washing it in the colour of its worst
           // site said "Rio de Janeiro is critical" when three of its hundred and ninety-seven were. The
           // shape is context — the dots on top carry the status, one per site, which is where it is true.
-          ctx.fillStyle = withAlpha(P.ink, rg.sites ? 0.07 : 0.025);
+          ctx.fillStyle = withAlpha(P.ink, rg.sites ? P.shapeFill : P.shapeFillEmpty);
           ctx.fill("evenodd");
-          ctx.strokeStyle = withAlpha(P.ink, rg.sites ? 0.38 : 0.16);
+          ctx.strokeStyle = withAlpha(P.ink, rg.sites ? P.shapeLine : P.shapeLineEmpty);
           ctx.lineWidth = rg.sites ? 1.1 : 0.7;
           ctx.stroke();
           // ...and the outline carries the shares. Washing the shape in the colour of its worst site

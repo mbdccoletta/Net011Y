@@ -1413,6 +1413,20 @@ check("The canvas reserves every mark it draws and hands them to the rule",
   mapSrc.split("reserve(").length - 1 >= 3 && mapSrc.includes("placeLabels(") && mapSrc.includes("taken, measure"),
   `reserve() call sites: ${mapSrc.split("reserve(").length - 2} · placement delegated: ${mapSrc.includes("placeLabels(")}`);
 
+// The same alpha is not the same contrast on the two stages. Dark ink at 16% over a near-white
+// shell lands at 1.34:1 — a line the reader reports as missing — while the light ink of the dark
+// stage at the same alpha reads 1.52:1. The shape alphas are tokens per theme for that reason, and
+// the light ones have to be the larger of the two or the lesson is lost at the next edit.
+const themeSrc = readFileSync(new URL("../../app/ui/app/styles/theme.css", import.meta.url).pathname, "utf8");
+const blockOf = (sel) => { const i = themeSrc.indexOf(sel); const j = themeSrc.indexOf("\n}", i); return themeSrc.slice(i, j); };
+const alphaIn = (block, name) => Number((block.match(new RegExp(`--lm-${name}:\\s*([0-9.]+)`)) ?? [])[1]);
+const darkBlock = blockOf("\n.lm {"), lightBlock = blockOf(':root:not([data-theme="dark"]) .lm {');
+const shapes = ["shape-line", "shape-line-empty", "shape-fill", "shape-fill-empty"];
+const pairs = shapes.map((n) => ({ n, dark: alphaIn(darkBlock, n), light: alphaIn(lightBlock, n) }));
+check("A region's shape is drawn with its own alpha on each stage, heavier on the light one",
+  pairs.every((p) => Number.isFinite(p.dark) && Number.isFinite(p.light) && p.light > p.dark),
+  pairs.map((p) => `${p.n} ${p.dark}→${p.light}`).join(" · "));
+
 check("The plan is made after the commit, and no incremental read starts without one",
   effect.includes("useEffect(") && effect.includes("planFor(") && hook.split("planFor(").length === 3
     && gate.includes("!QUERIES[name].incremental || asMetric(name) || !!plans[name]"),
