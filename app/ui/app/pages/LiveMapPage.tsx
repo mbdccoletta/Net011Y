@@ -142,10 +142,19 @@ export function LiveMapPage({ needs, model, infos, causeId, failed, onCause, onS
 const NO_COORDS = "No site in this environment has coordinates. Geographic and Regions draw sites by position, which comes from the geo_lat and geo_lon primary tags on the SNMP monitoring configurations (Settings · Sites, regions and locations). Schematic holds every site and needs no coordinates.";
 
   const [layout, setLayout] = useState<"geo" | "states" | "schematic" | null>(null);
-  // Geography is the default the moment any site can be placed: a reader opens the map to see where the
-  // network is. Only an environment that gives no coordinates at all starts on the schematic layout, and
-  // when geography would leave sites out, the bar says how many it is drawing.
-  const chosen = layout ?? (placedShare > 0 ? "geo" : "schematic");
+  /**
+   * Regions is the default the moment any site can be placed.
+   *
+   * Geography was, and it opens on the platform's bare basemap: on the light stage its country
+   * outlines measure #e4e4e7 against a #f4f4f7 ground, which is a map a reader reports as blank
+   * with some dots on it. That basemap is the platform's and not ours to darken. Regions draws the
+   * subdivisions the app already knows — their shape, their share of sites and their count — over
+   * the same positions, so the reader gets a map that reads at a glance and the dots keep meaning
+   * exactly what they meant. Geography is a click away for anyone who wants the bare ground.
+   *
+   * Only an environment that gives no coordinates at all starts on the schematic, as before.
+   */
+  const chosen = layout ?? (placedShare > 0 ? "states" : "schematic");
   const schematic = chosen === "schematic";
   /**
    * The platform's map draws the world; the schematic stays on the canvas.

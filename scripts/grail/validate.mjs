@@ -1427,6 +1427,16 @@ check("A region's shape is drawn with its own alpha on each stage, heavier on th
   pairs.every((p) => Number.isFinite(p.dark) && Number.isFinite(p.light) && p.light > p.dark),
   pairs.map((p) => `${p.n} ${p.dark}→${p.light}`).join(" · "));
 
+// Which layout the map opens on. Geography opens on the platform's own basemap, whose country
+// outlines measure #e4e4e7 on a #f4f4f7 ground on the light stage — not ours to darken, and read
+// as a blank map with dots on it. Regions draws the subdivisions the app already knows over the
+// same positions; an environment with no coordinates at all still opens on the schematic.
+const pageSrc = readFileSync(new URL("../../app/ui/app/pages/LiveMapPage.tsx", import.meta.url).pathname, "utf8");
+const defaultLayout = (pageSrc.match(/const chosen = layout \?\? \(placedShare > 0 \? "(\w+)" : "(\w+)"\)/) ?? []).slice(1);
+check("The map opens on the regions, and on the schematic where nothing can be placed",
+  defaultLayout[0] === "states" && defaultLayout[1] === "schematic",
+  `placed → ${defaultLayout[0] ?? "?"} · nothing placed → ${defaultLayout[1] ?? "?"}`);
+
 check("The plan is made after the commit, and no incremental read starts without one",
   effect.includes("useEffect(") && effect.includes("planFor(") && hook.split("planFor(").length === 3
     && gate.includes("!QUERIES[name].incremental || asMetric(name) || !!plans[name]"),
