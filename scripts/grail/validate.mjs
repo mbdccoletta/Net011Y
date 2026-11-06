@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES, planWanted, readWanted } from "./out/queries.mjs";
-import { causeSummary, causeSiteCount, regionsShown, networkContext, trafficContext, siteContext, measuredKey, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
+import { causeSummary, causeSiteCount, regionsShown, fitView, frameFill, FIT_MARGIN, networkContext, trafficContext, siteContext, measuredKey, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -1363,6 +1363,44 @@ check("The region list is bounded, and never leaves out a region that is alertin
     && ranked.filter((g) => g.list.some((i) => i.verdict === "Critical")).every((g) => regionCut.shown.includes(g))
     && regionsShown([region(2, 0)], 8).hidden === 0,
   `${ranked.length} regions → ${regionCut.shown.length} shown, ${regionCut.hidden} hidden · alerting kept: ${regionCut.shown.filter((g) => g.list.some((i) => i.verdict === "Critical")).length}`);
+
+// A name that says the same word twice says nothing, at length: "KS, KS" and "OK, OK" were on a
+// customer's map, from names whose city slot carries the state code as well.
+check("A shortened name never repeats the word it just said",
+  shortSiteName("DEPOT:B117.04:9 Example Road:KS:KS:12345") === "KS"
+    && shortSiteName("Oklahoma City, OK, OK, USA") === "Oklahoma City, OK"
+    && shortSiteName("DEPOT:B117.04:9 Example Road:Wichita:KS:12345") === "Wichita, KS",
+  `${shortSiteName("DEPOT:B117.04:9 Example Road:KS:KS:12345")} · ${shortSiteName("Oklahoma City, OK, OK, USA")}`);
+
+// The camera, as arithmetic. A reader judges the map by how much of the frame the estate fills
+// before anything else, and that was only observable by rendering a canvas.
+const INSETS = { top: 24, right: 376, bottom: 28, left: 336 };
+const usPts = [{ lat: 47.5, lon: -122.8 }, { lat: 42.1, lon: -70.8 }, { lat: 25.8, lon: -80.1 }, { lat: 39.2, lon: -96.2 }];
+const fill = frameFill(usPts, 1366, 697, INSETS);
+check("The frame fits the estate to the width it is designed to leave",
+  Math.abs(fill.across - 1 / FIT_MARGIN) < 0.01 && fill.down < fill.across,
+  `${(100 * fill.across).toFixed(0)}% across · ${(100 * fill.down).toFixed(0)}% down · target ${(100 / FIT_MARGIN).toFixed(0)}%`);
+
+// And it is the raw extremes that set it, so one far site reframes the map for all the others.
+// Named here rather than fixed: which site does it on a given estate is a question for that estate.
+const withFarSite = frameFill([...usPts, { lat: 51.5, lon: -0.1 }], 1366, 697, INSETS);
+check("One site far from the rest is enough to reframe the map, and the suite says by how much",
+  withFarSite.down < fill.down * 0.75 && Math.abs(withFarSite.across - 1 / FIT_MARGIN) < 0.01,
+  `without it ${(100 * fill.down).toFixed(0)}% down · with it ${(100 * withFarSite.down).toFixed(0)}%`);
+
+// The camera centres on what it frames, in the strip the panels leave rather than on the canvas.
+const v = fitView(usPts, 1366, 697, INSETS);
+check("The frame is centred on the estate",
+  Math.abs(v.cx - (-96.8)) < 0.05 && v.k > 1.2,
+  `centre ${v.cx.toFixed(1)}° · k ${v.k.toFixed(2)}`);
+
+// A name written across the ring it belongs to is how a busy map becomes unreadable. The marks are
+// reserved as they are drawn; this reads the canvas, which the suite cannot run.
+const mapSrc = readFileSync(new URL("../../app/ui/app/components/LiveMap.tsx", import.meta.url).pathname, "utf8");
+check("Every mark is reserved before the names are placed, and a site's own mark is not its obstacle",
+  mapSrc.includes("const taken: { x0: number; y0: number; x1: number; y1: number }[] = [...marks];")
+    && mapSrc.split("reserve(").length - 1 >= 3 && mapSrc.includes("ownMark(t2)") && mapSrc.includes("!ownMark(t)"),
+  `reserve() call sites: ${mapSrc.split("reserve(").length - 1} · taken seeded from marks: ${mapSrc.includes("[...marks]")}`);
 
 check("The plan is made after the commit, and no incremental read starts without one",
   effect.includes("useEffect(") && effect.includes("planFor(") && hook.split("planFor(").length === 3

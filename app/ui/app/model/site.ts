@@ -99,7 +99,21 @@ export function shortSiteName(name: string | null | undefined): string {
   const kept = parts.filter((p) => !postal(p) && !country(p) && !street(p) && (region(p) || !CODE.test(p)));
   if (!kept.length) return raw;
   const i = kept.map(region).lastIndexOf(true);
-  if (i > 0) return `${kept[i - 1]}, ${kept[i]}`;
+  /*
+   * "KS, KS" and "OK, OK" were on a customer's map, twice each.
+   *
+   * The rule takes the last region token and the part before it, and where the city slot carries
+   * the state code too — a colon-form name ending `:KS:KS:12345` — that is the same word twice,
+   * which tells the reader nothing and does it at length. A word is not repeated: if the part
+   * before the region is the region, walk back for a different one, and if there is none, the
+   * region alone is all the name has to say.
+   */
+  if (i > 0) {
+    const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+    let j = i - 1;
+    while (j >= 0 && same(kept[j], kept[i])) j -= 1;
+    return j >= 0 ? `${kept[j]}, ${kept[i]}` : kept[i];
+  }
   if (i === 0) return kept[0];
   return kept.slice(-2).join(", ");
 }

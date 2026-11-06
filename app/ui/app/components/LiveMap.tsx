@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MaximizeIcon, MinimizeIcon, MinusIcon, PlusIcon, ZoomToFitIcon } from "@dynatrace/strato-icons";
 import type { Verdict } from "../model/types";
+import { fitView, projY } from "../model/camera";
 import { LAND_BITS, LAND_COLS, LAND_ROWS, LAND_STEP } from "../data/landMask";
 import { prefersReducedMotion } from "../utils/format";
 import { clusterPoints, worstOf, type Cluster } from "../model/mapClusters";
@@ -153,7 +154,8 @@ export function pointInRing(ring: Float64Array, lon: number, lat: number): boole
 }
 
 // Web Mercator in degree units: x = longitude, y grows southwards.
-const projY = (lat: number) => -Math.log(Math.tan(Math.PI / 4 + (Math.max(-85, Math.min(85, lat)) * Math.PI) / 360)) * (180 / Math.PI);
+/* projY and the frame arithmetic live in model/camera.ts, where the suite can ask them what a
+   given estate would fill. */
 const invY = (y: number) => ((2 * Math.atan(Math.exp((-y * Math.PI) / 180)) - Math.PI / 2) * 180) / Math.PI;
 
 interface View { cx: number; cy: number; k: number }
@@ -227,14 +229,8 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
     const { w, h } = size.current;
     const ins = props.current.insets;
     const pts = sites.filter((s) => !codes || codes.has(s.code) || (withHubs && s.dc && links.some((l) => (l.a === s.code && codes.has(l.b)) || (l.b === s.code && codes.has(l.a)))));
-    if (!pts.length) return;
-    const xs = pts.map((s) => s.lon), ys = pts.map((s) => projY(s.lat));
-    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-    const fw = Math.max(120, w - ins.left - ins.right), fh = Math.max(120, h - ins.top - ins.bottom);
-    // a group of sites opened from the map can sit within a fraction of a degree
-    const spanX = Math.max(x1 - x0, tight ? 0.3 : 18), spanY = Math.max(y1 - y0, tight ? 0.2 : 10);
-    const k = Math.max(1.2, Math.min(260, Math.min(fw / (spanX * 1.35), fh / (spanY * 1.35))));
-    const to = { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, k };
+    const to = fitView(pts, w, h, ins, tight);
+    if (!to) return;
     if (animate && !reduce) tween.current = { from: { ...view.current }, to, start: performance.now() };
     else { view.current = to; tween.current = null; }
     dirty.current = true;
@@ -570,6 +566,17 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
 
+      /**
+       * What the marks occupy, so a name is never written across one.
+       *
+       * The label pass skipped a box that overlapped another *label*, and nothing else — so on a
+       * busy estate the names landed on top of the cluster rings they belong to, which is how
+       * a name came to be struck through by the ring of the cluster it belongs to. A mark
+       * is reserved as it is drawn, and the names go round them.
+       */
+      const marks: { x0: number; y0: number; x1: number; y1: number }[] = [];
+      const reserve = (x: number, y: number, r: number) => marks.push({ x0: x - r, y0: y - r, x1: x + r, y1: y + r });
+
       // sites, healthy first so problems stay on top
       // groups: the count in the middle and a ring of status shares (critical, warning, healthy, other)
       groups.forEach((cl) => {
@@ -596,6 +603,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         ctx.font = `600 ${cl.n >= 100 ? 9.5 : 10.5}px ${mono}`;
         ctx.fillText(cl.n >= 1000 ? `${(cl.n / 1000).toFixed(1)}k` : String(cl.n), cl.x, cl.y + 0.5);
         ctx.textAlign = "start";
+        reserve(cl.x, cl.y, cl.r + 4);
       });
       ctx.globalAlpha = 1;
 
@@ -621,6 +629,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
           // an inner dot carries the status even when the square is read as a shape
           ctx.fillStyle = color;
           ctx.beginPath(); ctx.arc(x, y, half * 0.34, 0, Math.PI * 2); ctx.fill();
+          reserve(x, y, half + 5);
           labelled.push(s);
           return;
         }
@@ -637,6 +646,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         ctx.fillStyle = color;
         ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
         if (hoverCode.current === s.code) { ctx.strokeStyle = P.ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.stroke(); }
+        reserve(x, y, r + 2.4);
         // Every site on screen is offered a name. Which ones get one is decided below, by whether the
         // text fits without touching another — geometry, not a count. A map of sixteen sites used to
         // label only the data centres, because the rule was "twelve sites or fewer".
@@ -648,7 +658,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
       // names into an unreadable pile, so a label is skipped when its box overlaps one already drawn —
       // data centres first, because they are the ones a reader is looking for.
       ctx.textBaseline = "middle";
-      const taken: { x0: number; y0: number; x1: number; y1: number }[] = [];
+      const taken: { x0: number; y0: number; x1: number; y1: number }[] = [...marks];
       // the regions are named first and hold their space: a state's name belongs to the whole shape,
       // and a site's name sitting on top of it would be the one that reads as the region
       // A region label summarises a group. Where the group is one site, the site's own name says more
@@ -679,10 +689,14 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         const x = sx(s.lon), y = sy(s.lat);
         ctx.font = s.dc ? `600 12px ${font}` : `500 11px ${mono}`;
         // the name is what a reader is after; the code is the fallback for when the name will not fit
+        /* its own mark, and the cluster it may sit inside, are not obstacles to its own name —
+           every other mark is */
+        const ownMark = (t2: { x0: number; y0: number; x1: number; y1: number }) =>
+          t2.x0 <= x && x <= t2.x1 && t2.y0 <= y && y <= t2.y1;
         const fits = (t: string) => {
           const tw = ctx.measureText(t).width;
           const b = { x0: x + 8 - 10, y0: y - (s.dc ? 7 : 6) - 3, x1: x + 12 + tw + 10, y1: y + (s.dc ? 7 : 6) + 3 };
-          return !taken.some((t2) => b.x0 < t2.x1 && b.x1 > t2.x0 && b.y0 < t2.y1 && b.y1 > t2.y0);
+          return !taken.some((t2) => !ownMark(t2) && b.x0 < t2.x1 && b.x1 > t2.x0 && b.y0 < t2.y1 && b.y1 > t2.y0);
         };
         // the name is what a reader is after, shortened where it is an address; the code is the
         // fallback for when even that will not fit
@@ -693,7 +707,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         // boxes that merely touch still read as one name — two neighbouring sites ran together into one
         // long string on screen — so a label needs clear space around it, not just no overlap
         const gap = { x0: box.x0 - 10, y0: box.y0 - 3, x1: box.x1 + 10, y1: box.y1 + 3 };
-        if (taken.some((t) => gap.x0 < t.x1 && gap.x1 > t.x0 && gap.y0 < t.y1 && gap.y1 > t.y0)) return;
+        if (taken.some((t) => !ownMark(t) && gap.x0 < t.x1 && gap.x1 > t.x0 && gap.y0 < t.y1 && gap.y1 > t.y0)) return;
         taken.push(box);
         // every label uses the main ink: the subdued one is the same colour as the dotted continents,
         // so a site name written in it disappears into the map. Rank is carried by weight, not by colour.
