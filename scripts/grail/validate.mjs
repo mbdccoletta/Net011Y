@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES, planWanted, readWanted } from "./out/queries.mjs";
-import { causeSummary, causeSiteCount, regionsShown, fitView, frameFill, FIT_MARGIN, networkContext, trafficContext, siteContext, measuredKey, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
+import { causeSummary, causeSiteCount, regionsShown, fitView, frameFill, FIT_MARGIN, placeLabels as NetMap_placeLabels, networkContext, trafficContext, siteContext, measuredKey, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -1394,13 +1394,24 @@ check("The frame is centred on the estate",
   Math.abs(v.cx - (-96.8)) < 0.05 && v.k > 1.2,
   `centre ${v.cx.toFixed(1)}° · k ${v.k.toFixed(2)}`);
 
-// A name written across the ring it belongs to is how a busy map becomes unreadable. The marks are
-// reserved as they are drawn; this reads the canvas, which the suite cannot run.
+// A name written across the ring it belongs to is how a busy map becomes unreadable. `placeLabels`
+// is the rule, so the suite asks it: a name beside a mark it does not own is dropped, and the mark
+// the site itself stands on is not an obstacle to its own name.
+const wide = (t) => t.length * 7;
+const onlyMark = [{ x0: 100, y0: 94, x1: 140, y1: 134 }];
+const besideIt = NetMap_placeLabels([{ x: 95, y: 114, name: "Beside a ring", code: "AAA" }], onlyMark, wide);
+const insideIt = NetMap_placeLabels([{ x: 120, y: 114, name: "Its own ring", code: "BBB" }], onlyMark, wide);
+const twoNames = NetMap_placeLabels(
+  [{ x: 10, y: 50, name: "First", code: "A" }, { x: 30, y: 50, name: "Second", code: "B" }], [], wide);
+check("A name is never written across a mark, and a site's own mark is not its obstacle",
+  besideIt.placed.length === 0 && insideIt.placed.length === 1 && twoNames.placed.length === 1,
+  `beside a ring: ${besideIt.placed.length} written · on its own ring: ${insideIt.placed.length} · two names overlapping: ${twoNames.placed.length} of 2`);
+
+// And the marks really are handed to it: the canvas seeds `taken` with what it drew.
 const mapSrc = readFileSync(new URL("../../app/ui/app/components/LiveMap.tsx", import.meta.url).pathname, "utf8");
-check("Every mark is reserved before the names are placed, and a site's own mark is not its obstacle",
-  mapSrc.includes("const taken: { x0: number; y0: number; x1: number; y1: number }[] = [...marks];")
-    && mapSrc.split("reserve(").length - 1 >= 3 && mapSrc.includes("ownMark(t2)") && mapSrc.includes("!ownMark(t)"),
-  `reserve() call sites: ${mapSrc.split("reserve(").length - 1} · taken seeded from marks: ${mapSrc.includes("[...marks]")}`);
+check("The canvas reserves every mark it draws and hands them to the rule",
+  mapSrc.split("reserve(").length - 1 >= 3 && mapSrc.includes("placeLabels(") && mapSrc.includes("taken, measure"),
+  `reserve() call sites: ${mapSrc.split("reserve(").length - 2} · placement delegated: ${mapSrc.includes("placeLabels(")}`);
 
 check("The plan is made after the commit, and no incremental read starts without one",
   effect.includes("useEffect(") && effect.includes("planFor(") && hook.split("planFor(").length === 3

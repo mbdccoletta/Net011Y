@@ -1,6 +1,6 @@
 {
   "name": "net-o11y",
-  "version": "0.1.98",
+  "version": "0.1.99",
   "description": "NetO11y: sites, devices and WAN links on one map, with the alerts Dynatrace already raises on them",
   "private": true,
   "scripts": {

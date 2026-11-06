@@ -233,11 +233,12 @@ cd scripts/grail
 node build.mjs                 # bundles the app's model and queries for the scripts
 node generate.mjs              # Grail-shaped fixtures: 62 sites, 494 devices (rebuilt automatically when stale)
 node example_check.mjs         # 163 coherence checks on the bundled example, both sizes
-node validate.mjs              # 157 scenario checks against the app's own model
+node validate.mjs              # 158 scenario checks against the app's own model
 node scorecard.mjs proxy       # what the app delivers in the environment the dev server serves
 node scorecard.mjs dtctl:<ctx> # the same through a dtctl context
 DT_CONTEXT=<dtctl-context> node live_check.mjs
 DT_CONTEXT=<ctx> node scan_split.mjs  # what a Live map load is charged for, and what now waits
+node map_preview.mjs us > out/m.html  # draws the Live map outside the app, with its own functions
 node perf.mjs 20000 10         # scale test: 20k devices through the model
 ```
 

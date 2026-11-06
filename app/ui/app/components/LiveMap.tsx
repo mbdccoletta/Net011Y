@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MaximizeIcon, MinimizeIcon, MinusIcon, PlusIcon, ZoomToFitIcon } from "@dynatrace/strato-icons";
 import type { Verdict } from "../model/types";
-import { fitView, projY } from "../model/camera";
+import { fitView, placeLabels, projY } from "../model/camera";
 import { LAND_BITS, LAND_COLS, LAND_ROWS, LAND_STEP } from "../data/landMask";
 import { prefersReducedMotion } from "../utils/format";
 import { clusterPoints, worstOf, type Cluster } from "../model/mapClusters";
@@ -685,35 +685,25 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         ctx.textAlign = "start";
       };
       if (RG?.length) drawRegions(RG.filter((rg) => rg.sites > 1));
-      [...labelled].sort((a, b) => Number(b.dc) - Number(a.dc)).forEach((s) => {
-        const x = sx(s.lon), y = sy(s.lat);
-        ctx.font = s.dc ? `600 12px ${font}` : `500 11px ${mono}`;
-        // the name is what a reader is after; the code is the fallback for when the name will not fit
-        /* its own mark, and the cluster it may sit inside, are not obstacles to its own name —
-           every other mark is */
-        const ownMark = (t2: { x0: number; y0: number; x1: number; y1: number }) =>
-          t2.x0 <= x && x <= t2.x1 && t2.y0 <= y && y <= t2.y1;
-        const fits = (t: string) => {
-          const tw = ctx.measureText(t).width;
-          const b = { x0: x + 8 - 10, y0: y - (s.dc ? 7 : 6) - 3, x1: x + 12 + tw + 10, y1: y + (s.dc ? 7 : 6) + 3 };
-          return !taken.some((t2) => !ownMark(t2) && b.x0 < t2.x1 && b.x1 > t2.x0 && b.y0 < t2.y1 && b.y1 > t2.y0);
-        };
-        // the name is what a reader is after, shortened where it is an address; the code is the
-        // fallback for when even that will not fit
-        const named = s.label ?? s.name;
-        const text = fits(named) ? named : s.code;
-        const w = ctx.measureText(text).width, h = s.dc ? 14 : 12;
-        const box = { x0: x + 8, y0: y - h / 2, x1: x + 12 + w, y1: y + h / 2 };
-        // boxes that merely touch still read as one name — two neighbouring sites ran together into one
-        // long string on screen — so a label needs clear space around it, not just no overlap
-        const gap = { x0: box.x0 - 10, y0: box.y0 - 3, x1: box.x1 + 10, y1: box.y1 + 3 };
-        if (taken.some((t) => !ownMark(t) && gap.x0 < t.x1 && gap.x1 > t.x0 && gap.y0 < t.y1 && gap.y1 > t.y0)) return;
-        taken.push(box);
+      /* the decision is `placeLabels` in model/camera.ts, asked with the canvas's own text
+         measurement; what is left here is the painting of what it chose */
+      const measure = (t: string, dc: boolean) => {
+        ctx.font = dc ? `600 12px ${font}` : `500 11px ${mono}`;
+        return ctx.measureText(t).width;
+      };
+      const chosen = placeLabels(
+        [...labelled].sort((a, b) => Number(b.dc) - Number(a.dc))
+          .map((s) => ({ x: sx(s.lon), y: sy(s.lat), name: s.label ?? s.name, code: s.code, dc: s.dc })),
+        taken, measure,
+      );
+      taken.length = 0; taken.push(...chosen.taken);
+      for (const l of chosen.placed) {
+        ctx.font = l.dc ? `600 12px ${font}` : `500 11px ${mono}`;
         // every label uses the main ink: the subdued one is the same colour as the dotted continents,
         // so a site name written in it disappears into the map. Rank is carried by weight, not by colour.
         ctx.lineWidth = 3.5; ctx.strokeStyle = withAlpha(P.halo, 0.95); ctx.fillStyle = P.ink;
-        ctx.strokeText(text, x + 10, y); ctx.fillText(text, x + 10, y);
-      });
+        ctx.strokeText(l.text, l.x + 10, l.y); ctx.fillText(l.text, l.x + 10, l.y);
+      }
       if (RG?.length) drawRegions(RG.filter((rg) => rg.sites === 1));
     };
     raf = requestAnimationFrame(draw);
