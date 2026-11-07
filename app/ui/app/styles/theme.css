@@ -128,6 +128,12 @@
   /* How strongly a region's shape is drawn: the border of one that holds sites, the border of one
      that holds none, and the two washes under them. A shape is context, so it is kept recessive —
      but "recessive" is a different number on each stage, which is why these are tokens. */
+  /* The ground the platform's map is drawn on. Its land is `background-container-neutral-default`,
+     and on the light stage that token and the shell are the same #f4f4f6 — so the land was painted
+     in the colour of the sea and the map read as a bare wireframe, which is what "it doesn't look
+     like the Dynatrace map" was describing. In the product the map sits on a surface; here it gets
+     one too. The dark stage already separates the two and keeps what it had. */
+  --lm-map-ground: var(--lm-bg);
   --lm-shape-ink: var(--dt-colors-text-neutral-default, #e2e8f0);
   --lm-shape-line: 0.38;
   --lm-shape-line-empty: 0.16;
@@ -211,6 +217,7 @@
      black at 0.9 (#262626, 13.4:1) and an empty one at 0.5 (#797979, 4.2:1), and both are drawn
      a little thicker: at 0.7px a line lands inside one device pixel and the GPU returns it as a
      smear, which is the other half of what "washed out" was describing. */
+  --lm-map-ground: var(--dt-colors-background-surface-default, #ffffff);
   --lm-shape-ink: #000000;
   --lm-shape-line: 0.9;
   --lm-shape-line-empty: 0.5;
@@ -278,7 +285,7 @@
    so the GPU paints no text: every name on this map is an HTML marker, haloed against whatever
    is under it and hidden by the collision pass in `LiveMapGeo` when it would sit on another. */
 /* the stage's own rules give `.lm-map` its height; this only has to not fight them */
-.lm-geo { overflow: hidden; }
+.lm-geo { overflow: hidden; background: var(--lm-map-ground); }
 .lm-geo .maplibregl-canvas { outline: none; }
 .lmg-lbl { display: inline-block; white-space: nowrap; pointer-events: none;
   font: 500 11px/1.2 var(--lm-label); color: var(--lm-ink);

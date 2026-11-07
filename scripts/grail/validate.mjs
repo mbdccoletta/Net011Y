@@ -1470,6 +1470,16 @@ check("The world keeps the platform's own weight; only the subdivisions carry th
     && geoSrc.includes('id="nf-regions-line"') && /shape\.(line|fill|width)/.test(geoPaint),
   `layer of ours over the basemap: ${geoSrc.includes("nf-world-line")} · subdivisions from the theme: ${/shape\.(line|fill|width)/.test(geoPaint)}`);
 
+// The platform's map paints its land in `background-container-neutral-default`, and on the light
+// stage that token and the shell are the same #f4f4f6 — land in the colour of the sea, which is a
+// wireframe and not a map. It gets the surface to stand on, as it does everywhere else in the
+// product. Measured in the running app: with the ground white the land reads as land.
+check("The platform's map stands on a surface, not on the shell it would vanish into",
+  /--lm-map-ground:\s*var\(--dt-colors-background-surface-default/.test(lightBlock)
+    && /--lm-map-ground:\s*var\(--lm-bg\)/.test(darkBlock)
+    && /\.lm-geo \{[^}]*background: var\(--lm-map-ground\)/.test(themeSrc),
+  `light ground: surface · dark ground: the stage it already separated from`);
+
 // Black on the light stage, asked for after three rounds of raising the alpha of a near-navy ink.
 check("The light stage draws the shape in black",
   /--lm-shape-ink:\s*#000000/.test(lightBlock) && alphaIn(lightBlock, "shape-line") >= 0.85,
