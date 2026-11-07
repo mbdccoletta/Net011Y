@@ -262,7 +262,7 @@ function overlay(map: { getMap(): { getContainer(): HTMLElement } }): Within {
   const cr = root.getBoundingClientRect();
   const stage: PxBox = { x0: 0, y0: 0, x1: cr.width, y1: cr.height };
   const blockers: PxBox[] = [];
-  for (const el of root.closest(".lm-stage")?.querySelectorAll(".lm-panel, .lm-zoom") ?? []) {
+  for (const el of root.closest(".lm-stage")?.querySelectorAll(".lm-panel, .lm-zoom, .lm-tab") ?? []) {
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height) continue;
     const b = { x0: r.left - cr.left, y0: r.top - cr.top, x1: r.right - cr.left, y1: r.bottom - cr.top };
@@ -272,7 +272,13 @@ function overlay(map: { getMap(): { getContainer(): HTMLElement } }): Within {
   return { stage, blockers };
 }
 
-function Labels({ labels }: { labels: Label[] }) {
+/*
+ * `pad` is not read here — the rectangles are measured from the elements, which is the honest
+ * source. It is a prop so that opening or closing a panel re-runs the two passes: the obstacles
+ * changed while the camera stood still, and both passes otherwise only run on `moveend`, so the
+ * names under a panel that was just closed would stay hidden until the reader nudged the map.
+ */
+function Labels({ labels, pad }: { labels: Label[]; pad: Insets }) {
   const { current: map } = useMap();
   const els = useRef(new Map<string, HTMLElement>());
   /**
@@ -305,7 +311,7 @@ function Labels({ labels }: { labels: Label[] }) {
     const rank = (l: Label) => (l.picked ? 0 : l.dc ? 1 : l.bad ? 2 : l.kind === "region" ? 3 : 4);
     const next = inView.sort((x, y) => rank(x) - rank(y) || (y.rank ?? 0) - (x.rank ?? 0)).slice(0, LABEL_BUDGET);
     setShown((prev) => (prev.length === next.length && prev.every((p, i) => p.key === next[i].key) ? prev : next));
-  }, [map, labels]);
+  }, [map, labels, pad]);
 
   const lay = useCallback(() => {
     if (!map) return;
@@ -347,7 +353,7 @@ function Labels({ labels }: { labels: Label[] }) {
       el.style.visibility = hit ? "hidden" : "visible";
       if (!hit) taken.push({ x0: x, y0: y, x1: x + w, y1: y + h });
     }
-  }, [map, shown]);
+  }, [map, shown, pad]);
 
   /* which names exist, recomputed where the camera stops */
   useEffect(() => {
@@ -1014,7 +1020,7 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
           <DotLayer<Dot & { of: number }> key={key} data={clustered.filter(keep)}
             shape={shape} shapeSize={size} color={(d) => colour[d.verdict]} />
         ))}
-        <Labels labels={labels} />
+        <Labels labels={labels} pad={insets} />
       </MapView>
       {/* The three buttons the canvas drew itself, in the place it drew them.
           `MapView.Toolbar` is the platform's own and it is what a chart carries, but on a

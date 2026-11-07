@@ -704,7 +704,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
       const wrapEl = wrap.current, cr = wrapEl?.getBoundingClientRect();
       const within: Within | undefined = wrapEl && cr ? {
         stage: { x0: 0, y0: 0, x1: cr.width, y1: cr.height },
-        blockers: [...(wrapEl.closest(".lm-stage")?.querySelectorAll(".lm-panel, .lm-zoom") ?? [])]
+        blockers: [...(wrapEl.closest(".lm-stage")?.querySelectorAll(".lm-panel, .lm-zoom, .lm-tab") ?? [])]
           .map((el) => el.getBoundingClientRect())
           .filter((r) => r.width && r.height && r.right > cr.left && r.left < cr.right && r.bottom > cr.top && r.top < cr.bottom)
           .map((r): PxBox => ({ x0: r.left - cr.left, y0: r.top - cr.top, x1: r.right - cr.left, y1: r.bottom - cr.top })),

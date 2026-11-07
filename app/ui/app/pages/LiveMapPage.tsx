@@ -18,6 +18,7 @@ import { causeQuestions, isolationQuestions, networkQuestions } from "../utils/p
 import { AssistPanel } from "../components/AssistPanel";
 import { appNetExpressions, demandExpression, useAnomaly } from "../hooks/useAnomaly";
 import { DataNeeds } from "../components/DataNeeds";
+import { ChevronLeftDoubleIcon, ChevronRightDoubleIcon } from "@dynatrace/strato-icons";
 import { PageEmpty } from "../components/PageEmpty";
 import { Skeleton, SkeletonText } from "@dynatrace/strato-components/content";
 import { SuspicionStrip } from "../components/Suspicion";
@@ -382,9 +383,29 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
     return () => ro.disconnect();
   }, []);
 
+  /**
+   * The two cards can be put away, and the map keeps what they were covering.
+   *
+   * On a wide stage they float over the map, so whatever sits under them cannot be dragged into
+   * view: the pointer lands on the card, not on the map, and the regions behind the right-hand
+   * panel were out of reach altogether. Putting a card away reveals the map underneath it exactly
+   * where it was — the camera deliberately does not move, because the ask is to see what the card
+   * was covering, and re-framing the estate would shift everything else to answer it.
+   *
+   * Only on the wide stage: on a narrow one the cards sit beside the map and cover nothing, and a
+   * card left shut on the way down would have no handle to come back by.
+   *
+   * They are hidden, not unmounted. The assist panel holds answers the reader asked for, and a
+   * card that forgets them when it is put away is a card nobody puts away twice.
+   */
+  const [shut, setShut] = useState({ left: false, right: false });
+  const hid = { left: wide && shut.left, right: wide && shut.right };
+
   const insets = useMemo<Insets>(
-    () => (wide ? { top: 24, left: 336, right: 376, bottom: 28 } : { top: 16, left: 16, right: 16, bottom: 16 }),
-    [wide],
+    () => (wide
+      ? { top: 24, left: shut.left ? 60 : 370, right: shut.right ? 60 : 410, bottom: 28 }
+      : { top: 16, left: 16, right: 16, bottom: 16 }),
+    [wide, shut.left, shut.right],
   );
 
   const dropPct = useDropThreshold();
@@ -560,6 +581,11 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
               if (!codes?.size) return;
               chooseTab("sites");
               setGroup({ id: `state:${r.code}`, codes });
+              /* A click on the map writes its answer in the list. With the list put away that
+                 click does nothing a reader can see, so it brings the card back: the card was
+                 shut to look at the map, and this is the moment the map was done being looked
+                 at. */
+              setShut((v) => (v.left ? { ...v, left: false } : v));
             }} />
         ) : (
           // no coordinates: the steps live in Settings › Data, so this points there instead of repeating them
@@ -572,7 +598,16 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
           </div>
         )}
 
-        <aside className="lm-panel lm-left" aria-label={leftTab === "sites" ? "Sites" : "Probable causes"}>
+        {wide && (
+          <button type="button" className={`lm-tab lm-tab--left${hid.left ? " is-shut" : ""}`}
+            onClick={() => setShut((v) => ({ ...v, left: !v.left }))} aria-expanded={!hid.left}
+            title={hid.left ? "Bring back the list" : "Put the list away"}
+            aria-label={hid.left ? "Bring back the list panel" : "Put the list panel away"}>
+            {hid.left ? <ChevronRightDoubleIcon /> : <ChevronLeftDoubleIcon />}
+          </button>
+        )}
+        <aside className={`lm-panel lm-left${hid.left ? " is-shut" : ""}`} aria-hidden={hid.left || undefined}
+          aria-label={leftTab === "sites" ? "Sites" : "Probable causes"}>
           <span className="vz-seg lm-lefttabs" role="group" aria-label="List">
             <button type="button" className={leftTab === "causes" ? "is-on" : ""} aria-pressed={leftTab === "causes"} onClick={() => chooseTab("causes")}>Causes</button>
             <button type="button" className={leftTab === "sites" ? "is-on" : ""} aria-pressed={leftTab === "sites"} onClick={() => chooseTab("sites")}>Sites</button>
@@ -660,7 +695,16 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
           </>)}
         </aside>
 
-        <aside className="lm-panel lm-right" aria-label={cause ? cause.title : "Whole network"}>
+        {wide && (
+          <button type="button" className={`lm-tab lm-tab--right${hid.right ? " is-shut" : ""}`}
+            onClick={() => setShut((v) => ({ ...v, right: !v.right }))} aria-expanded={!hid.right}
+            title={hid.right ? "Bring back the detail" : "Put the detail away"}
+            aria-label={hid.right ? "Bring back the detail panel" : "Put the detail panel away"}>
+            {hid.right ? <ChevronLeftDoubleIcon /> : <ChevronRightDoubleIcon />}
+          </button>
+        )}
+        <aside className={`lm-panel lm-right${hid.right ? " is-shut" : ""}`} aria-hidden={hid.right || undefined}
+          aria-label={cause ? cause.title : "Whole network"}>
           {cause ? (
             <>
               <h2 className="lm-title lm-title--wrap" title={causeMeta(cause)}>

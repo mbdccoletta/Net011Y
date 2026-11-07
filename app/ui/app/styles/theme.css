@@ -464,9 +464,38 @@
 }
 .lm-stage.is-wide { display: block; height: 100%; min-height: 320px; padding: 0; }
 .lm-stage.is-wide .lm-map { position: absolute; inset: 0; height: auto; }
-.lm-stage.is-wide .lm-panel { position: absolute; margin: 0; z-index: 2; background: var(--lm-tint); }
-.lm-stage.is-wide .lm-left { top: 16px; left: 16px; width: 304px; max-height: calc(100% - 44px); overflow-y: auto; }
-.lm-stage.is-wide .lm-right { top: 16px; right: 16px; width: 344px; max-height: calc(100% - 44px); overflow-y: auto; }
+/* border-box, so the declared width IS the width on screen. It was not: the card declared 304
+   and measured 338, because the 16px of padding and the hairline sit outside a content box,
+   and anything positioned from that number landed under the card instead of beside it. The
+   content width is unchanged — 338 minus the 34 it always spent — so nothing moves but the
+   arithmetic. */
+.lm-stage.is-wide .lm-panel { position: absolute; margin: 0; z-index: 2; background: var(--lm-tint); box-sizing: border-box; }
+.lm-stage.is-wide .lm-left { top: 16px; left: 16px; width: 338px; max-height: calc(100% - 44px); overflow-y: auto; }
+.lm-stage.is-wide .lm-right { top: 16px; right: 16px; width: 378px; max-height: calc(100% - 44px); overflow-y: auto; }
+/* The handle that puts a card away and brings it back.
+   It is a sibling of the card, not a child of it: the cards scroll inside themselves and would
+   clip a control hanging on their inner edge. Hairline and the card's own surface, so it reads as
+   belonging to the card rather than as one more control of the map. */
+.lm-tab { display: none; }
+.lm-stage.is-wide .lm-tab { display: grid; place-items: center; position: absolute; top: 24px; z-index: 3;
+  width: 28px; height: 28px; padding: 0; border: 1px solid var(--lm-line); border-radius: 8px;
+  background: var(--lm-tint); color: var(--lm-ink); cursor: pointer;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+/* In the light theme the card surface and the map ground are both #ffffff, so the fill says
+   nothing and the hairline alone reads at 1.38:1 — the very complaint the map's own lines drew
+   four times. The glyph is what carries the control: full ink, 13:1 on the ground, with the
+   stronger of the two neutral lines around it. Still a hairline, never an accent fill. */
+.lm-stage.is-wide .lm-tab { border-color: var(--lm-line-2); }
+.lm-stage.is-wide .lm-tab:hover { border-color: var(--lm-ink-3); }
+.lm-stage.is-wide .lm-tab:focus-visible { outline: 2px solid var(--lm-accent); outline-offset: 2px; }
+.lm-stage.is-wide .lm-tab svg { width: 14px; height: 14px; }
+/* 16 of margin + the card + 8 of air, on each side */
+.lm-stage.is-wide .lm-tab--left { left: 362px; }
+.lm-stage.is-wide .lm-tab--right { right: 402px; }
+.lm-stage.is-wide .lm-tab--left.is-shut { left: 16px; }
+.lm-stage.is-wide .lm-tab--right.is-shut { right: 16px; }
+/* hidden, never unmounted: the assist panel holds answers the reader asked for */
+.lm-panel.is-shut { display: none; }
 @media (max-width: 520px) {
   .lm-legend { margin-left: 0; }
 }

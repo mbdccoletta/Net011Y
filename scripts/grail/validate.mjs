@@ -1457,11 +1457,66 @@ check("A panel over a site is never forgiven the way the site's own mark is",
 const geoLblSrc = readFileSync(new URL("../../app/ui/app/components/LiveMapGeo.tsx", import.meta.url).pathname, "utf8");
 check("Both maps hand the placement the stage and the cards that float over it",
   geoLblSrc.includes("labelFits(") && geoLblSrc.includes("function overlay(")
-  && geoLblSrc.includes('querySelectorAll(".lm-panel, .lm-zoom")')
+  && geoLblSrc.includes('querySelectorAll(".lm-panel, .lm-zoom, .lm-tab")')
   && geoLblSrc.includes("over.blockers.some")
   && readFileSync(new URL("../../app/ui/app/components/LiveMap.tsx", import.meta.url).pathname, "utf8")
-    .includes('querySelectorAll(".lm-panel, .lm-zoom")'),
+    .includes('querySelectorAll(".lm-panel, .lm-zoom, .lm-tab")'),
   `regions map asks the rule: ${geoLblSrc.includes("labelFits(")} · budget skips covered sites: ${geoLblSrc.includes("over.blockers.some")}`);
+
+/*
+ * The cards can be put away, and the handle stays on the card's edge when they move.
+ *
+ * On a wide stage the two cards float over the map, so whatever sits under them cannot be dragged
+ * into view — the pointer lands on the card. The regions behind the right-hand panel were out of
+ * reach altogether. The handle is a sibling of the card, because a card scrolls inside itself and
+ * would clip a control hanging on its own inner edge; which means its position is arithmetic on
+ * the card's, and the two can drift apart silently. So the suite does the arithmetic.
+ */
+const tabCss = readFileSync(new URL("../../app/ui/app/styles/theme.css", import.meta.url).pathname, "utf8");
+const tabPage = readFileSync(new URL("../../app/ui/app/pages/LiveMapPage.tsx", import.meta.url).pathname, "utf8");
+const px = (re) => { const m = tabCss.match(re); return m ? Number(m[1]) : NaN; };
+const leftAt = px(/\.lm-stage\.is-wide \.lm-left \{ top: \d+px; left: (\d+)px;/);
+const leftW = px(/\.lm-stage\.is-wide \.lm-left \{ top: \d+px; left: \d+px; width: (\d+)px;/);
+const rightAt = px(/\.lm-stage\.is-wide \.lm-right \{ top: \d+px; right: (\d+)px;/);
+const rightW = px(/\.lm-stage\.is-wide \.lm-right \{ top: \d+px; right: \d+px; width: (\d+)px;/);
+const tabL = px(/\.lm-stage\.is-wide \.lm-tab--left \{ left: (\d+)px; \}/);
+const tabR = px(/\.lm-stage\.is-wide \.lm-tab--right \{ right: (\d+)px; \}/);
+const sits = (tab, at, w) => tab >= at + w && tab <= at + w + 16;
+/* The first version of this check passed while the handle sat UNDER the card, because it read the
+   declared width — 304 — and the card measured 338: the padding and the hairline live outside a
+   content box. A check that restates a declaration proves nothing about the layout. So the panels
+   are border-box, which makes the declared number the number on screen, and the check requires it. */
+check("Each card's handle sits on the card's own edge, at either width",
+  /\.lm-stage\.is-wide \.lm-panel \{[^}]*box-sizing: border-box;/.test(tabCss)
+  && sits(tabL, leftAt, leftW) && sits(tabR, rightAt, rightW)
+  && /\.lm-tab--left\.is-shut \{ left: 16px; \}/.test(tabCss) && /\.lm-tab--right\.is-shut \{ right: 16px; \}/.test(tabCss),
+  `left card ends at ${leftAt + leftW} and its handle is at ${tabL} · right card ends at ${rightAt + rightW} and its handle is at ${tabR} · border-box: ${/box-sizing: border-box/.test(tabCss)}`);
+
+/* And the handle has to be visible on the map it floats over. In the light theme the card surface
+   and the map ground are both #ffffff, so neither the fill nor a plain hairline says anything —
+   the fill reads 1.00:1 and the hairline 1.68:1. What carries the control is the glyph, measured
+   at 13.0:1 on the light ground and 14.9:1 on the dark one, so the glyph wears full ink. A later
+   edit that quietens it back down to the muted ink would leave a chip nobody can see. */
+check("The handle is carried by its glyph, which is full ink rather than the muted one",
+  /\.lm-stage\.is-wide \.lm-tab \{[^}]*color: var\(--lm-ink\);/.test(tabCss)
+  && !/\.lm-stage\.is-wide \.lm-tab \{[^}]*color: var\(--lm-ink-3\);/.test(tabCss)
+  && /\.lm-stage\.is-wide \.lm-tab \{ border-color: var\(--lm-line-2\); \}/.test(tabCss),
+  `glyph in full ink: ${/\.lm-stage\.is-wide \.lm-tab \{[^}]*color: var\(--lm-ink\);/.test(tabCss)} · hairline is the stronger neutral: ${/border-color: var\(--lm-line-2\)/.test(tabCss)}`);
+
+// A card is hidden, never unmounted: the assist panel holds answers the reader asked for, and a
+// card that forgets them when it is put away is a card nobody puts away twice. And the map must
+// be told the band it has, or the camera keeps padding for a card that is no longer there.
+/* The inset is the band the camera keeps clear, so it has to be the card's real extent — margin,
+   card, margin — not a number typed next to it. Read from the CSS and compared, because the two
+   were already 18px apart before this: the inset said 336 while the card reached 354. */
+const insetL = Number(tabPage.match(/shut\.left \? 60 : (\d+)/)?.[1]);
+const insetR = Number(tabPage.match(/shut\.right \? 60 : (\d+)/)?.[1]);
+check("A card put away is hidden, not unmounted, and the map is told the band it got back",
+  /\.lm-panel\.is-shut \{ display: none; \}/.test(tabCss)
+  && !/\{\s*!?(shut|hid)\.(left|right)\s*&&\s*<aside/.test(tabPage)
+  && insetL === leftAt + leftW + 16 && insetR === rightAt + rightW + 16
+  && tabPage.includes("const hid = { left: wide && shut.left, right: wide && shut.right }"),
+  `hidden by CSS: ${/\.lm-panel\.is-shut \{ display: none; \}/.test(tabCss)} · the left card reaches ${leftAt + leftW} and the inset keeps ${insetL} · the right card reaches ${rightAt + rightW} and the inset keeps ${insetR} · only ever shut on the wide stage: ${tabPage.includes("wide && shut.left")}`);
 
 // And the marks really are handed to it: the canvas seeds `taken` with what it drew.
 const mapSrc = readFileSync(new URL("../../app/ui/app/components/LiveMap.tsx", import.meta.url).pathname, "utf8");
