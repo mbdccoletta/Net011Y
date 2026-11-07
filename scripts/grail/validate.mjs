@@ -1518,6 +1518,26 @@ check("A card put away is hidden, not unmounted, and the map is told the band it
   && tabPage.includes("const hid = { left: wide && shut.left, right: wide && shut.right }"),
   `hidden by CSS: ${/\.lm-panel\.is-shut \{ display: none; \}/.test(tabCss)} · the left card reaches ${leftAt + leftW} and the inset keeps ${insetL} · the right card reaches ${rightAt + rightW} and the inset keeps ${insetR} · only ever shut on the wide stage: ${tabPage.includes("wide && shut.left")}`);
 
+/*
+ * The reader's zoom is the reader's.
+ *
+ * Three limits lived in our own code and all three were reported as "it will not zoom out any
+ * further": the canvas clamped the wheel to [1.2, 400], where 1.2 puts the whole world in 432px
+ * and stops; the regions map inherited whatever maplibre's default happened to be; and opening a
+ * cluster flew to at most zoom 11, so a reader pulling a dense group apart was stopped half way.
+ * A frame the app chooses for itself — `fitView`, `fitBounds` — may still have a range; a gesture
+ * the reader makes may not.
+ */
+const zoomCanvas = readFileSync(new URL("../../app/ui/app/components/LiveMap.tsx", import.meta.url).pathname, "utf8");
+const zoomGeo = readFileSync(new URL("../../app/ui/app/components/LiveMapGeo.tsx", import.meta.url).pathname, "utf8");
+const clamp = zoomCanvas.match(/const k = Math\.max\(([\d.]+), Math\.min\(([\d.]+), v\.k \* f\)\);/);
+const lo = clamp ? Number(clamp[1]) : NaN, hi = clamp ? Number(clamp[2]) : NaN;
+check("The reader's own zoom is not limited by us, on either map",
+  lo < 1.2 && hi > 400
+  && /m\.setMinZoom\(-2\);/.test(zoomGeo) && /m\.setMaxZoom\(24\);/.test(zoomGeo)
+  && !/maxZoom: \d+, duration/.test(zoomGeo),
+  `canvas wheel range ${lo} to ${hi} (was 1.2 to 400) · regions map states its own: ${/setMinZoom\(-2\)/.test(zoomGeo)} · a cluster opens without a ceiling: ${!/maxZoom: \d+, duration/.test(zoomGeo)}`);
+
 // And the marks really are handed to it: the canvas seeds `taken` with what it drew.
 const mapSrc = readFileSync(new URL("../../app/ui/app/components/LiveMap.tsx", import.meta.url).pathname, "utf8");
 check("The canvas reserves every mark it draws and hands them to the rule",

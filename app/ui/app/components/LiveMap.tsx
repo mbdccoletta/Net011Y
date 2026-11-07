@@ -774,7 +774,12 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
     const { w, h } = size.current, v = view.current, ins = props.current.insets;
     const ox = ins.left + (w - ins.left - ins.right) / 2, oy = ins.top + (h - ins.top - ins.bottom) / 2;
     const x = px ?? ox, y = py ?? oy;
-    const k = Math.max(1.2, Math.min(400, v.k * f));
+    /* The reader's own zoom is not clamped to what the opening fit thought was sensible. It was
+       [1.2, 400] — 1.2 puts the whole world in 432px and stops, which is the floor a reader hits
+       and reports as "it will not zoom out any further". The floor left here only keeps the
+       projection from collapsing, and the ceiling is past street level. `fitView` keeps its own
+       narrower range, because that one is a frame the app chooses, not a limit on the reader. */
+    const k = Math.max(0.05, Math.min(20000, v.k * f));
     const lon = v.cx + (x - ox) / v.k, yy = v.cy + (y - oy) / v.k;
     view.current = { cx: lon - (x - ox) / k, cy: yy - (y - oy) / k, k };
     tween.current = null;

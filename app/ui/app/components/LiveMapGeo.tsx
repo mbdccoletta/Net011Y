@@ -505,6 +505,17 @@ function Motion({ routes, hit: hitRegions, all, focus, focusKey, refit, colour, 
    * focus only once the count has stood still for a moment, and then only when the reader
    * changes it. The flight is the platform's own ease over the canvas's own frame.
    */
+  /* The reader's zoom is not limited by us. maplibre's own range is the widest there is — it
+     refuses a minimum below -2 and a maximum above 24 — and it is stated here rather than
+     inherited, so a default that narrows in a later version cannot quietly put a floor back
+     under a reader who is trying to zoom out. */
+  useEffect(() => {
+    if (!map) return;
+    const m = map.getMap();
+    m.setMinZoom(-2);
+    m.setMaxZoom(24);
+  }, [map]);
+
   const [settled, setSettled] = useState(false);
   const n = sites.length;
   useEffect(() => {
@@ -595,7 +606,7 @@ function Motion({ routes, hit: hitRegions, all, focus, focusKey, refit, colour, 
         /* splitting a cluster is a local move and reads best as one: a short, shallow flight
            that lands on the group rather than a tour of the way there */
         m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
-          { padding: 120, maxZoom: 11, duration: reduce ? 0 : 650, curve: 1.2 });
+          { padding: 120, duration: reduce ? 0 : 650, curve: 1.2 });
         return;
       }
       if (best) { onSite(best.code); return; }
