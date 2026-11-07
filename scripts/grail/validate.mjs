@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES, planWanted, readWanted } from "./out/queries.mjs";
-import { causeSummary, causeSiteCount, regionsShown, fitView, frameFill, FIT_MARGIN, placeLabels as NetMap_placeLabels, networkContext, trafficContext, siteContext, measuredKey, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
+import { causeSummary, causeSiteCount, regionsShown, fitView, frameFill, FIT_MARGIN, placeLabels as NetMap_placeLabels, labelFits as NetMap_labelFits, networkContext, trafficContext, siteContext, measuredKey, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -1406,6 +1406,62 @@ const twoNames = NetMap_placeLabels(
 check("A name is never written across a mark, and a site's own mark is not its obstacle",
   besideIt.placed.length === 0 && insideIt.placed.length === 1 && twoNames.placed.length === 1,
   `beside a ring: ${besideIt.placed.length} written · on its own ring: ${insideIt.placed.length} · two names overlapping: ${twoNames.placed.length} of 2`);
+
+/*
+ * A name nobody can read is not written — and, above all, does not reserve the space.
+ *
+ * The placement pass knew only about the other names. It knew nothing about the edges of the stage
+ * or about the two cards that float over the map, so two things happened at once and only the
+ * first was ever reported: a name beside a site near the edge was written past it and the viewport
+ * cut it mid-word, and a name under a panel was written where nobody could see it while still
+ * taking its slot, so a name that WOULD have been readable was dropped to make room for one that
+ * never appeared. Swept over 75 camera positions on a 230-site estate, 296 of 729 names written
+ * were unreadable, and removing them RAISED the readable count from 433 to 449.
+ */
+const stage300 = { x0: 0, y0: 0, x1: 300, y1: 200 };
+const panelLeft = [{ x0: 0, y0: 0, x1: 200, y1: 200 }];
+/* A name whose box runs past the stage is not written past it. The rule already had a fallback for
+   a name that will not fit — the site's code — and it is the right answer here too: three letters
+   inside the stage beat a name the viewport cuts mid-word. Where not even the code fits, nothing
+   is written. */
+const offEdge = NetMap_placeLabels([{ x: 250, y: 50, name: "A name too long to fit", code: "EDG" }], [],
+  wide, { stage: stage300, blockers: [] });
+const noRoom = NetMap_placeLabels([{ x: 294, y: 50, name: "A name too long to fit", code: "EDG" }], [],
+  wide, { stage: stage300, blockers: [] });
+// the panel covers A's name; B is clear of it, and used to be dropped to make room for A
+const pair = [{ x: 150, y: 50, name: "Under the panel", code: "AAA" }, { x: 205, y: 50, name: "Beside it", code: "BBB" }];
+const unaware = NetMap_placeLabels(pair, [], wide);
+const aware = NetMap_placeLabels(pair, [], wide, { stage: stage300, blockers: panelLeft });
+check("A name that cannot be read is not written, and does not take the space of one that can",
+  offEdge.placed.length === 1 && offEdge.placed[0].text === "EDG" && noRoom.placed.length === 0
+  && unaware.placed.length === 1 && unaware.placed[0].text === "Under the panel"
+  && aware.placed.length === 1 && aware.placed[0].text === "Beside it",
+  `at the stage edge: "${offEdge.placed[0]?.text ?? "none"}" instead of the cut name · with no room at all: ${noRoom.placed.length} written · unaware of the panel: ${unaware.placed.map((l) => l.text).join(", ") || "none"} · aware: ${aware.placed.map((l) => l.text).join(", ") || "none"}`);
+
+// A mark under a site is its own and is forgiven; a panel over a site is not. The distinction is
+// the whole point: a name beside its own dot is the normal case, and a panel covering that dot
+// covers the name just the same.
+const ownMark = NetMap_placeLabels([{ x: 100, y: 50, name: "On its own dot", code: "OWN" }],
+  [{ x0: 0, y0: 0, x1: 200, y1: 100 }], wide);
+const ownPanel = NetMap_placeLabels([{ x: 100, y: 50, name: "On its own dot", code: "OWN" }], [],
+  wide, { stage: stage300, blockers: [{ x0: 0, y0: 0, x1: 200, y1: 100 }] });
+check("A panel over a site is never forgiven the way the site's own mark is",
+  ownMark.placed.length === 1 && ownPanel.placed.length === 0
+  && NetMap_labelFits({ x0: 210, y0: 10, x1: 290, y1: 24 }, { stage: stage300, blockers: panelLeft })
+  && !NetMap_labelFits({ x0: 210, y0: 10, x1: 310, y1: 24 }, { stage: stage300, blockers: [] }),
+  `over its own mark: ${ownMark.placed.length} written · under a panel on the same spot: ${ownPanel.placed.length}`);
+
+// Both maps ask the rule, and they ask it with the panels they actually have. The rectangles are
+// measured from the elements, not derived from the inset column: the cards are shorter than the
+// stage, and a column-wide guess would throw away every name below them.
+const geoLblSrc = readFileSync(new URL("../../app/ui/app/components/LiveMapGeo.tsx", import.meta.url).pathname, "utf8");
+check("Both maps hand the placement the stage and the cards that float over it",
+  geoLblSrc.includes("labelFits(") && geoLblSrc.includes("function overlay(")
+  && geoLblSrc.includes('querySelectorAll(".lm-panel, .lm-zoom")')
+  && geoLblSrc.includes("over.blockers.some")
+  && readFileSync(new URL("../../app/ui/app/components/LiveMap.tsx", import.meta.url).pathname, "utf8")
+    .includes('querySelectorAll(".lm-panel, .lm-zoom")'),
+  `regions map asks the rule: ${geoLblSrc.includes("labelFits(")} · budget skips covered sites: ${geoLblSrc.includes("over.blockers.some")}`);
 
 // And the marks really are handed to it: the canvas seeds `taken` with what it drew.
 const mapSrc = readFileSync(new URL("../../app/ui/app/components/LiveMap.tsx", import.meta.url).pathname, "utf8");

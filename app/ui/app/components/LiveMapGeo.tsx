@@ -29,6 +29,7 @@ import type { Verdict } from "../model/types";
 import { worst } from "../model/verdict";
 import { useTokens } from "../hooks/useToken";
 import { pointInRing, type Insets, type MapLink, type MapRegion, type MapSite } from "./LiveMap";
+import { labelFits, type Box as PxBox, type Within } from "../model/camera";
 
 /** which of two verdicts a cluster should take its lead site from */
 const RANKED: Verdict[] = ["Critical", "Warning", "Healthy", "Not monitored"];
@@ -246,6 +247,31 @@ function Dots({ sites, onDots }: { sites: MapSite[]; onDots: (d: (Dot & { of: nu
   return null;
 }
 
+/**
+ * The map's own box and what floats over it, measured rather than assumed.
+ *
+ * The insets the camera fits against are a column width — 336 on the left, 376 on the right — but
+ * the panels are cards, not columns: the left one ends less than half way down the stage, and the
+ * sites below it have all the room in the world. Guessing with the inset would throw those names
+ * away. So the rectangles come from the elements themselves, and anything that does not actually
+ * lie over the map is dropped, which is also what makes this correct on the narrow layout, where
+ * the panels sit beside the map and block nothing.
+ */
+function overlay(map: { getMap(): { getContainer(): HTMLElement } }): Within {
+  const root = map.getMap().getContainer();
+  const cr = root.getBoundingClientRect();
+  const stage: PxBox = { x0: 0, y0: 0, x1: cr.width, y1: cr.height };
+  const blockers: PxBox[] = [];
+  for (const el of root.closest(".lm-stage")?.querySelectorAll(".lm-panel, .lm-zoom") ?? []) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    const b = { x0: r.left - cr.left, y0: r.top - cr.top, x1: r.right - cr.left, y1: r.bottom - cr.top };
+    if (b.x1 <= 0 || b.x0 >= cr.width || b.y1 <= 0 || b.y0 >= cr.height) continue;
+    blockers.push(b);
+  }
+  return { stage, blockers };
+}
+
 function Labels({ labels }: { labels: Label[] }) {
   const { current: map } = useMap();
   const els = useRef(new Map<string, HTMLElement>());
@@ -267,8 +293,15 @@ function Labels({ labels }: { labels: Label[] }) {
   const pick = useCallback(() => {
     if (!map) return;
     const b = map.getMap().getBounds();
-    const inView = labels.filter((l) => l.lon >= b.getWest() && l.lon <= b.getEast()
-      && l.lat >= b.getSouth() && l.lat <= b.getNorth());
+    const m = map.getMap(), over = overlay(map);
+    const inView = labels.filter((l) => {
+      if (l.lon < b.getWest() || l.lon > b.getEast() || l.lat < b.getSouth() || l.lat > b.getNorth()) return false;
+      /* a site under a panel has nowhere readable to put its name, and the budget is per view:
+         spending a slot on it is how a crowded map ends up writing fewer names than it has room
+         for. The dot stays — it is the name that has nowhere to go. */
+      const p = m.project([l.lon, l.lat]);
+      return !over.blockers.some((k) => p.x >= k.x0 && p.x <= k.x1 && p.y >= k.y0 && p.y <= k.y1);
+    });
     const rank = (l: Label) => (l.picked ? 0 : l.dc ? 1 : l.bad ? 2 : l.kind === "region" ? 3 : 4);
     const next = inView.sort((x, y) => rank(x) - rank(y) || (y.rank ?? 0) - (x.rank ?? 0)).slice(0, LABEL_BUDGET);
     setShown((prev) => (prev.length === next.length && prev.every((p, i) => p.key === next[i].key) ? prev : next));
@@ -277,6 +310,10 @@ function Labels({ labels }: { labels: Label[] }) {
   const lay = useCallback(() => {
     if (!map) return;
     const taken: { x0: number; y0: number; x1: number; y1: number }[] = [];
+    /* the stage edges and the floating panels, which the pass never knew about: a name was
+       written past the right edge and the viewport cut it mid-word, and a name under a panel
+       was invisible yet still reserved its space, dropping a name that could have been read */
+    const over = overlay(map);
     /* the order is the canvas's: a region with more than one site is named first, because a
        state's name belongs to the whole shape; then the sites; then the one-site regions,
        where the site's own name says more than "SC · 1" does */
@@ -303,7 +340,10 @@ function Labels({ labels }: { labels: Label[] }) {
       /* boxes that merely touch still read as one name, so a label needs clear space around
          it rather than only no overlap */
       const box = { x0: x - 8, y0: y - 3, x1: x + w + 8, y1: y + h + 3 };
-      const hit = taken.some((t) => box.x0 < t.x1 && box.x1 > t.x0 && box.y0 < t.y1 && box.y1 > t.y0);
+      /* the drawn box is what has to be readable; the padded one is only for keeping two names
+         from running together, and judging the edge by it would drop a name eight pixels clear */
+      const hit = taken.some((t) => box.x0 < t.x1 && box.x1 > t.x0 && box.y0 < t.y1 && box.y1 > t.y0)
+        || !labelFits({ x0: x, y0: y, x1: x + w, y1: y + h }, over);
       el.style.visibility = hit ? "hidden" : "visible";
       if (!hit) taken.push({ x0: x, y0: y, x1: x + w, y1: y + h });
     }

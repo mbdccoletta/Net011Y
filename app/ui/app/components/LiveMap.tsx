@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MaximizeIcon, MinimizeIcon, MinusIcon, PlusIcon, ZoomToFitIcon } from "@dynatrace/strato-icons";
 import type { Verdict } from "../model/types";
-import { fitView, placeLabels, projY } from "../model/camera";
+import { fitView, placeLabels, projY, type Box as PxBox, type Within } from "../model/camera";
 import { LAND_BITS, LAND_COLS, LAND_ROWS, LAND_STEP } from "../data/landMask";
 import { prefersReducedMotion } from "../utils/format";
 import { clusterPoints, worstOf, type Cluster } from "../model/mapClusters";
@@ -697,10 +697,22 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         ctx.font = dc ? `600 12px ${font}` : `500 11px ${mono}`;
         return ctx.measureText(t).width;
       };
+      /* The stage and the cards that float over it. The canvas draws in the wrap's own CSS
+         pixels, so the panels are measured against the wrap and nothing has to be scaled. The
+         cards are shorter than the stage, so this is their real extent, not the inset column —
+         a name below the left card is perfectly readable and used to be thrown away with it. */
+      const wrapEl = wrap.current, cr = wrapEl?.getBoundingClientRect();
+      const within: Within | undefined = wrapEl && cr ? {
+        stage: { x0: 0, y0: 0, x1: cr.width, y1: cr.height },
+        blockers: [...(wrapEl.closest(".lm-stage")?.querySelectorAll(".lm-panel, .lm-zoom") ?? [])]
+          .map((el) => el.getBoundingClientRect())
+          .filter((r) => r.width && r.height && r.right > cr.left && r.left < cr.right && r.bottom > cr.top && r.top < cr.bottom)
+          .map((r): PxBox => ({ x0: r.left - cr.left, y0: r.top - cr.top, x1: r.right - cr.left, y1: r.bottom - cr.top })),
+      } : undefined;
       const chosen = placeLabels(
         [...labelled].sort((a, b) => Number(b.dc) - Number(a.dc))
           .map((s) => ({ x: sx(s.lon), y: sy(s.lat), name: s.label ?? s.name, code: s.code, dc: s.dc })),
-        taken, measure,
+        taken, measure, within,
       );
       taken.length = 0; taken.push(...chosen.taken);
       for (const l of chosen.placed) {

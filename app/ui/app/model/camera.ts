@@ -70,6 +70,7 @@ export function placeLabels(
   candidates: readonly LabelCandidate[],
   marks: readonly Box[],
   measure: (text: string, dc: boolean) => number,
+  within?: Within,
 ): { placed: PlacedLabel[]; taken: Box[] } {
   const boxes: Box[] = [];
   const placed: PlacedLabel[] = [];
@@ -84,17 +85,47 @@ export function placeLabels(
      */
     const own = (t: Box) => t.x0 <= x && x <= t.x1 && t.y0 <= y && y <= t.y1;
     const clear = (b: Box) => !marks.some((m) => !own(m) && hits(b, m)) && !boxes.some((t) => hits(b, t));
+    /* the stage and what floats over it, asked of the box that is actually drawn rather than of
+       the padded one: a name eight pixels from the edge is readable, and dropping it was wrong */
+    const readable = (b: Box) => !within || labelFits(b, within);
     // the name is what a reader is after; the code is the fallback for when the name will not fit
-    const fits = (t: string) => clear({ x0: x + 8 - 10, y0: y - (dc ? 7 : 6) - 3, x1: x + 12 + measure(t, dc) + 10, y1: y + (dc ? 7 : 6) + 3 });
+    const fits = (t: string) => clear({ x0: x + 8 - 10, y0: y - (dc ? 7 : 6) - 3, x1: x + 12 + measure(t, dc) + 10, y1: y + (dc ? 7 : 6) + 3 })
+      && readable({ x0: x + 8, y0: y - (dc ? 7 : 6), x1: x + 12 + measure(t, dc), y1: y + (dc ? 7 : 6) });
     const text = fits(s.name) ? s.name : s.code;
     const w = measure(text, dc), h = dc ? 14 : 12;
     const box = { x0: x + 8, y0: y - h / 2, x1: x + 12 + w, y1: y + h / 2 };
     // boxes that merely touch still read as one name — two neighbouring sites ran together into one
     // long string on screen — so a label needs clear space around it, not just no overlap
     const gap = { x0: box.x0 - 10, y0: box.y0 - 3, x1: box.x1 + 10, y1: box.y1 + 3 };
-    if (!clear(gap)) continue;
+    /* a name that cannot be read is not written — and, just as important, does not reserve the
+       space, so the next name along is still free to take it */
+    if (!clear(gap) || !readable(box)) continue;
     boxes.push(box);
     placed.push({ x, y, text, dc });
   }
   return { placed, taken: [...marks, ...boxes] };
+}
+
+export interface Within {
+  /** the stage a name has to fit inside: the map's own box, in its own pixels */
+  stage: Box;
+  /** what floats over the map — the two panels, the zoom controls */
+  blockers: readonly Box[];
+}
+
+/**
+ * Whether a name can actually be read where it is about to be written.
+ *
+ * Two things were never asked. A name is drawn to the right of its dot and runs on for its own
+ * length, so a site near the edge of the stage had its name written past it and the viewport cut
+ * it mid-word. And the panels float *over* the map: a name under one of them is invisible, yet it
+ * still reserved its space, so a name that would have been readable was dropped to make room for
+ * one nobody can see. That second one is why a crowded map shows fewer names than it could.
+ *
+ * Unlike a mark, a blocker is never forgiven. A mark may be the site's own dot, and a name beside
+ * its own dot is the normal case; a panel covering a site's dot covers its name just the same.
+ */
+export function labelFits(box: Box, { stage, blockers }: Within): boolean {
+  if (box.x0 < stage.x0 || box.x1 > stage.x1 || box.y0 < stage.y0 || box.y1 > stage.y1) return false;
+  return !blockers.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0);
 }
