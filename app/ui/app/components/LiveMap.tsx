@@ -192,6 +192,8 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
   const drag = useRef<{ x: number; y: number; view: View; moved: boolean } | null>(null);
   const size = useRef({ w: 800, h: 600 });
   const dirty = useRef(true);
+  /** whether the last frame drew something that is still moving, and so owes the next one a frame */
+  const moved = useRef(false);
   /** the wheel zooms once the user clicks the map; leaving it at the default zoom releases the page scroll again */
   const armed = useRef(false);
   const [hover, setHover] = useState<{ site: MapSite; x: number; y: number; cluster?: Cluster; region?: MapRegion } | null>(null);
@@ -302,6 +304,11 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         c.width = Math.round(e.contentRect.width * dpr);
         c.height = Math.round(e.contentRect.height * dpr);
       }
+      /* Setting the backing store clears it, so a resize always owes a repaint — and it cannot
+         be left to `fitTo`, which marks the frame dirty but returns early when there is nothing
+         to fit. While the loop repainted unconditionally that gap cost nothing; now it is the
+         difference between a resized map and a blank one. */
+      dirty.current = true;
       fitTo(props.current.focus, false);
     });
     ro.observe(el);
@@ -326,8 +333,24 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         if (t >= 1) tween.current = null;
         dirty.current = true;
       }
-      if (reduce && !dirty.current) return;
+      /*
+       * A still picture is not redrawn sixty times a second.
+       *
+       * The loop repainted every frame for everyone but a reader who asks for reduced motion,
+       * and that was right while every route carried packets: something moved in every frame,
+       * so every frame was a new picture. Now a map at rest draws no routes at all, and the
+       * only things that move are a camera in flight, the packets on a route somebody asked
+       * about, and the pulse on a focused critical cluster. With none of those on screen the
+       * repaint produces a picture identical to the one already there, and costs a full pass
+       * over the estate — the land, the regions, the marks and the name placement — to do it.
+       *
+       * `moved` is set by the three things that animate, during the pass that draws them, so
+       * the next frame knows whether it has anything to say. `dirty` still forces a pass on
+       * every change that is not animation: data, camera, hover, theme, layout.
+       */
+      if (!dirty.current && !moved.current) return;
       dirty.current = false;
+      moved.current = false;
 
       const { sites: S, links: L, focus: F, insets: ins, byCode: B, regions: RG } = props.current;
       const P = palette.current ?? (wrap.current ? (palette.current = readPalette(wrap.current)) : null);
@@ -572,6 +595,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         ctx.lineWidth = (bad ? 1.5 : 1.1) * (vol == null ? 1 : 0.7 + vol * 1.6) * P.stroke * (n > 1 ? 1 + Math.min(2.2, Math.log2(n) * 0.35) : 1);
         ctx.setLineDash(verdict === "Critical" && !reduce ? [4, 4] : []);
         ctx.lineDashOffset = verdict === "Critical" ? -(now / 70) % 8 : 0;
+        if (verdict === "Critical" && !reduce) moved.current = true;
         ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(cxp, cyp, x1, y1); ctx.stroke();
         // packets on the route: towards the data center and back, each stream as many, as fast and as big
         // as that direction carries. Without the interface counters there is one stream, on the volume.
@@ -579,6 +603,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         // still reads as a dead link. Every route carries its packets; the focus shows in how brightly
         // they are drawn (below), not in whether they move at all.
         if (!reduce && vol !== 0) {
+          moved.current = true;
           const phase = hash(id), vv = vol ?? 0.3;
           const split = bpsIn != null || bpsOut != null;
           const share = (v: number | null) => (split ? Math.max(0.12, Math.min(1, (v ?? 0) / Math.max(1, (bpsIn ?? 0) + (bpsOut ?? 0)))) : 1);
@@ -627,6 +652,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         if (cl.x < -40 || cl.y < -40 || cl.x > w + 40 || cl.y > h + 40) return;
         ctx.globalAlpha = cl.focused ? 1 : P.siteDim;
         if (cl.crit && cl.focused && !reduce) {
+          moved.current = true;
           const t = ((now / 1800) + hash(cl.id)) % 1;
           ctx.strokeStyle = COL.Critical; ctx.globalAlpha = 1 - t; ctx.lineWidth = 1.2;
           ctx.beginPath(); ctx.arc(cl.x, cl.y, cl.r + 2 + t * 14, 0, Math.PI * 2); ctx.stroke();
@@ -679,6 +705,7 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
         }
         const bad = vd === "Critical" || vd === "Warning";
         if (bad && focused && !reduce && vd === "Critical") {
+          moved.current = true;
           const t = ((now / 1800) + hash(s.code)) % 1;
           ctx.strokeStyle = color; ctx.globalAlpha = 1 - t; ctx.lineWidth = 1.2;
           ctx.beginPath(); ctx.arc(x, y, 3 + t * 12, 0, Math.PI * 2); ctx.stroke();

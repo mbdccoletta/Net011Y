@@ -833,7 +833,7 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
   const ROUTE_BUDGET = 120;
 
   const routes = useMemo(() => {
-    const by = new Map<string, { id: string; verdict: Verdict; vol: number; path: Pt[]; of: number; asked: boolean }>();
+    const by = new Map<string, { id: string; verdict: Verdict; vol: number; ends: [Pt, Pt]; of: number; asked: boolean }>();
     /* whether anybody asked about this route — the rule is `askedAbout`, in the model, so the
        suite can put the question to it and both maps answer it the same way */
     const isDc = (code: string) => !!byCode.get(code)?.dc;
@@ -878,7 +878,11 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
       }
       /* the ends in a fixed order, so the same pair always bends the same way */
       const [p, q] = a.code < b.code ? [a, b] : [b, a];
-      by.set(key, { id: key, verdict: l.verdict, vol, of: 1, asked: askedHere, path: curve([p.lon, p.lat], [q.lon, q.lat]) });
+      /* the ends, not the curve. Ninety-seven points are built per route, and at most three are
+         drawn: on a four-thousand-link estate this memo was allocating 388,000 points to throw
+         away 387,709 of them, 10.9 ms every time the focus changed. The geometry is built in
+         `shown`, where it is known which routes need it. */
+      by.set(key, { id: key, verdict: l.verdict, vol, of: 1, asked: askedHere, ends: [[p.lon, p.lat], [q.lon, q.lat]] });
     }
     return [...by.values()];
   }, [links, byCode, sites, focus]);
@@ -902,7 +906,10 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
    * the square every line used to end at, and each site mark carries its own status — and the
    * line comes back the moment a cause, a group or a site is picked.
    */
-  const shown = useMemo(() => routesToDraw(routes.filter((r) => r.asked)), [routes]);
+  const shown = useMemo(
+    () => routesToDraw(routes.filter((r) => r.asked)).map((r) => ({ ...r, path: curve(r.ends[0], r.ends[1]) })),
+    [routes],
+  );
 
   /**
    * What the camera has to hold: the focus, the data centres it talks to, and a floor.
