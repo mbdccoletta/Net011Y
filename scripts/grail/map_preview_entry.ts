@@ -7,3 +7,5 @@ export { buildExampleNetwork } from "../../app/ui/app/data/exampleNetwork";
 export { shortSiteName } from "../../app/ui/app/model/site";
 export { allSites } from "../../app/ui/app/model/site";
 export { ensurePlaces, regionOf } from "../../app/ui/app/data/places";
+
+export { askedAbout, crossingDepth } from "../../app/ui/app/model/camera";

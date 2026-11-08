@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MaximizeIcon, MinimizeIcon, MinusIcon, PlusIcon, ZoomToFitIcon } from "@dynatrace/strato-icons";
 import type { Verdict } from "../model/types";
-import { fitView, placeLabels, projY, type Box as PxBox, type Within } from "../model/camera";
+import { askedAbout, fitView, placeLabels, projY, type Box as PxBox, type Within } from "../model/camera";
 import { LAND_BITS, LAND_COLS, LAND_ROWS, LAND_STEP } from "../data/landMask";
 import { prefersReducedMotion } from "../utils/format";
 import { clusterPoints, worstOf, type Cluster } from "../model/mapClusters";
@@ -497,17 +497,24 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
       // routes: one per pair of ends, a group counting as one end; width, packet count and packet speed follow
       // the traffic volume (log scale across routes)
       const RANK: Record<Verdict, number> = { Critical: 3, Warning: 2, Healthy: 1, "Not monitored": 0 };
-      const routes = new Map<string, { id: string; x0: number; y0: number; x1: number; y1: number; verdict: Verdict; focused: boolean; bps: number | null; bpsIn: number | null; bpsOut: number | null; n: number }>();
+      const routes = new Map<string, { id: string; aId: string; bId: string; x0: number; y0: number; x1: number; y1: number; verdict: Verdict; focused: boolean; asked: boolean; bps: number | null; bpsIn: number | null; bpsOut: number | null; n: number }>();
       L.forEach((l) => {
         const a = posOf(l.a), b = posOf(l.b);
         if (!a || !b || a.id === b.id) return;
         const verdict: Verdict = l.verdict;
         const focused = inFocus(l.a) && inFocus(l.b);
+        /* whether anybody asked about it — the rule is `askedAbout`, in the model, so the suite
+           can put the question to it and both maps answer it the same way. It is taken here,
+           where the ends are still site codes: by the time they are cluster ids they are not
+           the things a focus is expressed in. */
+        const asked = askedAbout(F, (code) => !!B.get(code)?.dc, l.a, l.b);
         const key = clusterOf.size ? `${a.id}|${b.id}` : l.id;
         const r = routes.get(key);
-        if (!r) routes.set(key, { id: l.id, x0: a.x, y0: a.y, x1: b.x, y1: b.y, verdict, focused, bps: l.bps ?? null, bpsIn: l.bpsIn ?? null, bpsOut: l.bpsOut ?? null, n: 1 });
+        if (!r) routes.set(key, { id: l.id, aId: a.id, bId: b.id, x0: a.x, y0: a.y, x1: b.x, y1: b.y, verdict, focused, asked, bps: l.bps ?? null, bpsIn: l.bpsIn ?? null, bpsOut: l.bpsOut ?? null, n: 1 });
         else {
           r.n++; r.focused = r.focused || focused;
+          /* a route that stands for a group of links is asked about when any one of them is */
+          r.asked = r.asked || asked;
           if (RANK[verdict] > RANK[r.verdict]) r.verdict = verdict;
           if (l.bps != null) r.bps = (r.bps ?? 0) + l.bps;
           if (l.bpsIn != null) r.bpsIn = (r.bpsIn ?? 0) + l.bpsIn;
@@ -518,7 +525,32 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
       const vols = [...routes.values()].map((r) => r.bps ?? 0).filter((x) => x > 0);
       const vMin = vols.length ? Math.log10(Math.min(...vols)) : 0, vMax = vols.length ? Math.log10(Math.max(...vols)) : 1;
       const volume = (bps: number | null) => (bps == null ? null : bps <= 0 ? 0 : vMax > vMin ? 0.15 + 0.85 * ((Math.log10(bps) - vMin) / (vMax - vMin)) : 1);
-      routes.forEach(({ id, x0, y0, x1, y1, verdict, focused, bps, bpsIn, bpsOut, n }) => {
+      /**
+       * Which routes are drawn, which is almost always none of them.
+       *
+       * A hub-and-spoke estate has one route per site, and they all end at the same few points.
+       * Measured on 230 spokes and two hubs: 230 curves, and at the worst vertical on the screen a
+       * reader had **162** of them to separate. The shape of that estate is not news — everybody
+       * talks to the hub — so drawing it 230 times is ink carrying no information, and it buries
+       * the one path somebody is actually asking about.
+       *
+       * Drawing fewer of them does not fix it, which is the part that took measuring: the bundle
+       * is made by the convergence, not by the count. Only the bad routes is 21 curves and still
+       * 15 deep; one hub opened is 44; bundling them through a spine per sector takes 162 to 128.
+       * All of those fail. Nothing at rest is 0, and one picked path is 1.
+       *
+       * So: a route is drawn when somebody asked about it — a cause or a group is selected and the
+       * route joins two of its ends, or the pointer is on one of its ends. The estate's
+       * connectivity is not lost by this; it moves to the ends, where the hub says how many spokes
+       * it carries and each site mark carries its own status. The fan said neither.
+       */
+      /* The pointer is the second way to ask, and it is this map's alone: the geographic one
+         hit-tests inside its motion layer and has no hovered code to offer here. Hovering a
+         site draws its own path and nothing else — one curve, which is how the estate stays
+         explorable at rest without the fan coming back. */
+      const hoverId = hoverCode.current ? (clusterOf.get(hoverCode.current)?.id ?? hoverCode.current) : null;
+      routes.forEach(({ id, aId, bId, x0, y0, x1, y1, verdict, focused, asked, bps, bpsIn, bpsOut, n }) => {
+        if (!asked && aId !== hoverId && bId !== hoverId) return;
         const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
         const cxp = (x0 + x1) / 2 - (dy / len) * len * 0.18, cyp = (y0 + y1) / 2 + (dx / len) * len * 0.18 - len * 0.08;
         const bad = verdict === "Critical" || verdict === "Warning";

@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES, planWanted, readWanted } from "./out/queries.mjs";
-import { causeSummary, causeSiteCount, regionsShown, fitView, frameFill, FIT_MARGIN, placeLabels as NetMap_placeLabels, labelFits as NetMap_labelFits, networkContext, trafficContext, siteContext, measuredKey, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile } from "./out/app-model.mjs";
+import { causeSummary, causeSiteCount, regionsShown, fitView, frameFill, FIT_MARGIN, placeLabels as NetMap_placeLabels, labelFits as NetMap_labelFits, networkContext, trafficContext, siteContext, measuredKey, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile, askedAbout as NetMap_askedAbout } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -1647,6 +1647,48 @@ check("The plan is made after the commit, and no incremental read starts without
   effect.includes("useEffect(") && effect.includes("planFor(") && hook.split("planFor(").length === 3
     && gate.includes("!QUERIES[name].incremental || asMetric(name) || !!plans[name]"),
   `planFor inside the effect: ${effect.includes("planFor(")} · call sites: ${hook.split("planFor(").length - 1} · gate: ${gate.includes("!!plans[name]")}`);
+
+/*
+ * The routes the map draws, which is almost always none of them.
+ *
+ * A hub-and-spoke estate draws its own topology once per site: 230 spokes on two hubs put 230
+ * curves on screen and left a reader 162 of them to separate at the worst vertical. Drawing
+ * fewer does not fix it — the bundle is made by the convergence, not the count — so the rule is
+ * that a route is drawn when somebody asked about it. These checks ask the rule, and then ask
+ * the drawing, because a rule that answers correctly and a map that still stacks curves are two
+ * different things and only the second one is what a reader meets.
+ */
+const DC = (code) => code.startsWith("DC");
+check("At rest the map draws no routes at all",
+  !NetMap_askedAbout(null, DC, "NC-0", "DC-E") && !NetMap_askedAbout(null, DC, "DC-E", "DC-W"),
+  `nothing picked, a spoke-to-hub route: ${NetMap_askedAbout(null, DC, "NC-0", "DC-E")}`);
+check("A picked site brings back its own route, and only its own",
+  NetMap_askedAbout(new Set(["NC-0"]), DC, "NC-0", "DC-E")
+    && !NetMap_askedAbout(new Set(["NC-0"]), DC, "NC-1", "DC-E")
+    && !NetMap_askedAbout(new Set(["NC-0"]), DC, "NC-0", "NC-2"),
+  `own route: ${NetMap_askedAbout(new Set(["NC-0"]), DC, "NC-0", "DC-E")} · ` +
+  `a neighbour's: ${NetMap_askedAbout(new Set(["NC-0"]), DC, "NC-1", "DC-E")} · ` +
+  `to an unpicked site: ${NetMap_askedAbout(new Set(["NC-0"]), DC, "NC-0", "NC-2")}`);
+
+/* and now the drawing, on the estate the number came from, because only the geometry knows how
+   deep the curves stack: a count of routes says nothing about convergence */
+const arc = await import("./arc_sweep.mjs");
+const est = await arc.estate();
+const was = arc.all(est);
+const rest = arc.drawn(est, null);
+const oneSite = arc.drawn(est, new Set([est.spokes[0].code]));
+const aCause = arc.drawn(est, new Set([est.spokes[0].code, est.spokes[40].code]));
+const regionGeo = arc.drawnGrouped(est, new Set(est.spokes.filter((x) => x.code.startsWith("NC-")).map((x) => x.code)), (c) => c.split("-")[0]);
+check("A reader never has more than three routes to separate, at rest or on one cause",
+  rest.worst === 0 && oneSite.worst <= arc.DEPTH_CEILING && aCause.worst <= arc.DEPTH_CEILING,
+  `at rest ${rest.worst} · one site ${oneSite.worst} · a cause ${aCause.worst} · ceiling ${arc.DEPTH_CEILING}`);
+check("The fan the rule exists to stop is still there to be stopped",
+  was.routes === est.links.length && was.worst > 100,
+  `every link, always: ${was.routes} routes, ${was.worst} deep at the worst vertical — ` +
+  `if this ever falls, the estate changed and the numbers above mean something else`);
+check("A region picked is one route on the geographic map, not one per site",
+  regionGeo.routes === 1 && regionGeo.worst <= arc.DEPTH_CEILING,
+  `grouped by region above 120 links: ${regionGeo.routes} route(s), ${regionGeo.worst} deep`);
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 

@@ -129,3 +129,58 @@ export function labelFits(box: Box, { stage, blockers }: Within): boolean {
   if (box.x0 < stage.x0 || box.x1 > stage.x1 || box.y0 < stage.y0 || box.y1 > stage.y1) return false;
   return !blockers.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0);
 }
+
+/**
+ * Whether anybody asked about a route, which is what decides whether it is drawn.
+ *
+ * A hub-and-spoke estate has one route per site and they all end at the same few points, so
+ * the map used to draw its own topology hundreds of times over. Measured on 230 spokes and two
+ * hubs: 230 curves, and at the worst vertical on the screen a reader had 162 of them to
+ * separate. The shape is not news — everybody talks to the hub — and the ink buried the one
+ * path somebody was asking about.
+ *
+ * Drawing fewer of them does not fix it, which is the part that took measuring: the bundle is
+ * made by the convergence, not by the count. Only the bad routes is 21 curves and still 15
+ * deep; one hub opened is 44; grouping by region takes 162 to 128. Nothing at rest is 0, and
+ * one picked path is 1.
+ *
+ * A data centre always counts as an end the reader has in view, because a WAN link with its
+ * far end excluded is half a picture. With nothing picked, nothing is asked: the estate's
+ * connectivity lives at the ends — the hub mark and each site's own status — until a cause, a
+ * group or a site is picked.
+ */
+export function askedAbout(
+  focus: ReadonlySet<string> | null,
+  isDc: (code: string) => boolean,
+  a: string,
+  b: string,
+): boolean {
+  const inF = (code: string) => !!focus && (focus.has(code) || isDc(code));
+  return inF(a) && inF(b);
+}
+
+/**
+ * How many distinct curves a reader has to separate at the worst place on the map.
+ *
+ * The number the screenshot was really about, and the one a count of routes does not give:
+ * routes that converge stack up near their shared end whatever their number. Every vertical
+ * line across the stage is swept and the curves crossing it are counted; the worst column is
+ * what a reader is up against. Three is the ceiling a line can still be followed at.
+ */
+export function crossingDepth(
+  curves: readonly (readonly (readonly [number, number])[])[],
+  w: number,
+  step = 4,
+): { worst: number; at: number } {
+  let worst = 0, at = 0;
+  for (let x = 0; x < w; x += step) {
+    let hit = 0;
+    for (const p of curves) {
+      for (let i = 1; i < p.length; i++) {
+        if ((p[i - 1][0] - x) * (p[i][0] - x) <= 0) { hit++; break; }
+      }
+    }
+    if (hit > worst) { worst = hit; at = x; }
+  }
+  return { worst, at };
+}

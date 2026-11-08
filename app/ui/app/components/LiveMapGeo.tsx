@@ -29,7 +29,7 @@ import type { Verdict } from "../model/types";
 import { worst } from "../model/verdict";
 import { useTokens } from "../hooks/useToken";
 import { pointInRing, type Insets, type MapLink, type MapRegion, type MapSite } from "./LiveMap";
-import { labelFits, type Box as PxBox, type Within } from "../model/camera";
+import { askedAbout, labelFits, type Box as PxBox, type Within } from "../model/camera";
 
 /** which of two verdicts a cluster should take its lead site from */
 const RANKED: Verdict[] = ["Critical", "Warning", "Healthy", "Not monitored"];
@@ -832,7 +832,10 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
   const ROUTE_BUDGET = 120;
 
   const routes = useMemo(() => {
-    const by = new Map<string, { id: string; verdict: Verdict; vol: number; path: Pt[]; of: number }>();
+    const by = new Map<string, { id: string; verdict: Verdict; vol: number; path: Pt[]; of: number; asked: boolean }>();
+    /* whether anybody asked about this route — the rule is `askedAbout`, in the model, so the
+       suite can put the question to it and both maps answer it the same way */
+    const isDc = (code: string) => !!byCode.get(code)?.dc;
     /* one line per region and data centre, when there are too many to read one per site: the
        region's end is the mean of the sites it stands for, and the line carries the worst of
        their verdicts and the largest volume measured on any of them */
@@ -855,20 +858,44 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
       const vol = Math.max(0, Math.min(1, (l.bps ?? 0) / 2e9));
       const key = [a.code, b.code].sort().join("|");
       const had = by.get(key);
+      const askedHere = askedAbout(focus, isDc, l.a, l.b);
       if (had) {
         /* the pair carries the worse of what was said about it, and the traffic actually
            measured on it, which is the larger of the two readings */
         had.verdict = worst([had.verdict, l.verdict]);
         had.vol = Math.max(had.vol, vol);
         had.of++;
+        /* a grouped route stands for many links: one of them being asked about is enough */
+        had.asked = had.asked || askedHere;
         continue;
       }
       /* the ends in a fixed order, so the same pair always bends the same way */
       const [p, q] = a.code < b.code ? [a, b] : [b, a];
-      by.set(key, { id: key, verdict: l.verdict, vol, of: 1, path: curve([p.lon, p.lat], [q.lon, q.lat]) });
+      by.set(key, { id: key, verdict: l.verdict, vol, of: 1, asked: askedHere, path: curve([p.lon, p.lat], [q.lon, q.lat]) });
     }
     return [...by.values()];
-  }, [links, byCode, sites]);
+  }, [links, byCode, sites, focus]);
+
+  /**
+   * The routes the map actually draws, which is almost always none of them.
+   *
+   * A hub-and-spoke estate has one route per site and they all end at the same few points.
+   * Measured on 230 spokes and two hubs: 230 curves, and at the worst vertical on the screen
+   * a reader had **162** of them to separate. The shape is not news — everybody talks to the
+   * hub — so drawing it 230 times is ink carrying no information, and it buries the one path
+   * somebody is asking about.
+   *
+   * Drawing fewer does not fix it, which is the part that took measuring: the bundle is made
+   * by the convergence, not by the count. Only the bad routes is 21 curves and still 15 deep;
+   * one hub opened is 44; grouping them by region, which this map already does above 120
+   * links, takes 162 to 128. All of those fail a reader. Nothing at rest is 0, and one picked
+   * path is 1.
+   *
+   * The estate's connectivity is not lost by this. It moves to the ends — the data centre is
+   * the square every line used to end at, and each site mark carries its own status — and the
+   * line comes back the moment a cause, a group or a site is picked.
+   */
+  const shown = useMemo(() => routes.filter((r) => r.asked), [routes]);
 
   /**
    * What the camera has to hold: the focus, the data centres it talks to, and a floor.
@@ -924,9 +951,9 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
   type Conn = { path: { longitude: number; latitude: number }[]; verdict: Verdict };
   /* only the quiet links are the platform's: the alerting ones carry the marching ants, and
      that is a layer of ours with a dash stepped per frame */
-  const conns: Conn[] = useMemo(() => routes.filter((r) => r.verdict !== "Critical").map((r) => ({
+  const conns: Conn[] = useMemo(() => shown.filter((r) => r.verdict !== "Critical").map((r) => ({
     path: r.path.map(([longitude, latitude]) => ({ longitude, latitude })), verdict: r.verdict,
-  })), [routes]);
+  })), [shown]);
 
   /* the sites the reader picked, each of which gets a ring */
   const focusPoints = useMemo<Feat[]>(() => {
@@ -938,10 +965,10 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
   }, [focusCodes, sites]);
 
   /* the same paths the platform draws, as plain features, for the glow under them */
-  const routeFeats = useMemo<Feat[]>(() => routes.map((r) => ({
+  const routeFeats = useMemo<Feat[]>(() => shown.map((r) => ({
     type: "Feature" as const, properties: { verdict: r.verdict, vol: r.vol },
     geometry: { type: "LineString" as const, coordinates: r.path },
-  })), [routes]);
+  })), [shown]);
 
   const shapes = useMemo<Feat[]>(() => (regions ?? []).filter((r) => r.rings.length).map((r) => ({
     type: "Feature" as const, properties: { sites: r.sites },
@@ -983,9 +1010,9 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
         {/* thinner as there are more of them: three points is right for a dozen arcs and a
             smear for a hundred, and the line is there to be followed, not to be loud */}
         <ConnectionLayer<Conn> data={conns} curve="linear"
-          thickness={routes.length > 24 ? 1 : routes.length > 8 ? 2 : 3}
+          thickness={shown.length > 24 ? 1 : shown.length > 8 ? 2 : 3}
           color={(c) => colour[c.verdict]} />
-        <Motion routes={routes} hit={regions ?? []} all={all} focus={frame} focusKey={focusKey} refit={refit} colour={colour}
+        <Motion routes={shown} hit={regions ?? []} all={all} focus={frame} focusKey={focusKey} refit={refit} colour={colour}
           sites={sites} onSite={onSite} onRegion={onRegion} pad={insets} />
         {/* the sites, clustered where several land on the same pixel: the clustering is a child
             of the map because it needs the projection, the layers are children of the map
