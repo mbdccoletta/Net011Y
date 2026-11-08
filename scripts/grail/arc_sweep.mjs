@@ -86,7 +86,9 @@ export function drawnGrouped({ sites, dcs, links }, focus, regionOfCode, cap = t
   const isDc = (code) => !!byCode.get(code)?.dc;
   const v = fitView(sites, W, H, INS);
   const sx = (lon) => W / 2 + (lon - v.cx) * v.k, sy = (lat) => H / 2 + (projY(lat) - v.cy) * v.k;
-  const group = links.length > ROUTE_BUDGET;
+  /* counted over what was asked about, not over the estate: one path picked out of the list
+     must be drawn from the site the row names, not from the mean of its region */
+  const group = links.filter((l) => askedAbout(focus, isDc, l.a, l.b)).length > ROUTE_BUDGET;
   const home = new Map();
   if (group) {
     for (const s of sites.filter((x) => !x.dc)) {

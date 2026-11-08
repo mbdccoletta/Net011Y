@@ -1686,9 +1686,26 @@ check("The fan the rule exists to stop is still there to be stopped",
   was.routes === est.links.length && was.worst > 100,
   `every link, always: ${was.routes} routes, ${was.worst} deep at the worst vertical — ` +
   `if this ever falls, the estate changed and the numbers above mean something else`);
-check("A region picked is one route on the geographic map, not one per site",
-  regionGeo.routes === 1 && regionGeo.worst <= arc.DEPTH_CEILING,
-  `grouped by region above 120 links: ${regionGeo.routes} route(s), ${regionGeo.worst} deep`);
+/* The geographic map groups routes by region, but only when there are more than the budget to
+   draw one per site. A region of 23 is under it, so those paths are drawn from the sites they
+   belong to; the whole estate is over it, and then a region stands for its sites. Both stay
+   inside the ceiling — the grouping is about which places the line joins, not about depth. */
+const everyGeo = arc.drawnGrouped(est, new Set(est.spokes.map((x) => x.code)), (c) => c.split("-")[0]);
+check("Routes are grouped by region only when there are too many to draw one per site",
+  regionGeo.asked === 23 && regionGeo.worst <= arc.DEPTH_CEILING
+    && everyGeo.asked === 23 && everyGeo.asked < est.links.length
+    && everyGeo.worst <= arc.DEPTH_CEILING,
+  `a region of 23, under the budget: ${regionGeo.asked} routes from their own sites, ` +
+  `${regionGeo.routes} drawn, ${regionGeo.worst} deep · the whole estate, over it: ` +
+  `${est.links.length} links become ${everyGeo.asked} regional routes, ${everyGeo.routes} drawn, ` +
+  `${everyGeo.worst} deep`);
+/* and one path picked is drawn from the site the row names, not from the mean of its region:
+   the budget counts what was asked about, so below it nothing is grouped at all */
+const onePathGeo = arc.drawnGrouped(est, new Set([est.spokes[0].code]), (c) => c.split("-")[0]);
+check("One path picked is drawn from its own site, not from its region's mean",
+  onePathGeo.routes === 1 && onePathGeo.worst === 1,
+  `one asked about, ${onePathGeo.routes} drawn, ${onePathGeo.worst} deep — the budget counts ` +
+  `the routes asked about, so a single path is never replaced by its region`);
 
 /*
  * And past the cap the curve gives way to a row.

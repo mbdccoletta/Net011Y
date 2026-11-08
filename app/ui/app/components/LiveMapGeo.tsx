@@ -840,7 +840,13 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
     /* one line per region and data centre, when there are too many to read one per site: the
        region's end is the mean of the sites it stands for, and the line carries the worst of
        their verdicts and the largest volume measured on any of them */
-    const group = links.length > ROUTE_BUDGET;
+    /* Counted over the links somebody asked about, not over the estate.
+       The budget is there because four thousand lines converging on five points answers
+       nothing — but it was counting every link on the map, so a reader who picked one path
+       out of the list still got a line drawn from the mean of its region rather than from
+       the site the row names. The row said "Fairview Depot" and the map drew somewhere in
+       North Carolina. What is asked about is what has to be readable. */
+    const group = links.filter((l) => askedAbout(focus, isDc, l.a, l.b)).length > ROUTE_BUDGET;
     const home = new Map<string, { lon: number; lat: number; n: number }>();
     if (group) {
       for (const sIt of sites) {
