@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { hooksAfterReturn } from "./hooks_after_return.mjs";
 import { QUERIES, planWanted, readWanted } from "./out/queries.mjs";
-import { causeSummary, causeSiteCount, regionsShown, fitView, frameFill, FIT_MARGIN, placeLabels as NetMap_placeLabels, labelFits as NetMap_labelFits, networkContext, trafficContext, siteContext, measuredKey, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile, askedAbout as NetMap_askedAbout } from "./out/app-model.mjs";
+import { causeSummary, causeSiteCount, regionsShown, fitView, frameFill, FIT_MARGIN, placeLabels as NetMap_placeLabels, labelFits as NetMap_labelFits, networkContext, trafficContext, siteContext, measuredKey, networkLogShare, buildRealModel, deriveTags, forecastWindow, evaluateNeeds, VIEW_NEEDS, allSites, shortSiteName, addressParts, ensurePlaces, countryOf, regionOf, placesReady, buildCauses, splitCauses, isBad, appVerdict, deviceVerdict, portCounts, portsDown, suspicionFor, outsideCounts, Prompts, INSTRUCTION, INSTRUCTION_LIMIT, appRise, environmentFindings, portUsers, busyPortFindings, pathFindings, pageCoverage, changesOf, clusterPoints, worstOf, CELL, bubbleRadius, mergeRows, logsSearchQuery, buildJourney, asRoutes, nextSteps, coverage, read, fitLine, findStep, jumpOf, aheadSubjects, aheadCensus, aheadContext, silence, STATES, crossedAgo, chanceBy, backtest, clusterChanges, narrow, branchesAt, busyHour, shownCeiling, headroomOf, quantile, askedAbout as NetMap_askedAbout, pathRows as NetMap_pathRows, routesToDraw as NetMap_routesToDraw, DRAW_CAP } from "./out/app-model.mjs";
 
 // The fixtures carry their own moments — a restart two hours ago, an outage that started at 15:34 — and
 // the model only reports what happened in the last day. Left for a day, they age out of every window and
@@ -1689,6 +1689,59 @@ check("The fan the rule exists to stop is still there to be stopped",
 check("A region picked is one route on the geographic map, not one per site",
   regionGeo.routes === 1 && regionGeo.worst <= arc.DEPTH_CEILING,
   `grouped by region above 120 links: ${regionGeo.routes} route(s), ${regionGeo.worst} deep`);
+
+/*
+ * And past the cap the curve gives way to a row.
+ *
+ * `askedAbout` fixed the resting map and a single cause and left two cases over: a region
+ * picked was 23 routes and 22 deep, and every site picked was 230 and 162. Drawing fewer is
+ * not the answer past a point, because the bundle is made by the convergence. So the map draws
+ * at most three, and the rest of the estate's paths are rows — where overlap is impossible,
+ * both ends are written out, and the number is on the row rather than in a tooltip.
+ */
+const mkEnd = (code) => ({ code, label: code, dc: code.startsWith("DC") });
+const pairTwice = [
+  { id: "lldp:a", a: "NC-0", b: "DC-E", verdict: "Healthy", bps: 1e8 },
+  { id: "flow:a", a: "DC-E", b: "NC-0", verdict: "Critical", bps: 4e8 },
+  { id: "wan:b", a: "NC-1", b: "DC-E", verdict: "Warning", bps: 9e8 },
+  { id: "wan:c", a: "NC-2", b: "DC-E", verdict: "Healthy", bps: 2e9 },
+];
+const pathRws = NetMap_pathRows(pairTwice, mkEnd);
+check("A pair reported pairTwice is one path, carrying the worse verdict and both readings",
+  pathRws.length === 3 && pathRws[0].id === "DC-E|NC-0" && pathRws[0].n === 2 && pathRws[0].verdict === "Critical" && pathRws[0].bps === 5e8,
+  `rows ${pathRws.length} · first ${pathRws[0]?.id} standing for ${pathRws[0]?.n} links, ${pathRws[0]?.verdict}, ${pathRws[0]?.bps} bps`);
+check("The paths are ordered worst first, and then by what they carry",
+  pathRws.map((r) => r.verdict).join(",") === "Critical,Warning,Healthy"
+    && new Set(pathRws.map((r) => r.id)).size === pathRws.length
+    && pathRws.every((r) => r.id === [r.a.code, r.b.code].sort().join("|")),
+  `order ${pathRws.map((r) => r.verdict).join(",")} · ids unique and made of their own two ends: ` +
+  `${pathRws.every((r) => r.id === [r.a.code, r.b.code].sort().join("|"))}`);
+
+const capQuiet = Array.from({ length: 20 }, (_, i) => ({ id: `q${i}`, verdict: "Healthy" }));
+const capMixed = [...capQuiet, { id: "c", verdict: "Critical" }, { id: "w1", verdict: "Warning" }, { id: "w2", verdict: "Warning" }, { id: "w3", verdict: "Warning" }];
+check("Under the cap the map draws every route it was asked about",
+  NetMap_routesToDraw(capQuiet.slice(0, DRAW_CAP)).length === DRAW_CAP
+    && NetMap_routesToDraw(capQuiet.slice(0, 1)).length === 1,
+  `three asked: ${NetMap_routesToDraw(capQuiet.slice(0, DRAW_CAP)).length} drawn · one asked: ${NetMap_routesToDraw(capQuiet.slice(0, 1)).length}`);
+check("Over the cap only what is wrong is drawn, worst first, and never more than the cap",
+  NetMap_routesToDraw(capMixed).length === DRAW_CAP && NetMap_routesToDraw(capMixed)[0].id === "c"
+    && NetMap_routesToDraw(capMixed).every((r) => r.verdict !== "Healthy"),
+  `${NetMap_routesToDraw(capMixed).length} drawn of ${capMixed.length} asked, first ${NetMap_routesToDraw(capMixed)[0]?.id}`);
+check("Over the cap with nothing wrong the map draws none of them, and the rows carry it",
+  NetMap_routesToDraw(capQuiet).length === 0,
+  `twenty capQuiet routes asked about: ${NetMap_routesToDraw(capQuiet).length} drawn — ` +
+  `three arbitrary healthy arcs answer nothing and cost the ink that buried the answer`);
+
+/* and the geometry again, now with the cap, on the two cases the rule alone left over */
+const regionSchem = arc.drawn(est, new Set(est.spokes.filter((x) => x.code.startsWith("NC-")).map((x) => x.code)));
+const everySite = arc.drawn(est, new Set(est.spokes.map((x) => x.code)));
+const wasRegion = arc.drawn(est, new Set(est.spokes.filter((x) => x.code.startsWith("NC-")).map((x) => x.code)), false);
+check("A region picked, and the whole estate picked, are inside the ceiling now",
+  regionSchem.worst <= arc.DEPTH_CEILING && everySite.worst <= arc.DEPTH_CEILING
+    && regionSchem.asked === 23 && everySite.asked === est.links.length,
+  `a region: ${regionSchem.asked} asked, ${regionSchem.routes} drawn, ${regionSchem.worst} deep ` +
+  `(${wasRegion.worst} without the cap) · the whole estate: ${everySite.asked} asked, ` +
+  `${everySite.routes} drawn, ${everySite.worst} deep`);
 
 report.summary = { passed: report.checks.filter((c) => c.ok).length, of: report.checks.length };
 

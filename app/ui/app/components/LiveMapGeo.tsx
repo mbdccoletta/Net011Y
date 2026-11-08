@@ -30,6 +30,7 @@ import { worst } from "../model/verdict";
 import { useTokens } from "../hooks/useToken";
 import { pointInRing, type Insets, type MapLink, type MapRegion, type MapSite } from "./LiveMap";
 import { askedAbout, labelFits, type Box as PxBox, type Within } from "../model/camera";
+import { routesToDraw } from "../model/paths";
 
 /** which of two verdicts a cluster should take its lead site from */
 const RANKED: Verdict[] = ["Critical", "Warning", "Healthy", "Not monitored"];
@@ -895,7 +896,7 @@ export function LiveMapGeo({ sites, links, focus, insets, onSite, regions, onReg
    * the square every line used to end at, and each site mark carries its own status — and the
    * line comes back the moment a cause, a group or a site is picked.
    */
-  const shown = useMemo(() => routes.filter((r) => r.asked), [routes]);
+  const shown = useMemo(() => routesToDraw(routes.filter((r) => r.asked)), [routes]);
 
   /**
    * What the camera has to hold: the focus, the data centres it talks to, and a floor.

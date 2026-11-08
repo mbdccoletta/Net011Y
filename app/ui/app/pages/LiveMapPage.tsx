@@ -11,6 +11,8 @@ import { countriesOf, loadCountries, regionAt, type RegionShape } from "../data/
 import { fmtInt, hhmm } from "../utils/format";
 import { logsQuery, openLogs } from "../utils/drilldown";
 import { NativeDrill } from "../components/NativeDrill";
+import { PathList } from "../components/PathList";
+import { pathRows } from "../model/paths";
 import { SiteTree } from "../components/SiteTree";
 import { useSiteHierarchy } from "../hooks/useSiteHierarchy";
 import { causeContext, isolationContext, measuredKey, networkContext } from "../utils/assist";
@@ -48,8 +50,8 @@ interface Props {
   /** Opens Settings › Data, where every item says what to send and links to its documentation */
   onSettings?: (key: NeedKey) => void;
   /** which of the two left lists is open, and how to change it: both live in the URL */
-  list: "causes" | "sites";
-  onList: (list: "causes" | "sites") => void;
+  list: "causes" | "sites" | "paths";
+  onList: (list: "causes" | "sites" | "paths") => void;
   /** the next step to get more from the app in this environment */
   next?: React.ComponentProps<typeof DataNeeds>["next"];
   /** leaves the example data for the environment's own */
@@ -347,7 +349,7 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
   /* Which of the two lists is open is navigation, so it lives in the URL with the rest of it —
      and not in this browser, where it was one reader's copy and could not be sent to anybody. */
   const leftTab = list;
-  const chooseTab = (t: "causes" | "sites") => onList(t);
+  const chooseTab = (t: "causes" | "sites" | "paths") => onList(t);
   const [group, setGroup] = useState<{ id: string; codes: Set<string> } | null>(null);
   /**
    * A default is not a selection, and only a selection moves the map.
@@ -361,7 +363,26 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
    */
   const picked = causeId && causeId !== "all" ? causes.find((c) => c.id === causeId) ?? null : null;
   const causeFocus = useMemo(() => (picked ? new Set(picked.sites.map((s) => s.code)) : null), [picked]);
-  const focus = leftTab === "sites" && group ? group.codes : causeFocus;
+  /**
+   * The WAN paths as rows, and the path the reader picked.
+   *
+   * Past three curves the map cannot say it — twenty-three sites in one region put twenty-two
+   * curves across one vertical — so the paths are a list, and picking one is picking its two
+   * ends. That is why there is no second focus mechanism here: the row id *is* the pair of
+   * codes, so the map's own `askedAbout` draws exactly that one route and nothing else.
+   */
+  const [path, setPath] = useState<string | null>(null);
+  const siteOf = useMemo(() => new Map(mapSites.map((s) => [s.code, s])), [mapSites]);
+  const rows = useMemo(() => pathRows(mapLinks, (code) => {
+    const s = siteOf.get(code);
+    return s ? { code, label: s.label ?? s.name, dc: !!s.dc } : null;
+  }), [mapLinks, siteOf]);
+  const pathFocus = useMemo(() => {
+    if (!path) return null;
+    const row = rows.find((r) => r.id === path);
+    return row ? new Set([row.a.code, row.b.code]) : null;
+  }, [path, rows]);
+  const focus = leftTab === "paths" ? pathFocus : leftTab === "sites" && group ? group.codes : causeFocus;
 
   // responsive insets: panels float over the map only on wide stages
   const stage = useRef<HTMLDivElement>(null);
@@ -607,12 +628,15 @@ const NO_COORDS = "No site in this environment has coordinates. Geographic and R
           </button>
         )}
         <aside className={`lm-panel lm-left${hid.left ? " is-shut" : ""}`} aria-hidden={hid.left || undefined}
-          aria-label={leftTab === "sites" ? "Sites" : "Probable causes"}>
+          aria-label={leftTab === "paths" ? "WAN paths" : leftTab === "sites" ? "Sites" : "Probable causes"}>
           <span className="vz-seg lm-lefttabs" role="group" aria-label="List">
             <button type="button" className={leftTab === "causes" ? "is-on" : ""} aria-pressed={leftTab === "causes"} onClick={() => chooseTab("causes")}>Causes</button>
             <button type="button" className={leftTab === "sites" ? "is-on" : ""} aria-pressed={leftTab === "sites"} onClick={() => chooseTab("sites")}>Sites</button>
+            <button type="button" className={leftTab === "paths" ? "is-on" : ""} aria-pressed={leftTab === "paths"} onClick={() => chooseTab("paths")}>Paths</button>
           </span>
-          {leftTab === "sites" ? (
+          {leftTab === "paths" ? (
+            <PathList rows={rows} picked={path} onPick={setPath} />
+          ) : leftTab === "sites" ? (
             <SiteTree infos={infos} levels={levels.length ? levels : defaultLevels} selected={group?.id ?? null}
               onGroup={(id, codes) => setGroup(id && codes ? { id, codes } : null)} onSite={onSite} />
           ) : risingLoading ? (

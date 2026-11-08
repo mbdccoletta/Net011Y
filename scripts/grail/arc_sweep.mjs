@@ -8,7 +8,7 @@
 // `crossingDepth`; the bend is the one `LiveMap` strokes, copied here rather than re-derived.
 //
 //   node scripts/grail/arc_sweep.mjs
-import { fitView, projY, ensurePlaces, regionOf, askedAbout, crossingDepth } from "./out/app-model.mjs";
+import { fitView, projY, ensurePlaces, regionOf, askedAbout, crossingDepth, routesToDraw, DRAW_CAP } from "./out/app-model.mjs";
 
 const W = 1608, H = 790, INS = { top: 24, right: 376, bottom: 28, left: 336 };
 /** the ceiling a line can still be followed at */
@@ -59,16 +59,18 @@ function bend(x0, y0, x1, y1) {
 }
 
 /** what the map puts on screen for a given focus, and how deep it stacks */
-export function drawn({ sites, dcs, links }, focus) {
+export function drawn({ sites, dcs, links }, focus, cap = true) {
   const byCode = new Map(sites.map((s) => [s.code, s]));
   const isDc = (code) => !!byCode.get(code)?.dc;
   const v = fitView(sites, W, H, INS);
   const sx = (lon) => W / 2 + (lon - v.cx) * v.k, sy = (lat) => H / 2 + (projY(lat) - v.cy) * v.k;
-  const curves = links.filter((l) => askedAbout(focus, isDc, l.a, l.b)).map((l) => {
+  const asked = links.filter((l) => askedAbout(focus, isDc, l.a, l.b))
+    .map((l) => ({ ...l, verdict: byCode.get(l.a)?.verdict ?? "Healthy" }));
+  const curves = (cap ? routesToDraw(asked) : asked).map((l) => {
     const a = byCode.get(l.a), b = byCode.get(l.b);
     return bend(sx(a.lon), sy(a.lat), sx(b.lon), sy(b.lat));
   });
-  return { routes: curves.length, ...crossingDepth(curves, W), dots: curves.length * 2 * 4, dcs: dcs.length };
+  return { routes: curves.length, asked: asked.length, ...crossingDepth(curves, W), dots: curves.length * 2 * 4, dcs: dcs.length };
 }
 
 /**
@@ -79,7 +81,7 @@ export function drawn({ sites, dcs, links }, focus) {
  * grouping differs, which is the thing being measured.
  */
 const ROUTE_BUDGET = 120;
-export function drawnGrouped({ sites, dcs, links }, focus, regionOfCode) {
+export function drawnGrouped({ sites, dcs, links }, focus, regionOfCode, cap = true) {
   const byCode = new Map(sites.map((s) => [s.code, s]));
   const isDc = (code) => !!byCode.get(code)?.dc;
   const v = fitView(sites, W, H, INS);
@@ -101,10 +103,14 @@ export function drawnGrouped({ sites, dcs, links }, focus, regionOfCode) {
     const h = group ? home.get(regionOfCode(a0.code)) : null;
     const a = h ? { code: regionOfCode(a0.code), lon: h.lon, lat: h.lat } : a0;
     const key = [a.code, b.code].sort().join("|");
-    if (!by.has(key)) by.set(key, bend(sx(a.lon), sy(a.lat), sx(b.lon), sy(b.lat)));
+    const had = by.get(key);
+    const vd = byCode.get(l.a)?.verdict ?? "Healthy";
+    if (!had) by.set(key, { id: key, verdict: vd, path: bend(sx(a.lon), sy(a.lat), sx(b.lon), sy(b.lat)) });
+    else if (vd === "Critical" || (vd === "Warning" && had.verdict !== "Critical")) had.verdict = vd;
   }
-  const curves = [...by.values()];
-  return { routes: curves.length, ...crossingDepth(curves, W), dots: curves.length * 2 * 4 };
+  const asked = [...by.values()];
+  const curves = (cap ? routesToDraw(asked) : asked).map((r) => r.path);
+  return { routes: curves.length, asked: asked.length, ...crossingDepth(curves, W), dots: curves.length * 2 * 4 };
 }
 
 /** how deep it stacked before the rule: every link, always */
@@ -122,10 +128,11 @@ export function all({ sites, links }) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const e = await estate();
   const row = (label, r) =>
-    console.log(`${label.padEnd(40)} routes ${String(r.routes).padStart(3)}   worst vertical ${String(r.worst).padStart(3)}` +
-      `   dots/frame ${String(r.dots).padStart(4)}   ${r.worst <= DEPTH_CEILING ? "PASS" : "FAIL"}`);
+    console.log(`${label.padEnd(40)} asked ${String(r.asked ?? r.routes).padStart(3)}   drawn ${String(r.routes).padStart(3)}` +
+      `   worst vertical ${String(r.worst).padStart(3)}   dots/frame ${String(r.dots).padStart(4)}` +
+      `   ${r.worst <= DEPTH_CEILING ? "PASS" : "FAIL"}`);
   console.log(`estate: ${e.spokes.length} spokes, ${e.dcs.length} hubs, ${e.links.length} links`);
-  console.log(`ceiling: at most ${DEPTH_CEILING} distinct curves on any vertical\n`);
+  console.log(`ceiling: at most ${DEPTH_CEILING} distinct curves on any vertical; the map's own cap is ${DRAW_CAP}\n`);
   const rg = (code) => code.split("-")[0];
   const one = new Set([e.spokes[0].code]);
   const cause = new Set([e.spokes[0].code, e.spokes[40].code]);

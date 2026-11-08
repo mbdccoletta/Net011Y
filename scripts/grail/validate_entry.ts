@@ -2,6 +2,7 @@ export { buildRealModel, deriveTags } from "../../app/ui/app/data/buildRealModel
 export { buildExampleNetwork } from "../../app/ui/app/data/exampleNetwork";
 export { evaluateNeeds, VIEW_NEEDS } from "../../app/ui/app/data/requirements";
 export { allSites, shortSiteName, addressParts, regionsShown } from "../../app/ui/app/model/site";
+export { pathRows, routesToDraw, DRAW_CAP } from "../../app/ui/app/model/paths";
 export { fitView, frameFill, projY, FIT_MARGIN, placeLabels, labelFits, askedAbout, crossingDepth } from "../../app/ui/app/model/camera";
 export { ensurePlaces, countryOf, regionOf, placesReady } from "../../app/ui/app/data/places";
 export { buildCauses, splitCauses, causeSummary, causeSiteCount } from "../../app/ui/app/model/causes";

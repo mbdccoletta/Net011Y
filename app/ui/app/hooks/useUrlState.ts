@@ -23,7 +23,7 @@ export interface UrlState {
   /** size of the example network: about 1,000 devices, the enterprise one, or 20,000 */
   scale: "mid" | "xl" | null;
   /** which list the map's left panel shows: the open causes, or the sites grouped by tag */
-  list: "causes" | "sites";
+  list: "causes" | "sites" | "paths";
 }
 
 const KEYS = ["cause", "sel", "tab", "status", "region", "role", "carrier", "q"] as const;
@@ -44,7 +44,7 @@ function read(): UrlState {
     view: p.get("view") === "table" ? "table" : "visual",
     source: p.get("source") === "example" ? "example" : "live",
     scale: p.get("source") !== "example" ? null : p.get("scale") === "xl" ? "xl" : p.get("scale") === "mid" ? "mid" : null,
-    list: p.get("list") === "sites" ? "sites" : "causes",
+    list: p.get("list") === "sites" ? "sites" : p.get("list") === "paths" ? "paths" : "causes",
   };
 }
 
@@ -69,7 +69,7 @@ export function useUrlState() {
       if (next.view === "table" && next.page !== "causes") p.set("view", "table");
       if (next.source === "example") p.set("source", "example");
       if (next.source === "example" && next.scale) p.set("scale", next.scale);
-      if (next.list === "sites") p.set("list", "sites");
+      if (next.list !== "causes") p.set("list", next.list);
       const url = `${window.location.pathname}${p.toString() ? `?${p}` : ""}`;
       if (push) window.history.pushState(null, "", url);
       else window.history.replaceState(null, "", url);

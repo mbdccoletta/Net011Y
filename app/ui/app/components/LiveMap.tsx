@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { MaximizeIcon, MinimizeIcon, MinusIcon, PlusIcon, ZoomToFitIcon } from "@dynatrace/strato-icons";
 import type { Verdict } from "../model/types";
 import { askedAbout, fitView, placeLabels, projY, type Box as PxBox, type Within } from "../model/camera";
+import { routesToDraw } from "../model/paths";
 import { LAND_BITS, LAND_COLS, LAND_ROWS, LAND_STEP } from "../data/landMask";
 import { prefersReducedMotion } from "../utils/format";
 import { clusterPoints, worstOf, type Cluster } from "../model/mapClusters";
@@ -549,8 +550,13 @@ export function LiveMap({ sites, links, focus, insets, onSite, schematic = false
          site draws its own path and nothing else — one curve, which is how the estate stays
          explorable at rest without the fan coming back. */
       const hoverId = hoverCode.current ? (clusterOf.get(hoverCode.current)?.id ?? hoverCode.current) : null;
+      /* and over the cap the curve gives way to the rows in the Paths list: twenty-three routes
+         to one hub stack twenty-two deep however few of them are wrong, so past three only the
+         ones with something wrong are drawn. `routesToDraw` is the rule, shared with the
+         geographic map, and the reader reaches the rest by picking a row. */
+      const drawable = new Set(routesToDraw([...routes.values()].filter((r) => r.asked)).map((r) => r.id));
       routes.forEach(({ id, aId, bId, x0, y0, x1, y1, verdict, focused, asked, bps, bpsIn, bpsOut, n }) => {
-        if (!asked && aId !== hoverId && bId !== hoverId) return;
+        if (!(asked && drawable.has(id)) && aId !== hoverId && bId !== hoverId) return;
         const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
         const cxp = (x0 + x1) / 2 - (dy / len) * len * 0.18, cyp = (y0 + y1) / 2 + (dx / len) * len * 0.18 - len * 0.08;
         const bad = verdict === "Critical" || verdict === "Warning";
